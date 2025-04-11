@@ -126,4 +126,8 @@ export class Connection {
       callback([ ...Connection.workspaces ].pop());
     }, 200);
   }
+
+  static connections() {
+    return Connection.workspaces.map(({ bookmark }) => bookmark);
+  }
 }

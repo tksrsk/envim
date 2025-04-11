@@ -23,6 +23,7 @@ interface States {
   tabs: ITab[];
   menus: IMenu[];
   bookmarks: ISetting["bookmarks"];
+  connections: string[];
   mode?: IMode;
   dragging: number;
   enabled: boolean;
@@ -38,13 +39,15 @@ const styles = {
 
 export function TablineComponent(props: Props) {
   const { options, mode, tabs, menus  } = useEditor();
-  const [state, setState] = useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
+  const [state, setState] = useState<States>({ cwd: "", tabs, menus, bookmarks: [], connections: [], dragging: -1, enabled: options.ext_tabline });
 
   useEffect(() => {
     Emit.on("envim:cwd", onCwd);
+    Emit.on("envim:connections", onConnections);
 
     return () => {
       Emit.off("envim:cwd", onCwd);
+      Emit.off("envim:connections", onConnections);
     };
   }, []);
 
@@ -59,6 +62,10 @@ export function TablineComponent(props: Props) {
 
     setState(state => ({ ...state, cwd, bookmarks: Setting.bookmarks }));
     selected && current !== selected && Emit.send("envim:connect", Setting.type, Setting.path, selected.path);
+  }
+
+  function onConnections (connections: string[]) {
+    setState(state => ({ ...state, connections }));
   }
 
   async function saveBookmark(path: string) {
@@ -196,7 +203,7 @@ export function TablineComponent(props: Props) {
         ) }
         { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path, selected }, i) =>
           <FlexComponent animate="hover" direction="column" active={selected} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
-            { name }
+            <FlexComponent>{ state.connections.includes(path) && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
             <div className="color-gray-fg small">{ path }</div>
             <IconComponent color="gray" font="" float="right" onClick={e => deleteBookmark(e, path)} hover />
           </FlexComponent>

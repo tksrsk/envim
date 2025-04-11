@@ -83,6 +83,7 @@ export class Envim {
   private onAttach = async (width: number, height: number, options: UiAttachOptions) => {
     await this.nvim.uiAttach(width, height, { ...{ ext_linegrid: true }, ...options });
     await this.onCommand("doautocmd envim DirChanged");
+    Emit.send("envim:connections", Connection.connections());
   }
 
   private onResize = (gid: number, width: number, height: number) => {

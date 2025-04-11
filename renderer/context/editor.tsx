@@ -7,6 +7,7 @@ import { Setting } from "../utils/setting";
 
 interface EditorContextType {
   busy: boolean;
+  connections: ISetting["bookmarks"];
   options: ISetting["options"];
   mode?: IMode;
   tabs: ITab[];
@@ -17,6 +18,7 @@ interface EditorContextType {
 
 const EditorContext = createContext<EditorContextType>({
   busy: false,
+  connections: [],
   options: Setting.options,
   tabs: [],
   bufs: [],
@@ -29,6 +31,7 @@ export const useEditor = () => useContext(EditorContext);
 export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<EditorContextType>({
     busy: false,
+    connections: [],
     options: Setting.options,
     tabs: [],
     bufs: [],
