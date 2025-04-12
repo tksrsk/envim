@@ -150,7 +150,7 @@ export function TablineComponent(props: Props) {
         const prevCommand = prev === curr ? "" : `tabnext ${prev} |`;
         const nextCommand = prev === curr ? "" : `| tabnext ${curr + offset}`;
 
-        runCommand(e, `${prevCommand} tabmove ${sign}${Math.abs(next)} ${nextCommand}`);;
+        runCommand(e, `${prevCommand} tabmove ${sign}${Math.abs(next)} ${nextCommand}`);
       }
     }
 
@@ -166,7 +166,7 @@ export function TablineComponent(props: Props) {
     const sname = state.mode?.short_name;
 
     return !sname ? null : menus.map((menu, i) => {
-      const command = [ ...base, menu.name.replace(/([\. ])/g, "\\$1") ];
+      const command = [ ...base, menu.name.replace(/([\\. ])/g, "\\$1") ];
 
       return menu.submenus?.length ? (
         <MenuComponent key={i} side={base.length > 0} label={menu.name}>

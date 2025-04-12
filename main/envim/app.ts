@@ -165,6 +165,7 @@ export class App {
         break;
         case "mode_change":
           r.forEach(r => this.modeChange(r[1]));
+        break;
         case "option_set":
           this.optionsSet(r);
         break;

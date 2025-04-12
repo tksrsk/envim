@@ -6,7 +6,7 @@ interface IOptions {
   reverse?: boolean;
   normal?: boolean;
   lighten?: boolean;
-};
+}
 
 const TYPE = "highlight";
 

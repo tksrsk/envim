@@ -58,7 +58,7 @@ export function InputComponent () {
   }
 
   function onFocusable (focusable: boolean) {
-    focusable ? input.current?.focus() : input.current?.blur();;
+    focusable ? input.current?.focus() : input.current?.blur();
     setState(state => ({ ...state, focusable }));
   }
 
