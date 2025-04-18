@@ -24,6 +24,7 @@ export const icons = [
   { font: "󰗀", color: "orange", name: "Xml", type: /^xml$/ },
   { font: "󰆼", color: "yellow", name: "SQL", type: /^(mysql)|(sql)$/ },
   { font: "", color: "lightblue", name: "Markdown", type: /^markdown$/ },
+  { font: "󰖟", color: "lightblue", name: "WEB", type: /^(http)|(browser)$/ },
   { font: "󰈙", color: "gray", name: "Text", type: /^text$/ },
   { font: "", color: "red", name: "Quickfix", type: /^qf$/ },
   { font: "󰋗", color: "pink", name: "Help", type: /^help$/ },
