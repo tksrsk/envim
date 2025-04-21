@@ -98,10 +98,10 @@ export function SettingComponent (props: Props) {
   }
 
   function onToggleOption (e: ChangeEvent<HTMLInputElement>) {
-    setState(state => {
-      state.options[e.target.name] = e.target.checked;
+    setState(({ options, ...state }) => {
+      options[e.target.name] = e.target.checked;
 
-      return state;
+      return { ...state, options };
     });
   }
 
