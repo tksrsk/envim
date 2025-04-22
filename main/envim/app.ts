@@ -82,7 +82,7 @@ export class App {
           r.forEach(r => this.winPos(r[0], r[1], r[2], r[3], r[4], r[5], true, 3, "normal"));
         break;
         case "win_float_pos":
-          r.forEach(r => this.winFloatPos(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]));
+          r.forEach(r => this.winFloatPos(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]));
         break;
         case "win_external_pos":
           r.forEach(r => this.winExternalPos(r[0], r[1]));
@@ -253,12 +253,13 @@ export class App {
     Grids.setStatus(gid, "show", update);
   }
 
-  private winFloatPos(gid: number, win: Window, anchor: string, pgid: number, row: number, col: number, focusable: boolean, zIndex: number) {
+  private winFloatPos(gid: number, win: Window, anchor: string, pgid: number, row: number, col: number, focusable: boolean, zIndex: number, compIndex?: number, screenRow?: number, screenCol?: number) {
     const current = Grids.get(gid).getInfo();
     const parent = Grids.get(pgid).getInfo();
 
-    row = parent.y + (anchor[0] === "N" ? row : row - current.height);
-    col = parent.x + (anchor[1] === "W" ? col : col - current.width);
+    row = screenRow !== undefined ? screenRow : parent.y + (anchor[0] === "N" ? row : row - current.height);
+    col = screenCol !== undefined ? screenCol : parent.x + (anchor[1] === "W" ? col : col - current.width);
+    zIndex = compIndex ? compIndex : zIndex;
 
     this.winPos(gid, win, row, col, current.width, current.height, focusable, Math.max(zIndex, parent.zIndex + 4), "floating");
   }
