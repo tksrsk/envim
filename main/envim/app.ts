@@ -256,12 +256,13 @@ export class App {
   private winFloatPos(gid: number, win: Window, anchor: string, pgid: number, row: number, col: number, focusable: boolean, zIndex: number, compIndex?: number, screenRow?: number, screenCol?: number) {
     const current = Grids.get(gid).getInfo();
     const parent = Grids.get(pgid).getInfo();
+    const index = compIndex ? compIndex : zIndex;
 
     row = screenRow !== undefined ? screenRow : parent.y + (anchor[0] === "N" ? row : row - current.height);
     col = screenCol !== undefined ? screenCol : parent.x + (anchor[1] === "W" ? col : col - current.width);
-    zIndex = compIndex ? compIndex : zIndex;
 
-    this.winPos(gid, win, row, col, current.width, current.height, focusable, Math.max(zIndex, parent.zIndex + 4), "floating");
+    this.winPos(gid, win, row, col, current.width, current.height, focusable, Math.max(index, parent.zIndex + 4), "floating");
+    Grids.setLayer(gid, zIndex);
   }
 
   private async winExternalPos(gid: number, win: Window) {

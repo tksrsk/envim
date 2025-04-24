@@ -20,6 +20,7 @@ interface Props {
   winid: number;
   focusable: boolean;
   focus: boolean;
+  shadow: boolean
   type: "normal" | "floating" | "external";
   style: {
     zIndex: number;
@@ -279,7 +280,7 @@ export function EditorComponent(props: Props) {
   }
 
   return (
-    <FlexComponent animate="fade-in hover" position="absolute" overflow="visible" nomouse={state.nomouse} style={{ ...props.style, ...(state.hidden ? { height: 0 } : {}) }} shadow={!state.hidden}
+    <FlexComponent animate="fade-in hover" position="absolute" overflow="visible" nomouse={state.nomouse} style={{ ...props.style, ...(state.hidden ? { height: 0 } : {}) }} shadow={props.shadow && !state.hidden}
       onMouseDown={state.dragging ? undefined : onMouseDown}
       onMouseMove={state.dragging ? undefined : onMouseMove}
       onMouseUp={state.dragging ? undefined : onMouseUp}

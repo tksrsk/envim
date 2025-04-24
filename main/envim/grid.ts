@@ -15,7 +15,7 @@ class Grid {
   constructor(gid: number, workspace: string, width :number, height: number) {
     const id = `${workspace}.${gid}`;
 
-    this.info = { id, gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, type: "normal", status: "hide" };
+    this.info = { id, gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
     this.resize(width, height);
   }
 
@@ -162,6 +162,7 @@ class Grid {
 
 export class Grids {
   private static grids: { [k: number]: Grid } = {};
+  private static layer: { [i: number]: { parent: number, children: number[] } } = {};
   private static default: 1 = 1;
   private static active: { gid: number; row: number; col: number; } = { gid: 0, row: 0, col: 0 };
   private static changes: { [k: number]: number } = {};
@@ -173,6 +174,7 @@ export class Grids {
     Object.values(Grids.grids).forEach(grid => Grids.workspace.caches[Grids.workspace.current].push(grid));
 
     Grids.grids = {};
+    Grids.layer = {};
     Grids.active = { gid: 0, row: 0, col: 0 };
     Grids.changes = {};
     Grids.workspace.current = workspace;
@@ -217,10 +219,55 @@ export class Grids {
     if (Grids.get(gid, false).setInfo({ status }) || update) {
       Grids.changes[gid] = gid;
     }
+    if (status === "delete") {
+      Object.keys(Grids.layer).forEach(zIndex => {
+        const layer = Grids.layer[+zIndex];
+
+        if (layer.parent === gid) {
+          delete(Grids.layer[zIndex]);
+        } else {
+          layer.children = layer.children.filter(child => child !== gid);
+        }
+      });
+    }
   }
 
   static setMode(mode: IMode) {
     Grids.mode = mode;
+  }
+
+  static setLayer(gid: number, zIndex: number) {
+    if (!Grids.layer[zIndex]) {
+      Grids.layer[zIndex] = { parent: gid, children: [ ] };
+    }
+
+    const layer = Grids.layer[zIndex];
+
+    if (layer.parent !== gid) {
+      const current = Grids.get(gid).getInfo();
+      const parent = Grids.get(layer.parent).getInfo();
+
+      if (
+        current.x < parent.x && current.y < parent.y &&
+        (current.x + current.width) > (parent.x + parent.width) &&
+        (current.y + current.height) > (parent.y + parent.height)
+      ) {
+        Grids.changes[layer.parent] = layer.parent;
+        Grids.changes[gid] = gid;
+        Grids.get(layer.parent).setInfo({ shadow: false });
+        Grids.get(gid).setInfo({ shadow: true });
+        layer.children = [ layer.parent, ...layer.children.filter(child => child !== gid) ];
+        layer.parent = gid;
+      } else if (
+        parent.x < current.x && parent.y < current.y &&
+        (parent.x + parent.width) > (current.x + current.width) &&
+        (parent.y + parent.height) > (current.y + current.height)
+      ) {
+        Grids.changes[gid] = gid;
+        Grids.get(gid).setInfo({ shadow: false });
+        layer.children = [ gid, ...layer.children.filter(child => child !== gid) ];
+      }
+    }
   }
 
   static refresh() {

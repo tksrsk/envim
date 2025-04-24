@@ -35,6 +35,7 @@ interface States {
     order: number;
     focusable: boolean;
     focus: boolean
+    shadow: boolean;
     type: "normal" | "floating" | "external";
     style: {
       zIndex: number;
@@ -102,7 +103,7 @@ export function EnvimComponent(props: Props) {
   function onWin(wins: IWindow[]) {
     setState(({ grids, ...state }) => {
       const nextOrder = Object.values(grids).reduce((order, grid) => Math.max(order, grid.order), 1);
-      const refresh = wins.reverse().filter(({ id, gid, winid, x, y, width, height, zIndex, focusable, focus, type, status }, i) => {
+      const refresh = wins.reverse().filter(({ id, gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
         const curr = grids[id]?.style || {};
         const order = grids[id]?.order || i + nextOrder;
         const next = {
@@ -116,7 +117,7 @@ export function EnvimComponent(props: Props) {
         if (status === "delete") {
           delete(grids[id]);
         } else if (JSON.stringify(curr) !== JSON.stringify(next)) {
-          grids[id] = { id, gid, winid, order, focusable, focus, type, style: next };
+          grids[id] = { id, gid, winid, order, focusable, focus, shadow, type, style: next };
         }
 
         return zIndex < 5 && (curr.visibility !== next.visibility || curr.width !== next.width || curr.height !== next.height);

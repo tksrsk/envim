@@ -20,6 +20,7 @@ export interface IWindow {
   zIndex: number;
   focusable: boolean;
   focus: boolean;
+  shadow: boolean;
   type: "normal" | "floating" | "external";
   status: "show" | "hide" | "delete";
 }
