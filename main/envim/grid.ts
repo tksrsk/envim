@@ -224,7 +224,7 @@ export class Grids {
         const layer = Grids.layer[+zIndex];
 
         if (layer.parent === gid) {
-          delete(Grids.layer[zIndex]);
+          delete(Grids.layer[+zIndex]);
         } else {
           layer.children = layer.children.filter(child => child !== gid);
         }
