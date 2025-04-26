@@ -162,7 +162,7 @@ class Grid {
 
 export class Grids {
   private static grids: { [k: number]: Grid } = {};
-  private static layer: { [i: number]: { parent: number, children: number[] } } = {};
+  private static layer: { [i: number]: { parent: number, children: number[] }[] } = {};
   private static default: 1 = 1;
   private static active: { gid: number; row: number; col: number; } = { gid: 0, row: 0, col: 0 };
   private static changes: { [k: number]: number } = {};
@@ -220,15 +220,14 @@ export class Grids {
       Grids.changes[gid] = gid;
     }
     if (status === "delete") {
-      Object.keys(Grids.layer).forEach(zIndex => {
-        const layer = Grids.layer[+zIndex];
-
+      Object.entries(Grids.layer).forEach(([zIndex, layers]) => layers.some(layer => {
         if (layer.parent === gid) {
-          delete(Grids.layer[+zIndex]);
+          layers = layers.filter(item => item !== layer);
+          layers.length || delete(Grids.layer[+zIndex]);
         } else {
           layer.children = layer.children.filter(child => child !== gid);
         }
-      });
+      }));
     }
   }
 
@@ -238,12 +237,12 @@ export class Grids {
 
   static setLayer(gid: number, zIndex: number) {
     if (!Grids.layer[zIndex]) {
-      Grids.layer[zIndex] = { parent: gid, children: [ ] };
+      Grids.layer[zIndex] = [];
     }
 
-    const layer = Grids.layer[zIndex];
+    const exists = Grids.layer[zIndex].some(layer => {
+      if (layer.parent === gid) return;
 
-    if (layer.parent !== gid) {
       const current = Grids.get(gid).getInfo();
       const parent = Grids.get(layer.parent).getInfo();
 
@@ -258,7 +257,9 @@ export class Grids {
         Grids.get(gid).setInfo({ shadow: true });
         layer.children = [ layer.parent, ...layer.children.filter(child => child !== gid) ];
         layer.parent = gid;
-      } else if (
+        return true;
+      }
+      if (
         parent.x < current.x && parent.y < current.y &&
         (parent.x + parent.width) > (current.x + current.width) &&
         (parent.y + parent.height) > (current.y + current.height)
@@ -266,8 +267,11 @@ export class Grids {
         Grids.changes[gid] = gid;
         Grids.get(gid).setInfo({ shadow: false });
         layer.children = [ gid, ...layer.children.filter(child => child !== gid) ];
+        return true;
       }
-    }
+    });
+
+    exists || Grids.layer[zIndex].push({ parent: gid, children: [] });
   }
 
   static refresh() {
