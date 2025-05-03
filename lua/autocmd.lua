@@ -34,6 +34,7 @@ vim.api.nvim_create_autocmd({ "WinNew", "BufWinEnter" }, {
   callback = function()
     local winid = vim.fn.win_getid()
 
+    vim.bo.filetype = "browser"
     vim.bo.buftype = "nofile"
     vim.bo.bufhidden = "wipe"
     vim.bo.buflisted = false
