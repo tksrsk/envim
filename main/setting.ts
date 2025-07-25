@@ -1,6 +1,6 @@
 import { app } from "electron";
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFile } from "fs";
 
 import { ISetting } from "common/interface";
 
@@ -17,13 +17,13 @@ export class Setting {
     Setting.item.presets[`[${item.type}]:${item.path}`] = JSON.parse(JSON.stringify(item));
     Setting.item.presets[`[${item.type}]:${item.path}`].presets = {};
 
-    writeFileSync(Setting.path, JSON.stringify(Setting.item), { encoding: "utf8" });
+    writeFile(Setting.path, JSON.stringify(Setting.item), { encoding: "utf8" }, () => {});
   }
 
   static remove(type: string, path: string) {
     delete(Setting.item.presets[`[${type}]:${path}`])
 
-    writeFileSync(Setting.path, JSON.stringify(Setting.item), { encoding: "utf8" });
+    writeFile(Setting.path, JSON.stringify(Setting.item), { encoding: "utf8" }, () => {});
   }
 
   static get() {

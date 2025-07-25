@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, RefObject } from "react";
 
 import { ISetting, IWindow, IHighlight } from "common/interface";
 
@@ -57,6 +57,7 @@ const styles = {
 export function EnvimComponent(props: Props) {
   const [state, setState] = useState<States>({ init: true, pause: false, grids: {} });
   const { size, height } = Setting.font;
+  const timer: RefObject<number> = useRef<number>(0);
 
   useEffect(() => {
     Emit.on("app:switch", onSwitch);
@@ -104,7 +105,7 @@ export function EnvimComponent(props: Props) {
     setState(({ grids, ...state }) => {
       const nextOrder = Object.values(grids).reduce((order, grid) => Math.max(order, grid.order), 1);
       const refresh = wins.reverse().filter(({ id, gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
-        const curr = grids[id]?.style || {};
+        const curr = grids[id]?.style;
         const order = grids[id]?.order || i + nextOrder;
         const next = {
           zIndex: (status === "show" ? zIndex : -1) + +focus ,
@@ -120,10 +121,11 @@ export function EnvimComponent(props: Props) {
           grids[id] = { id, gid, winid, order, focusable, focus, shadow, type, style: next };
         }
 
-        return zIndex < 5 && (curr.visibility !== next.visibility || curr.width !== next.width || curr.height !== next.height);
+        return type === "normal" && curr && (curr.visibility !== next.visibility || curr.width !== next.width || curr.height !== next.height);
       }).length > 0;
 
-      refresh && Emit.send("envim:command", "mode");
+      clearTimeout(timer.current);
+      timer.current = refresh ? +setTimeout(() => Emit.send("envim:command", "mode"), 100) : 0;
 
       return { ...state, grids };
     });
