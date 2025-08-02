@@ -99,7 +99,10 @@ export function InputComponent () {
   }
 
   function toggleFocus (focus: boolean) {
-    setState(state => ({ ...state, focus }));
+    setTimeout(
+      () => (document.activeElement === input.current) === focus && setState(state => ({ ...state, focus })),
+      200
+    );
     focus && Emit.share("envim:focused")
   }
 

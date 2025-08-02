@@ -27,7 +27,8 @@
     },
     "files": [
       "dist-electron",
-      "dist"
+      "dist",
+      "lua"
     ]
   },
   "devDependencies": {

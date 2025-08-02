@@ -17,6 +17,6 @@
     "jsx": "react-jsx",
     "baseUrl": "./"
   },
-  "include": ["common", "renderer"],
+  "include": ["common", "renderer", "main", "preload"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

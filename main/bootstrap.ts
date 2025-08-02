@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu } from "electron";
+import { app, session, BrowserWindow, Menu } from "electron";
 import { join } from "path";
+import { readdir } from "fs";
 
 import { Emit } from "./emit";
 import { Browser } from "./browser";
@@ -48,6 +49,7 @@ export class Bootstrap {
       },
     });
 
+    // setTimeout(() => Bootstrap.win?.webContents.openDevTools(), 1000);
     Bootstrap.win.maximize();
     Bootstrap.win.loadFile(join(__dirname, "../../dist/index.html"));
     Bootstrap.win.on("closed", this.onQuit);
@@ -55,10 +57,18 @@ export class Bootstrap {
     Bootstrap.win.on("leave-full-screen", () => Bootstrap.win && Emit.send("app:resize", ...Bootstrap.win.getSize()));
     Bootstrap.win.once("ready-to-show", () => Emit.share("envim:theme"));
     Bootstrap.win.webContents.on("did-attach-webview", (_, webContents) => new Browser(webContents));
+    Bootstrap.win.webContents.on("will-navigate", e => e.preventDefault());
     Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences) => {
       delete(webPreferences.preload);
       webPreferences.nodeIntegration = false;
       webPreferences.transparent = false;
+    });
+
+    readdir(join(__dirname, "../../../extensions"), (e, paths) => {
+      e || paths.forEach(async path => {
+        const extention = join(__dirname, "../../../extensions", path);
+        path.startsWith(".") || session.defaultSession.extensions.loadExtension(extention, { allowFileAccess: true });
+      });
     });
   }
 }

@@ -103,14 +103,20 @@ export class Envim {
   }
 
   private onApi = async (fname: string, args: any[]) => {
+    // process.stdout.write(JSON.stringify({ fname, args }))
+    // process.stdout.write("\n")
     return await this.nvim.request(fname, args);
   }
 
   private onMouse = async (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
+    // process.stdout.write(JSON.stringify({ gid, button, action, modifier }))
+    // process.stdout.write("\n")
     return await this.nvim.inputMouse(button, action, modifier, gid, row, col);
   }
 
   private onInput = async (input: string) => {
+    // process.stdout.write(JSON.stringify({ input }))
+    // process.stdout.write("\n")
     return await this.nvim.input(input);
   }
 
@@ -119,11 +125,13 @@ export class Envim {
   }
 
   private onCommand = async (command: string) => {
+    // process.stdout.write(JSON.stringify({ command }))
+    // process.stdout.write("\n")
     return await this.nvim.command(command);
   }
 
   private onLuafile = (path: string) => {
-    readFile(join(__dirname, "lua", path), { encoding: "utf8" }).then(file => {
+    readFile(join(__dirname, "../../lua", path), { encoding: "utf8" }).then(file => {
       this.nvim.lua(file);
     });
   }
