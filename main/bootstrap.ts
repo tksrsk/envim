@@ -49,7 +49,6 @@ export class Bootstrap {
       },
     });
 
-    // setTimeout(() => Bootstrap.win?.webContents.openDevTools(), 1000);
     Bootstrap.win.maximize();
     Bootstrap.win.loadFile(join(__dirname, "../../dist/index.html"));
     Bootstrap.win.on("closed", this.onQuit);
