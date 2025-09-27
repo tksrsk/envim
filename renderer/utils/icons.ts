@@ -32,8 +32,8 @@ export const icons = [
 ];
 
 export const notificates = [
-  { font: "", kinds: ["echo",  "echomsg", "lua_print", ""]},
-  { font: "", kinds: ["quickfix",  "search_count", "search_cmd"]},
+  { font: "", kinds: ["empty", "echo", "echomsg", "lua_print", "progress", ""]},
+  { font: "", kinds: ["quickfix", "search_count", "search_cmd"]},
   { font: "", kinds: ["wmsg", "verbose"]},
   { font: "", kinds: ["emsg", "echoerr", "lua_error", "rpc_error", "shell_err"]},
   { font: "", kinds: ["confirm", "confirm_sub"]},
