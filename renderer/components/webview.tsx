@@ -191,7 +191,7 @@ export function WebviewComponent(props: Props) {
       case "i": return runAction("mode-browser");
       case ":": return runAction("mode-input");
       case "/": return runAction("mode-search");
-      case "Escape": return runAction("mode-command");
+      case "Escape": return runAction(state.loading ? "cancel-load" : "mode-command");
       case "Enter": return webview.current.stopFindInPage("activateSelection");
     }
   }
@@ -275,6 +275,7 @@ export function WebviewComponent(props: Props) {
         case "mode-input": return input.current?.focus();
         case "mode-search": return search.current?.focus();
         case "mode-command": return command.current?.focus();
+        case "cancel-load": return webview.current.stop();
       }
     }
   }
@@ -368,7 +369,7 @@ export function WebviewComponent(props: Props) {
       <FlexComponent vertical="center" overflow="visible" nomouse={preview}>
         <IconComponent font="" onClick={() => runAction("navigate-backward")} />
         <IconComponent font="" onClick={() => runAction("navigate-forward")} />
-        <IconComponent font="󰑓" onClick={() => runAction("reload")} />
+        <IconComponent font={ state.loading ? "" : "󰑓" } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
         <MenuComponent color="blue-fg" label="󰖟">
           { renderEngine("") }
         </MenuComponent>
