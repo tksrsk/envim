@@ -27,17 +27,23 @@ export class Browser {
   }
 
   private onOpenWindow = (details: HandlerDetails) => {
-    const action: "allow" | "deny" = details.frameName || details.postBody ? "allow" : "deny";
+    const action: "allow" | "deny" = !details.url.match(/^https?\/\//) || details.postBody ? "allow" : "deny";
 
     action === "deny" && Emit.share("envim:browser", details.url);
-    action === "allow" && !details.frameName && app.once("browser-window-created", (_, browserWindow) => (
-      browserWindow.webContents.once("did-navigate", () => {
-        Emit.share("envim:browser", browserWindow.webContents.getURL());
-        browserWindow.close();
+    action === "allow" && app.once("browser-window-created", (_, browserWindow) => (
+      browserWindow.webContents.on("did-navigate", () => {
+        const url = browserWindow.webContents.getURL();
+
+        if (url.match(/^https?:\/\//)) {
+          Emit.share("envim:browser", url);
+          browserWindow.close();
+        } else if (browserWindow.isVisible() === false) {
+          browserWindow.show();
+        }
       })
     ));
 
-    return { action, overrideBrowserWindowOptions: { show: !!details.frameName } };
+    return { action, overrideBrowserWindowOptions: { show: false } };
   }
 
   private onOpenUrl = (_: Event, url: string) => {
