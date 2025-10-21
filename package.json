@@ -45,7 +45,7 @@
     "ssh2": "^1.16.0",
     "tslint": "^6.1.3",
     "typescript": "^5.9.2",
-    "vite": "^7.1.7",
+    "vite": "^7.1.11",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
   },
