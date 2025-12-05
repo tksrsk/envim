@@ -69,12 +69,11 @@ export function WebviewComponent(props: Props) {
   }, []);
 
   useEffect(() => {
-    if (container.current && !container.current.innerHTML) {
-      container.current.innerHTML = `<webview allowpopups="on" />`;
-    }
     if (container.current) {
-      const webview = container.current.querySelector("webview") as WebviewTag;
+      const webview = document.createElement("webview") as WebviewTag;
 
+      container.current.appendChild(webview);
+      webview.setAttribute("allowpopups", "on");
       webview.addEventListener("dom-ready", onReady);
       webview.src = getUrl(props.src);
 
@@ -89,7 +88,7 @@ export function WebviewComponent(props: Props) {
         webview.removeEventListener("focus", onFocus);
       };
     }
-  }, [container.current === undefined, props.src]);
+  }, [container.current]);
 
   useEffect(() => {
     props.active && runAction("mode-command");
