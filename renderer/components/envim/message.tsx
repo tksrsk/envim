@@ -29,7 +29,7 @@ const styles = {
 
 export function MessageComponent(props: Props) {
   const [state, setState] = useState<States>({ open: props.open });
-  const icon = notificates.filter(icon => icon.kinds.indexOf(props.message.kind) >= 0)[0];
+  const { font } = notificates.filter(icon => icon.kinds.indexOf(props.message.kind) >= 0)[0] || { font: "󱈸" };
   const defaultHl = props.message.contents[0].hl;
   const defaultStyle = Highlights.style(defaultHl);
 
@@ -46,7 +46,7 @@ export function MessageComponent(props: Props) {
 
   return (
     <FlexComponent grow={1} basis="0" onClick={onToggleOpen}>
-      <IconComponent font={icon.font} style={Highlights.style(defaultHl, { reverse: true, normal: true })} />
+      <IconComponent font={font} style={Highlights.style(defaultHl, { reverse: true, normal: true })} />
       <FlexComponent whiteSpace={state.open ? "pre-wrap" : "nowrap"} grow={1} shrink={1} basis="0" padding={[2, 4]} style={defaultStyle} selectable>
         <div style={styles.message}>
           {props.message.contents.map(({hl, content}, i) => <span {...contentStyle(hl, hl === defaultHl ? {} : Highlights.style(hl))} key={i}>{ content }</span>)}
