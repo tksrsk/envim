@@ -50,7 +50,7 @@ export class Bootstrap {
     });
 
     Bootstrap.win.maximize();
-    Bootstrap.win.loadFile(join(__dirname, "../../dist/index.html"));
+    Bootstrap.win.loadFile(join(__dirname, "../renderer/index.html"));
     Bootstrap.win.on("closed", this.onQuit);
     Bootstrap.win.on("resize", () => Bootstrap.win && Emit.update("app:resize", true, ...Bootstrap.win.getSize()));
     Bootstrap.win.on("leave-full-screen", () => Bootstrap.win && Emit.send("app:resize", ...Bootstrap.win.getSize()));
