@@ -5,7 +5,7 @@ import { FlexComponent } from "./flex";
 interface Props {
   side?: boolean;
   horizontal?: boolean;
-  label: string;
+  label: string | React.ComponentType;
   color?: string;
   active?: boolean;
   fit?: boolean;
@@ -93,7 +93,9 @@ export function MenuComponent(props: PropsWithChildren<Props>) {
   return (
     <FlexComponent vertical="center" overflow="visible">
       <div className="space" style={styles.wrap} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} ref={div}>
-        <FlexComponent grow={1} vertical="center" color={props.color} onClick={onClick} active={props.active} spacing>{ props.label }</FlexComponent>
+        <FlexComponent grow={1} vertical="center" color={props.color} onClick={onClick} active={props.active} spacing={typeof props.label === "string"}>
+          { typeof props.label === "string" ? props.label : <props.label /> }
+        </FlexComponent>
         { renderMenu() }
       </div>
     </FlexComponent>

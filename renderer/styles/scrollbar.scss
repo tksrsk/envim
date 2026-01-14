@@ -1,14 +1,10 @@
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--color-fg);
+  width: 3px;
+  height: 3px;
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 1px solid var(--color-fg);
+  cursor: pointer;
   border-radius: 2px;
-  background: var(--color-bg);
+  background: var(--color-blue);
 }

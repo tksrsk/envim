@@ -6,6 +6,7 @@ import { ITab, IBuffer, IMode, IMenu } from "common/interface";
 
 import { Emit } from "../emit";
 import { Function } from "./function";
+import { Acp } from "./acp";
 import { Autocmd } from "./autocmd";
 import { Clipboard } from "./clipboard";
 import { Grids } from "./grid";
@@ -21,6 +22,7 @@ export class App {
     Highlights.init();
     Grids.init(init, workspace);
     Function.setup();
+    Acp.setup(init, workspace);
     Autocmd.setup();
     Clipboard.setup();
     nvim.on("request", this.onRequest);
@@ -44,6 +46,10 @@ export class App {
       case "envim_openurl": return args.length && Emit.share("envim:browser", args[0], args[1] || "");
       case "envim_preview": return args.length === 2 && Emit.share("envim:preview", args[0], args[1]);
       case "envim_preview_toggle": return args.length === 3 && Emit.share("envim:preview:toggle", args[0], args[1], args[2]);
+      case "envim_acp_stdout": return Emit.share("acp:stdout", args[0]);
+      case "envim_acp_exited": return Emit.share("acp:exited", args[0]);
+      case "envim_acp_error": return Emit.share("acp:error", args[0]);
+      case "envim_acp_file_add": return Emit.send("acp:file-add", args[0]);
     }
   }
 

@@ -71,20 +71,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   async function onTabline(tabs: ITab[], bufs: IBuffer[]) {
-    const buflist: { [key: number]: { filetype?: string, buftype?: string } } = {};
-
-    for (let i = 0; i < tabs.length; i++) {
-      const { buffer } = tabs[i];
-      const { filetype, buftype } = buflist[buffer] || state.tabs.find(tab => tab.buffer === buffer) || {
-        filetype: await Emit.send<string>("envim:api", "nvim_buf_get_option", [buffer, "filetype"]),
-        buftype: await Emit.send<string>("envim:api", "nvim_buf_get_option", [buffer, "buftype"]),
-      };
-
-      buflist[buffer] = { filetype, buftype };
-    }
-
-    tabs = tabs.map(tab => ({ ...tab, ...buflist[tab.buffer] }))
-
     setState(state => ({ ...state, tabs, bufs }));
   }
 

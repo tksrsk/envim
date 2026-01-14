@@ -32,6 +32,7 @@
     "npmRebuild": false
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "^0.14.1",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/dockerode": "^3.3.47",
     "@types/react": "^19.2.7",

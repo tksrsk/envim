@@ -1,3 +1,14 @@
+import {
+  McpServer,
+  SessionModeState,
+  SessionModelState,
+  PermissionOption,
+  AvailableCommand,
+  PlanEntry,
+  ToolCallStatus,
+  UsageUpdate
+} from "@agentclientprotocol/sdk";
+
 export interface ISetting {
   type: "command" | "address" | "docker" | "ssh";
   path: string;
@@ -6,6 +17,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
+  acp: { command: string; mcpServers: { enabled: boolean; server: McpServer }[]; };
   presets: { [k: string]: ISetting };
 }
 
@@ -64,8 +76,6 @@ export interface ITab {
   name: string;
   buffer: number;
   active: boolean;
-  filetype?: string;
-  buftype?: string;
 }
 
 export interface IBuffer {
@@ -93,4 +103,38 @@ export interface IMenu {
   hidden: boolean;
   mappings: { [k: string]: { enabled: boolean; rhs: string; } };
   submenus?: IMenu[];
+}
+
+interface IAcpToolBase {
+  id: string;
+  status: ToolCallStatus;
+  permissionRequest?: { requestId: string; options: PermissionOption[]; selectedOptionId?: string; } };
+
+export interface IAcpToolCall extends IAcpToolBase {
+  title: string;
+  start: number;
+}
+
+export interface IAcpMessage {
+  sessionId: string;
+  type: string;
+  content: string;
+  toolInfo?: IAcpToolBase & { content: string; diff: { add: string; delete: string; } };
+}
+
+export interface IAcpSession {
+  id: string;
+  name: string;
+  workspace: string;
+  status: "show" | "hide";
+  commands: AvailableCommand[];
+  modes?: SessionModeState | null;
+  models?: SessionModelState | null;
+  usage?: UsageUpdate
+}
+
+export interface IAcpStatus {
+  status: "disconnected" | "connecting" | "connected" | "processing";
+  sessionId?: string;
+  plan: PlanEntry[];
 }

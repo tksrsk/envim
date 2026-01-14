@@ -117,7 +117,7 @@ export function SettingComponent (props: Props) {
   }
 
   function onSubmit (e: FormEvent) {
-    const { type, path, font, opacity, options, bookmarks, searchengines } = state;
+    const { type, path, font, opacity, options, bookmarks, searchengines, acp } = state;
 
     e.stopPropagation();
     e.preventDefault();
@@ -129,6 +129,7 @@ export function SettingComponent (props: Props) {
     Setting.options = options;
     Setting.bookmarks = bookmarks;
     Setting.searchengines = searchengines;
+    Setting.acp = acp;
 
     Emit.send("envim:connect", type, path, bookmarks.find(({ selected }) => selected)?.path);
   }

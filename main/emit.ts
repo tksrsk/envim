@@ -5,7 +5,7 @@ import { Bootstrap } from "./bootstrap";
 
 export class Emit {
   private static emit = new EventEmitter;
-  private static events: { [k: string]: ((...args: any[]) => void)[] } = {};
+  private static events: { [k: string]: ((...args: any[]) => unknown)[] } = {};
   private static cache: { [k: string ]: { json: string; timer: number; } } = {};
 
   static init() {
@@ -13,7 +13,7 @@ export class Emit {
     Emit.cache = {};
   }
 
-  static on(event: string, callback: (...args: any[]) => void) {
+  static on(event: string, callback: (...args: any[]) => unknown) {
     if (!Emit.events[event]) {
       ipcMain.handle(event, (_: IpcMainInvokeEvent, ...args: any[]) => Emit.share(event, ...args));
       Emit.emit.on(event, (...args) => Emit.share(event, ...args));

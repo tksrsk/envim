@@ -46,7 +46,7 @@ export class Envim {
     setting && Emit.send("envim:setting", setting);
   }
 
-  private onConnect = (type: string, path: string, bookmark: string ) => {
+  private onConnect = (type: string, path: string, bookmark: string) => {
     const error = () => {
       const setting = Setting.get();
       const message = `Connection error occurred : "[${type}]:${path}".\nDelete preset?`;
@@ -56,6 +56,7 @@ export class Envim {
         Setting.remove(type, path);
         this.onInit();
       }
+      return true;
     }
 
     const connect = async (nvim: NeovimClient, init: boolean, workspace: string) => {
@@ -184,7 +185,7 @@ export class Envim {
   }
 
   private onPreview = (content: any, ext: string) => {
-    const path = join(app.getPath("userData"), `tmp.${ext}`);;
+    const path = join(app.getPath("userData"), `tmp.${ext}`);
     const src = `file://${path}`;
 
     writeFile(path, Buffer.from(content)).then(() => this.onBrowser(src, "vnew"));

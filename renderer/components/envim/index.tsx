@@ -17,6 +17,7 @@ import { HistoryComponent } from "./history";
 import { CmdlineComponent } from "./cmdline";
 import { PopupmenuComponent } from "./popupmenu";
 import { NotificateComponent } from "./notificate";
+import { AcpComponent } from "../acp";
 import { InputComponent } from "./input";
 
 interface Props {
@@ -162,6 +163,7 @@ export function EnvimComponent(props: Props) {
           </FlexComponent>
           { state.init && <CmdlineComponent /> }
           { state.init && <NotificateComponent /> }
+          <AcpComponent />
           <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />
         </FlexComponent>
         { state.init && <HistoryComponent {...props.footer} /> }

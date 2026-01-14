@@ -3,27 +3,28 @@ label {
   margin: 4px;
 }
 
-input {
-  outline: none;
+input[type=text], textarea {
+  width: inherit;
+  margin: auto .2em;
+  padding: .2em;
+  color: inherit;
+  background: none;
+  border: none;
+  border-bottom: solid 2px var(--color-gray);
 
-  &[type=text] {
-    width: inherit;
-    margin: auto .2em;
-    padding: .2em;
-    color: inherit;
-    background: none;
-    border: none;
-    border-bottom: solid 2px var(--color-gray);
-
-    &:focus {
-      border-color: var(--color-blue);
-    }
-
-    &:hover {
-      border-color: var(--color-blue);
-      filter: brightness(var(--brightness-light));
-    }
+  &:focus {
+    border-color: var(--color-blue);
   }
+
+  &:hover {
+    border-color: var(--color-blue);
+    filter: brightness(var(--brightness-light));
+  }
+}
+
+input, textarea {
+  outline: none;
+  resize: none;
 
   &[type=radio] {
     margin: 0 12px;

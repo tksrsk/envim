@@ -121,7 +121,7 @@ export function TablineComponent(props: Props) {
   }, [options.ext_tabline]);
 
   function renderTab(i: number, tab: ITab) {
-    const icon = icons.filter(icon => (tab.filetype || "").search(icon.type) >= 0 || (tab.buftype || "").search(icon.type) >= 0).shift();
+    const icon = icons.find(icon => tab.name.match(icon.match))!;
 
     function onDragStart() {
       setState(state => ({ ...state, dragging: i }));
@@ -154,7 +154,7 @@ export function TablineComponent(props: Props) {
       }
     }
 
-    return !icon ? null : (
+    return (
       <FlexComponent key={i} animate="fade-in hover" color={icon.color} active={tab.active} title={tab.name} shrink={tab.active ? 0 : 2} margin={[4, 2, 0]} padding={[0, 8]} rounded={[4, 4, 0, 0]} shadow={tab.active} style={styles.tab} onClick={e => runCommand(e, `tabnext ${i + 1}`)} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop} >
         <IconComponent font={icon.font} text={tab.name.replace(/.*\//, "…/")} />
         { state.tabs.length > 1 && <IconComponent color="gray" font="" float="right" onClick={e => runCommand(e, `confirm tabclose ${i + 1}`)} hover /> }

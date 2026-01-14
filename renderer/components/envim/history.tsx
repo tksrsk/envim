@@ -156,6 +156,7 @@ export function HistoryComponent(props: Props) {
           </FlexComponent>
         </MenuComponent>
         { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => Emit.send("envim:command", "tabnew envim://browser")} /> }
+        <IconComponent color="purple-fg" font="" onClick={() => Emit.share("acp:toggle")} />
         <IconComponent color="green-fg" active={state.debug.length > 0} font="" onClick={toggleDebug} />
       </FlexComponent>
       <FlexComponent overflow="visible" hover>

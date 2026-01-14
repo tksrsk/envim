@@ -20,6 +20,7 @@ const defaultSetting: ISetting = {
   searchengines: [
     { name: "Google", uri: "https://google.com/search?q=${query}", selected: true },
   ],
+  acp: { command: "", mcpServers: [] },
   presets: {},
 };
 
@@ -91,5 +92,13 @@ export class Setting {
 
   static set searchengines(searchengins: ISetting["searchengines"]) {
     Setting.set({ ...Setting.item, searchengines: searchengins });
+  }
+
+  static get acp() {
+    return Setting.item.acp;
+  }
+
+  static set acp(acp: ISetting["acp"]) {
+    Setting.set({ ...Setting.item, acp });
   }
 }

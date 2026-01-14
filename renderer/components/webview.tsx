@@ -369,10 +369,9 @@ export function WebviewComponent(props: Props) {
         <IconComponent font="" onClick={() => runAction("navigate-backward")} />
         <IconComponent font="" onClick={() => runAction("navigate-forward")} />
         <IconComponent font={ state.loading ? "" : "󰑓" } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
-        <MenuComponent color="blue-fg" label="󰖟">
+        <MenuComponent label={() => <IconComponent { ...icon } onClick={saveEngine} />}>
           { renderEngine("") }
         </MenuComponent>
-        <IconComponent { ...icon } onClick={saveEngine} />
         <FlexComponent grow={1} shrink={2} padding={[0, 8, 0, 0]}>
           <form style={styles.form} onSubmit={onSubmit}>
             <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} onFocus={onFocus} disabled={preview} tabIndex={-1} />
