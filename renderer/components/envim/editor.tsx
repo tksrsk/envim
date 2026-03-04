@@ -100,7 +100,7 @@ export function EditorComponent(props: Props) {
     button = button || ["left", "middle", "right"][e.button] || "left";
 
     const [col, row] = [ x2Col(e.nativeEvent.offsetX), y2Row(e.nativeEvent.offsetY) ];
-    const modiffier = [];
+    const modiffier: string[] = [];
     const skip = (button === "move" || action === "drag") && row === pointer.current.row && col === pointer.current.col;
     const gid = props.gid === 1 ? 0 : props.gid;
     const url = (action === "press" || button === "move") ? Canvas.link(props.id, row, col) : "";
@@ -294,8 +294,8 @@ export function EditorComponent(props: Props) {
       { props.gid === 1 || renderPreview() }
       { props.gid === 1 || !props.focusable ? null : (
         <>
-          <FlexComponent color="default" grow={1} position="absolute" inset={[0, -4, 0, "auto"]} onMouseDown={onScroll} hover={state.scrolling === 0}>
-            <FlexComponent animate="fade-in" color="blue" border={[0, 2]} rounded={[2]} style={state.scroll} shadow nomouse></FlexComponent>
+          <FlexComponent color="default" grow={1} position="absolute" inset={[0, -3, 0, "auto"]} onMouseDown={onScroll} hover={state.scrolling === 0}>
+            <FlexComponent animate="fade-in" color="blue" border={[0, 1.5]} rounded={[2]} style={state.scroll} shadow nomouse></FlexComponent>
           </FlexComponent>
           <FlexComponent color={state.hidden ? "orange" : "default"} position="absolute" overflow="visible" inset={[-height, -4, "auto", "auto"]} rounded={state.hidden ? [4] : [4, 4, 0, 0]} hover={!state.hidden} spacing
             onMouseDown={e => runCommand(e, "")}
