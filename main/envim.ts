@@ -1,8 +1,8 @@
 import { app, dialog, nativeTheme } from "electron";
-import { join } from "path"
+import { join } from "path";
 import { readFile, writeFile } from "fs/promises";
 import { NeovimClient } from "neovim";
-import { UiAttachOptions } from "neovim/lib/api/Neovim"
+import { UiAttachOptions } from "neovim/lib/api/Neovim";
 
 import { ISetting } from "common/interface";
 
@@ -57,7 +57,7 @@ export class Envim {
         this.onInit();
       }
       return true;
-    }
+    };
 
     const connect = async (nvim: NeovimClient, init: boolean, workspace: string) => {
       this.nvim = nvim;
@@ -65,9 +65,9 @@ export class Envim {
       bookmark && this.onCommand(`cd ${bookmark}`);
 
       if (init) {
-        this.nvim.setClientInfo("Envim", { major: 0, minor: 0, patch: 1, prerelease: "dev" }, "ui", {}, {})
+        this.nvim.setClientInfo("Envim", { major: 0, minor: 0, patch: 1, prerelease: "dev" }, "ui", {}, {});
         this.nvim.on("disconnect", () => this.onDisconnect(workspace));
-        await this.nvim.setVar('envim_id', await this.nvim.channelId);
+        await this.nvim.setVar("envim_id", await this.nvim.channelId);
       }
       Emit.send("app:switch", true);
 
@@ -104,20 +104,14 @@ export class Envim {
   }
 
   private onApi = async (fname: string, args: any[]) => {
-    // process.stdout.write(JSON.stringify({ fname, args }))
-    // process.stdout.write("\n")
     return await this.nvim.request(fname, args);
   }
 
   private onMouse = async (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
-    // process.stdout.write(JSON.stringify({ gid, button, action, modifier }))
-    // process.stdout.write("\n")
     return await this.nvim.inputMouse(button, action, modifier, gid, row, col);
   }
 
   private onInput = async (input: string) => {
-    // process.stdout.write(JSON.stringify({ input }))
-    // process.stdout.write("\n")
     return await this.nvim.input(input);
   }
 
@@ -126,8 +120,6 @@ export class Envim {
   }
 
   private onCommand = async (command: string) => {
-    // process.stdout.write(JSON.stringify({ command }))
-    // process.stdout.write("\n")
     return await this.nvim.command(command);
   }
 
@@ -161,16 +153,16 @@ export class Envim {
 
   private onError = (e: Error | any) => {
     if (e instanceof Error) {
-      dialog.showErrorBox('Error', `${e.message}\n${e.stack || ""}`);
+      dialog.showErrorBox("Error", `${e.message}\n${e.stack || ""}`);
     } else if (e instanceof String) {
-      dialog.showErrorBox('Error', e.toString());
+      dialog.showErrorBox("Error", e.toString());
     }
     this.onDisconnect("");
   }
 
   private onTheme = (theme?: "dark" | "light") => {
     if (!theme) {
-      theme = nativeTheme.shouldUseDarkColors ? "dark" : "light"
+      theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
     }
 
     nativeTheme.themeSource = theme;

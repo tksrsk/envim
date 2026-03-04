@@ -60,7 +60,7 @@ export function CmdlineComponent() {
       result.push({ hl: "0", c: " " });
     }
     content.forEach(([hl, text]) => {
-      result = result.concat(text.split("").map(c => ({ hl, c })))
+      result = result.concat(text.split("").map(c => ({ hl, c })));
     });
     content.length && result.push({ hl: "0", c: " " });
 
@@ -69,7 +69,7 @@ export function CmdlineComponent() {
 
   function onCmdline(cmd: string[][], pos: number, prompt: string, indent: number) {
     setState(state => {
-      const cmdline = convertContent(cmd, indent)
+      const cmdline = convertContent(cmd, indent);
 
       if (cmdline.length) {
         pos = getPos(cmdline, pos + indent);

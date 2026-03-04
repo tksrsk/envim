@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-import { IMessage } from "../../../common/interface";
+import { IMessage } from "common/interface";
 
 import { Highlights } from "../../utils/highlight";
 import { notificates } from "../../utils/icons";

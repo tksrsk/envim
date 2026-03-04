@@ -39,7 +39,7 @@ export class App {
 
   private onNotification = (method: string, args: any) => {
     switch (method) {
-      case "redraw" :return this.redraw(args);
+      case "redraw": return this.redraw(args);
       case "envim_clipboard": return Clipboard.copy(args[0], args[1]);
       case "envim_dirchanged": return Autocmd.dirchanged(args[0]);
       case "envim_setbackground": return Emit.share("envim:theme", args[0]);
@@ -210,7 +210,7 @@ export class App {
     highlights = highlights.map(([id, hl, _, info]) => {
       const ui = info.some((info: { kind: string }) => info.kind === "ui");
 
-      return { id, ui, hl }
+      return { id, ui, hl };
     }).filter(({ id, hl, ui }) => Highlights.set(id, hl, ui));
     Emit.update("highlight:set", false, highlights);
   }
@@ -241,7 +241,7 @@ export class App {
   }
 
   private gridScroll(gid: number, top: number, bottom: number, left: number, right: number, rows: number, cols: number) {
-    Grids.get(gid).setScroll(top, bottom, left, right, rows, cols)
+    Grids.get(gid).setScroll(top, bottom, left, right, rows, cols);
   }
 
   private winPos(gid: number, win: Window | null, row: number, col: number, width: number, height: number, focusable: boolean, zIndex: number, type: "normal" | "floating" | "external") {

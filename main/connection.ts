@@ -31,7 +31,7 @@ export class Connection {
   private static network(address: string, callback: (nvim: NeovimClient) => void, error: () => void) {
     try {
       const [port, host] = address.split(":").reverse();
-      const socket = createConnection({ port: +port, host: host });
+      const socket = createConnection({ port: +port, host });
 
       socket.setNoDelay();
       callback(Connection.attach(socket, socket));

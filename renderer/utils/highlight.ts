@@ -52,9 +52,9 @@ class Highlight {
 
     const rgb = `${("000000" + color.toString(16)).slice(-6)}`;
 
-    const r = Number(`0x${rgb[0]}${rgb[1]}`)
-    const g = Number(`0x${rgb[2]}${rgb[3]}`)
-    const b = Number(`0x${rgb[4]}${rgb[5]}`)
+    const r = Number(`0x${rgb[0]}${rgb[1]}`);
+    const g = Number(`0x${rgb[2]}${rgb[3]}`);
+    const b = Number(`0x${rgb[4]}${rgb[5]}`);
 
     return {
       normal: `#${rgb}`,

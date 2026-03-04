@@ -41,7 +41,7 @@ export function AppComponent() {
     Emit.on("app:resize", onResize);
     Emit.on("app:switch", onSwitch);
     Emit.on("app:theme", onTheme);
-    Highlights.setHighlight("0", true, {  })
+    Highlights.setHighlight("0", true, {  });
   }, []);
 
   function onResize (width: number, height: number) {

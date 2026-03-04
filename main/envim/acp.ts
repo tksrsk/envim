@@ -10,14 +10,10 @@ import {
   PermissionOption
 } from "@agentclientprotocol/sdk";
 
+import { IAcpStatus, IAcpSession, IAcpMessage, IAcpToolCall } from "common/interface";
+
 import { Emit } from "../emit";
 import { Setting } from "../setting";
-import {
-  IAcpStatus,
-  IAcpSession,
-  IAcpMessage,
-  IAcpToolCall
-} from "common/interface";
 
 export class Acp {
   private static initialized = false;
@@ -209,7 +205,7 @@ export class Acp {
           toolInfo.content = [toolInfo.content, "[Terminal Output]"].filter(str => str).join("\n");
         }
       });
-    } else if (toolCall.rawInput && Object.keys(toolCall.rawInput).length){
+    } else if (toolCall.rawInput && Object.keys(toolCall.rawInput).length) {
       toolInfo.content = JSON.stringify(toolCall.rawInput);
     }
 
@@ -339,7 +335,7 @@ export class Acp {
 
     const prompt: ContentBlock[] = [{ type: "text", text }];
 
-    files.forEach(file => prompt.push({ type: "resource_link", uri: `file://${file}`, name: file.split('/').pop() || file }));
+    files.forEach(file => prompt.push({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file }));
 
     Acp.addMessage(sessionId, "user_message_chunk", text);
     Acp.setState({ ...Acp.state, status: "processing" });

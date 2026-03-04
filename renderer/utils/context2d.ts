@@ -47,7 +47,7 @@ export class Context2D {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
-    if (!canvas || !ctx) throw "Failed create canvas";
+    if (!canvas || !ctx) throw new Error("Failed create canvas");
 
     canvas.width = this.canvas.width;
     canvas.height = this.canvas.height;
@@ -85,7 +85,7 @@ export class Context2D {
       this.bgctx.beginPath();
       this.bgctx.setLineDash([]);
 
-      switch(type) {
+      switch (type) {
         case "strikethrough":
         case "underline":
           const line = type === "underline" ? font.height - lineWidth : Math.floor((font.height + lineWidth) / 2);
@@ -123,7 +123,7 @@ export class Context2D {
           break;
       }
 
-      this.bgctx.stroke()
+      this.bgctx.stroke();
     });
   }
 
@@ -160,13 +160,13 @@ export class Context2D {
 
       this.scrolltmp = { i: 0, capture };
       this.urlhls.forEach((hl, key) => {
-        const [row, col] = key.split(',').map(Number);
+        const [row, col] = key.split(",").map(Number);
         const next = { row: row - scroll.rows, col: col - scroll.cols };
 
         if (
           !between(scroll.y, row, scroll.y + scroll.height - 1) ||
           !between(scroll.x, col, scroll.x + scroll.width - 1) ||
-          (between(scroll.y, next.row, scroll.y + scroll.height -1) && between(scroll.x, next.col, scroll.x + scroll.width - 1))
+          (between(scroll.y, next.row, scroll.y + scroll.height - 1) && between(scroll.x, next.col, scroll.x + scroll.width - 1))
         ) {
           urlhls.set(`${next.row},${next.col}`, hl);
         }

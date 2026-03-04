@@ -47,7 +47,7 @@ $color-purple: #723eac;
   .color-#{$name} {
     color: var(--color-#{$fg});
     @if $bg != null {
-      background-color: var(if($alpha, --color-#{$bg}-alpha, --color-#{$bg}));
+      background-color: var(if(sass($alpha): --color-#{$bg}-alpha; else: --color-#{$bg}));
       border-color: var(--color-#{$bg});
     }
   }

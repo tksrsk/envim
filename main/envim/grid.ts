@@ -12,7 +12,7 @@ class Grid {
   private ready: "init" | "resize" | true = "init";
   private size?: { width: number; height: number; };
 
-  constructor(gid: number, workspace: string, width :number, height: number) {
+  constructor(gid: number, workspace: string, width: number, height: number) {
     const id = `${workspace}.${gid}`;
 
     this.info = { id, gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
@@ -36,7 +36,7 @@ class Grid {
     return this.info;
   }
 
-  resize(width :number, height: number, clear: boolean = false) {
+  resize(width: number, height: number, clear: boolean = false) {
     if (clear === false && this.info.width === width && this.info.height === height) return;
     const old = clear ? [] : this.lines;
 

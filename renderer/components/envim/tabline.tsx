@@ -1,6 +1,6 @@
 import React, { useEffect, useState, MouseEvent, DragEvent } from "react";
 
-import { ISetting, ITab, IMode, IMenu } from "../../../common/interface";
+import { ISetting, ITab, IMode, IMenu } from "common/interface";
 
 import { useEditor } from "../../context/editor";
 

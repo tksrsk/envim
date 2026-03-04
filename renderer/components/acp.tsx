@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEv
 import { PlanEntry } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
-import { IAcpStatus, IAcpSession, IAcpMessage } from "../../common/interface";
+import { IAcpStatus, IAcpSession, IAcpMessage } from "common/interface";
 
 import { Emit } from "../utils/emit";
 import { Setting } from "../utils/setting";

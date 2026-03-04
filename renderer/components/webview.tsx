@@ -1,7 +1,7 @@
 import { WebviewTag, PageFaviconUpdatedEvent } from "electron";
 import React, { useEffect, useState, useRef, RefObject, MouseEvent, FormEvent, ChangeEvent, KeyboardEvent } from "react";
 
-import { ISetting } from "../../common/interface";
+import { ISetting } from "common/interface";
 
 import { Emit } from "../utils/emit";
 import { Setting } from "../utils/setting";
@@ -177,8 +177,8 @@ export function WebviewComponent(props: Props) {
 
     switch (e.key) {
       case "h": return runAction("navigate-backward");
-      case "j": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Down" })
-      case "k": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Up" })
+      case "j": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Down" });
+      case "k": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Up" });
       case "l": return runAction("navigate-forward");
       case "N": return runAction("search-backward");
       case "n": return runAction("search-forward");
@@ -267,8 +267,8 @@ export function WebviewComponent(props: Props) {
         case "navigate-backward": return webview.current.goBack();
         case "navigate-forward": return webview.current.goForward();
         case "reload": return webview.current.reloadIgnoringCache();
-        case "zoom-out": return setZoom(state.zoom - 10)
-        case "zoom-in": return setZoom(state.zoom + 10)
+        case "zoom-out": return setZoom(state.zoom - 10);
+        case "zoom-in": return setZoom(state.zoom + 10);
         case "devtool": return Emit.send(`devtool:${webview.current.getWebContentsId()}`);
         case "mode-browser": return webview.current.focus();
         case "mode-input": return input.current?.focus();
@@ -331,7 +331,7 @@ export function WebviewComponent(props: Props) {
     }
 
     runAction("mode-input");
-  }
+  };
 
   function renderEngine(base: string) {
     const regexp = new RegExp(`^${base}`);
@@ -392,5 +392,5 @@ export function WebviewComponent(props: Props) {
         <div className="space" ref={container} />
       </FlexComponent>
     </FlexComponent>
-  )
+  );
 }

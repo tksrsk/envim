@@ -8,7 +8,7 @@ const initialize = () => {
   counter.forEach(timer => clearTimeout(timer));
   counter.splice(0);
   share("envim:pause", false);
-}
+};
 
 const on = (event: string, callback: (...args: any[]) => void) => {
   emit.on(event, callback);
@@ -38,11 +38,11 @@ const invoke = async (event: string, ...args: any[]) => {
 const send = async (event: string, ...args: any[]) => {
   const timer = +setTimeout(() => {
     counter.push(timer);
-    share("envim:pause", true)
+    share("envim:pause", true);
   }, 100);
 
   const result = await invoke(event, ...args);
-  const index = counter.indexOf(timer)
+  const index = counter.indexOf(timer);
   clearTimeout(timer);
   index >= 0 && counter.splice(index, 1) && counter.length === 0 && share("envim:pause", false);
 

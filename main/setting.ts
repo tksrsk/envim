@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFile } from "fs";
 import { ISetting } from "common/interface";
 
 export class Setting {
-  private static item: ISetting
+  private static item: ISetting;
   private static init: boolean = false;
   private static path: string = join(app.getPath("appData"), "envim.json");
 
@@ -21,7 +21,7 @@ export class Setting {
   }
 
   static remove(type: string, path: string) {
-    delete(Setting.item.presets[`[${type}]:${path}`])
+    delete(Setting.item.presets[`[${type}]:${path}`]);
 
     writeFile(Setting.path, JSON.stringify(Setting.item), { encoding: "utf8" }, () => {});
   }

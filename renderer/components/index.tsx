@@ -11,13 +11,13 @@ declare global {
       initialize: () => void,
       on: (event: string, callback: (...args: any[]) => void) => void,
       send: <T>(event: string, ...args: any[]) => Promise<T>,
-    }
+    };
   }
 
   interface Navigator {
     windowControlsOverlay: {
       getTitlebarAreaRect?: () => DOMRect,
-    }
+    };
   }
 }
 

@@ -9,9 +9,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": [
-        "renderer/*"
-      ]
+      "common/*": ["common/*"],
+      "@renderer/*": ["renderer/*"]
     }
   }
 }

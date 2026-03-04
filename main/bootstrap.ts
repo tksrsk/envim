@@ -62,12 +62,5 @@ export class Bootstrap {
       webPreferences.nodeIntegration = false;
       webPreferences.transparent = false;
     });
-
-    readdir(join(__dirname, "../../../extensions"), (e, paths) => {
-      e || paths.forEach(async path => {
-        const extention = join(__dirname, "../../../extensions", path);
-        path.startsWith(".") || session.defaultSession.extensions.loadExtension(extention, { allowFileAccess: true });
-      });
-    });
   }
 }

@@ -12,7 +12,7 @@ interface Props {
   hover?: boolean;
   active?: boolean;
   float?: "left" | "right";
-  onClick?: (...args: any[]) => void,
+  onClick?: (...args: any[]) => void;
 }
 
 const whiteSpace: "nowrap" = "nowrap";

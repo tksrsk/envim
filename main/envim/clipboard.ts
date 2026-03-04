@@ -13,7 +13,7 @@ export class Clipboard {
 
   static copy(lines: string[], type: "v" | "V" | "b") {
     Clipboard.lines = lines;
-    Clipboard.type = type
+    Clipboard.type = type;
     clipboard.writeText(lines.join("\n"));
   }
 

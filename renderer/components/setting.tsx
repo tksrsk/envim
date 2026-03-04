@@ -58,7 +58,7 @@ export function SettingComponent (props: Props) {
 
     return () => {
       Emit.off("envim:setting", onSetting);
-    }
+    };
   }, []);
 
   function onSetting (state: ISetting) {

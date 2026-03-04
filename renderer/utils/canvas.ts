@@ -33,7 +33,7 @@ export class Canvas {
   }
 
   static push(id: string, cells: ICell[], scroll: IScroll | undefined) {
-    Cache.get<Context2D>(TYPE, id)?.push(cells, scroll)
+    Cache.get<Context2D>(TYPE, id)?.push(cells, scroll);
     Canvas.render();
   }
 

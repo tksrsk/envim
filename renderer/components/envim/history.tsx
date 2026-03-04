@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, RefObject } from "react";
 
-import { ISetting, IMessage } from "../../../common/interface";
+import { ISetting, IMessage } from "common/interface";
 
 import { useEditor } from "../../context/editor";
 

@@ -24,7 +24,7 @@ export class Emit {
   }
 
   static share(event: string, ...args: any[]) {
-    (Emit.events[event] || []).forEach(callback => callback(...args))
+    (Emit.events[event] || []).forEach(callback => callback(...args));
   }
 
   static send<T>(event: string, ...args: any[]): Promise<T> {

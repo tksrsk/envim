@@ -26,7 +26,7 @@ export interface IWindow {
   gid: number;
   winid: number;
   x: number;
-  y: number
+  y: number;
   width: number;
   height: number;
   zIndex: number;
@@ -55,21 +55,21 @@ export interface IScroll {
 }
 
 export interface IHighlight {
-  foreground?: number,
-  background?: number,
-  special?: number,
-  reverse?: boolean,
-  italic?: boolean,
-  bold?: boolean,
-  strikethrough?: boolean,
-  underline?: boolean,
-  underdouble?: boolean,
-  undercurl?: boolean,
-  underdotted?: boolean,
-  underdashed?: boolean,
-  altfont?: boolean,
-  blend?: number,
-  url?: string,
+  foreground?: number;
+  background?: number;
+  special?: number;
+  reverse?: boolean;
+  italic?: boolean;
+  bold?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
+  underdouble?: boolean;
+  undercurl?: boolean;
+  underdotted?: boolean;
+  underdashed?: boolean;
+  altfont?: boolean;
+  blend?: number;
+  url?: string;
 }
 
 export interface ITab {
@@ -108,7 +108,7 @@ export interface IMenu {
 interface IAcpToolBase {
   id: string;
   status: ToolCallStatus;
-  permissionRequest?: { requestId: string; options: PermissionOption[]; selectedOptionId?: string; } };
+  permissionRequest?: { requestId: string; options: PermissionOption[]; selectedOptionId?: string; }; }
 
 export interface IAcpToolCall extends IAcpToolBase {
   title: string;
@@ -130,7 +130,7 @@ export interface IAcpSession {
   commands: AvailableCommand[];
   modes?: SessionModeState | null;
   models?: SessionModelState | null;
-  usage?: UsageUpdate
+  usage?: UsageUpdate;
 }
 
 export interface IAcpStatus {

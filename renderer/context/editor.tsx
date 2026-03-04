@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 
-import { ISetting, ITab, IBuffer, IMode, IMenu } from "../../common/interface";
+import { ISetting, ITab, IBuffer, IMode, IMenu } from "common/interface";
 
 import { Emit } from "../utils/emit";
 import { Setting } from "../utils/setting";
