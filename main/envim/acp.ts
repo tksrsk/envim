@@ -313,11 +313,6 @@ export class Acp {
 
 
   static addMessage(sessionId: string, type: string, content: string, toolInfo?: IAcpMessage["toolInfo"]): void {
-    const session = Acp.sessions[sessionId];
-    if (!session || (!content && !toolInfo)) {
-      return;
-    }
-
     const message: IAcpMessage = {
       sessionId,
       type,
