@@ -5,7 +5,6 @@ import {
   PermissionOption,
   AvailableCommand,
   PlanEntry,
-  ToolCallStatus,
   UsageUpdate
 } from "@agentclientprotocol/sdk";
 
@@ -105,21 +104,11 @@ export interface IMenu {
   submenus?: IMenu[];
 }
 
-interface IAcpToolBase {
-  id: string;
-  status: ToolCallStatus;
-  permissionRequest?: { requestId: string; options: PermissionOption[]; selectedOptionId?: string; }; }
 
-export interface IAcpToolCall extends IAcpToolBase {
-  title: string;
-  start: number;
-}
-
-export interface IAcpMessage {
-  sessionId: string;
-  type: string;
-  content: string;
-  toolInfo?: IAcpToolBase & { content: string; diff: { add: string; delete: string; } };
+export interface IPermissionRequest {
+  requestId: string;
+  options: PermissionOption[];
+  selectedOptionId?: string;
 }
 
 export interface IAcpSession {

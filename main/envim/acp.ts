@@ -2,15 +2,14 @@ import {
   Client,
   ClientSideConnection,
   ContentBlock,
-  ToolCallContent,
+  ToolCallUpdate,
   SessionNotification,
   RequestPermissionRequest,
   RequestPermissionResponse,
-  ndJsonStream,
-  PermissionOption
+  ndJsonStream
 } from "@agentclientprotocol/sdk";
 
-import { IAcpStatus, IAcpSession, IAcpMessage, IAcpToolCall } from "common/interface";
+import { IPermissionRequest, IAcpStatus, IAcpSession  } from "common/interface";
 
 import { Emit } from "../emit";
 import { Setting } from "../setting";
@@ -21,7 +20,7 @@ export class Acp {
   private static workspace: { current: string; state: { [k: string]: IAcpStatus } } = { current: "default", state: {} };
   private static connection: ClientSideConnection | null = null;
   private static sessions: { [key: string]: IAcpSession } = {};
-  private static tool: { [key: string]: IAcpToolCall } = {};
+  private static tool: { [key: string]: ToolCallUpdate } = {};
   private static permission: { [key: string]: (response: RequestPermissionResponse) => void } = {};
 
   static async setup(init: boolean, workspace: string) {
@@ -102,76 +101,33 @@ export class Acp {
       !Acp.handleSessionInfoUpdate(params) &&
       !Acp.handleUsageUpdate(params)
     ) {
-      Acp.handleUpdateContent(params);
+      Acp.addMessage(params);
     }
 
     Acp.notifySessionUpdate();
   }
 
-  private static handleUpdateContent(params: SessionNotification) {
-    const content = Acp.parseUpdateContent(params);
+  private static processToolUpdate(sessionId: string, toolCall: ToolCallUpdate) {
+    toolCall._meta = toolCall._meta || {};
+    toolCall = { ...Acp.tool[toolCall.toolCallId], ...toolCall };
 
-    if (content?.trim()) {
-      Acp.addMessage(params.sessionId, params.update.sessionUpdate, content);
+    if (!toolCall._meta!.start && toolCall.status === "in_progress") {
+      toolCall._meta!.start = Date.now();
     }
-  }
-
-  private static parseUpdateContent(params: SessionNotification) {
-    if ("content" in params.update && params.update.content) {
-      const contents = Array.isArray(params.update.content) ? params.update.content : [params.update.content];
-      const genContent = (message: string, content: ContentBlock | ToolCallContent) => {
-        if (content.type === "text") {
-          message = `${message}${content.text || ""}`;
-        } else if (content.type === "image") {
-          message = `${message}[Image: ${content.mimeType}]`;
-        } else if (content.type === "resource_link") {
-          message = `${message}[${content.name}: ${content.uri}]`;
-        } else if (content.type === "resource") {
-          message = `${message}[Resource: ${content.resource.uri}]`;
-        } else {
-          message = `[${content.type}]`;
-        }
-
-        return message;
-      };
-
-      return contents.reduce(genContent, "");
+    if (toolCall.status !== "pending") {
+      toolCall._meta!.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
     }
 
-    return "";
-  }
+    Acp.tool[toolCall.toolCallId] = toolCall;
 
-  private static processToolUpdate(sessionId: string, toolCall: RequestPermissionRequest["toolCall"], permissionOptions?: PermissionOption[]): IAcpMessage["toolInfo"] {
-    if (toolCall.toolCallId in Acp.tool) {
-      const tool = Acp.tool[toolCall.toolCallId];
-      tool.status = toolCall.status || tool.status;
-      if (!tool.start && toolCall.status === "in_progress") {
-        tool.start = Date.now();
-      }
-    } else {
-      Acp.tool[toolCall.toolCallId] = {
-        id: toolCall.toolCallId,
-        title: toolCall.title || toolCall.toolCallId,
-        status: toolCall.status || "pending",
-        start: Date.now(),
-      };
-    }
-
-    const tool = Acp.tool[toolCall.toolCallId];
-    const executionTime = toolCall.status !== "pending"
-      ? ` (${((Date.now() - tool.start) / 1000).toFixed(1)}s)`
-      : "";
-    const content = `${tool.title}${executionTime}`;
-    const toolInfo = Acp.mapToToolInfo(toolCall, permissionOptions);
-
-    tool.permissionRequest = toolInfo?.permissionRequest;
-    Acp.addMessage(sessionId, "tool", content, toolInfo);
+    Acp.addMessage({
+      sessionId,
+      update: { sessionUpdate: "tool_call_update", ...toolCall }
+    });
 
     if (toolCall.status === "completed" || toolCall.status === "failed") {
       delete(Acp.tool[toolCall.toolCallId]);
     }
-
-    return toolInfo;
   }
 
   private static handleToolCallUpdate(params: SessionNotification): boolean {
@@ -184,44 +140,7 @@ export class Acp {
     return true;
   }
 
-  private static mapToToolInfo(toolCall: RequestPermissionRequest["toolCall"], permissionOptions?: PermissionOption[]): IAcpMessage["toolInfo"] {
-    const toolInfo: IAcpMessage["toolInfo"] = {
-      id: toolCall.toolCallId,
-      status: toolCall.status || "pending",
-      content: "",
-      diff: { add: "", delete: "" },
-    };
 
-    if (toolCall.content && Array.isArray(toolCall.content)) {
-      toolCall.content.forEach(current => {
-        if (current.type === "diff") {
-          toolInfo.diff.add += current.newText;
-          toolInfo.diff.delete += current.oldText;
-        } else if (current.type === "content") {
-          if (current.content.type === "text") {
-            toolInfo.content += current.content.text;
-          } else if (current.content.type === "resource") {
-            toolInfo.content = [toolInfo.content, current.content.resource.uri].filter(str => str).join("\n");
-          } else if (current.content.type === "resource_link") {
-            toolInfo.content = [toolInfo.content, current.content.uri].filter(str => str).join("\n");
-          }
-        } else if (current.type === "terminal") {
-          toolInfo.content = [toolInfo.content, "[Terminal Output]"].filter(str => str).join("\n");
-        }
-      });
-    } else if (toolCall.rawInput && Object.keys(toolCall.rawInput).length) {
-      toolInfo.content = JSON.stringify(toolCall.rawInput);
-    }
-
-    if (permissionOptions) {
-      toolInfo.permissionRequest = {
-        requestId: `perm_${Date.now()}`,
-        options: permissionOptions,
-      };
-    }
-
-    return toolInfo;
-  }
 
   static async startAgent() {
     Acp.setState({ status: "connecting", plan: [] });
@@ -316,15 +235,8 @@ export class Acp {
   }
 
 
-  static addMessage(sessionId: string, type: string, content: string, toolInfo?: IAcpMessage["toolInfo"]): void {
-    const message: IAcpMessage = {
-      sessionId,
-      type,
-      content,
-      toolInfo,
-    };
-
-    Emit.send("acp:message-added", message);
+  static addMessage(notification: SessionNotification) {
+    Emit.send("acp:message-added", notification);
   }
 
   static async sendPrompt(sessionId: string, text: string, files: string[] = []) {
@@ -337,17 +249,17 @@ export class Acp {
       ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as ContentBlock)),
     ];
 
-    prompt.forEach(content => Acp.handleUpdateContent({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
+    prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
     Acp.setState({ ...Acp.state, status: "processing" });
     Acp.connection.prompt({
       sessionId,
       prompt
     }).catch((err: unknown) => {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      Acp.addMessage(sessionId, "system", `Failed to send message: ${errorMessage}`);
+      Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Failed to send message: ${errorMessage}` } } });
     }).then(result => {
       if (result && result.stopReason !== "end_turn") {
-        Acp.addMessage(sessionId, "system", result.stopReason);
+        Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
       }
     }).finally(() => {
       Acp.tool = {};
@@ -363,7 +275,7 @@ export class Acp {
 
     Acp.setState({ ...Acp.state, status: "processing" });
     Acp.connection.cancel({ sessionId });
-    Acp.addMessage(sessionId, "system", "❌ Request cancelled by user");
+    Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "❌ Request cancelled by user"  } } });
     Acp.setState({ ...Acp.state, status: "connected" });
   }
 
@@ -475,22 +387,25 @@ export class Acp {
   }
 
   private static async handleRequestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    const toolInfo = Acp.processToolUpdate(Acp.state.sessionId!, params.toolCall, params.options);
+    const requestId = `perm_${Date.now()}`;
 
-    return new Promise((resolve) => {
-      Acp.permission[toolInfo!.permissionRequest!.requestId] = resolve;
-    });
+    Acp.processToolUpdate(Acp.state.sessionId!, params.toolCall);
+    params.toolCall._meta!.permissionRequest = { requestId, options: params.options };
+
+    return new Promise((resolve) => Acp.permission[requestId] = resolve);
   }
 
   static handlePermissionResponse(requestId: string, optionId: string): void {
     const tool = Object.values(Acp.tool)
-    .find(t => t.permissionRequest?.requestId === requestId);
+      .find(t => {
+      const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
+        permissionRequest?.requestId === requestId
+      });
     const resolver = Acp.permission[requestId];
-    const option = tool?.permissionRequest?.options.find(opt => opt.optionId === optionId);
 
-    if (tool && resolver && option) {
+    if (tool && resolver) {
       resolver({ outcome: { outcome: "selected", optionId } });
-      delete(Acp.tool[tool.id]);
+      delete(Acp.tool[tool.toolCallId]);
       delete(Acp.permission[requestId]);
     }
   }

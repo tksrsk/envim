@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEvent } from "react";
-import { PlanEntry } from "@agentclientprotocol/sdk";
+import { ContentBlock, ToolCallContent, PlanEntry, SessionNotification } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
-import { IAcpStatus, IAcpSession, IAcpMessage } from "common/interface";
+import { IPermissionRequest, IAcpStatus, IAcpSession  } from "common/interface";
 
 import { Emit } from "../utils/emit";
 import { Setting } from "../utils/setting";
@@ -16,7 +16,7 @@ interface State {
   visible: boolean;
   status: IAcpStatus;
   sessions: IAcpSession[];
-  messages: IAcpMessage[];
+  messages: SessionNotification[];
   input: string;
   mode: "command" | "prompt" | number;
   session: IAcpSession | null;
@@ -109,7 +109,7 @@ export function AcpComponent() {
     setState(state => ({ ...state, status }));
   }
 
-  function onMessageAdded(message: IAcpMessage) {
+  function onMessageAdded(message: SessionNotification) {
     setState(state => ({
       ...state,
       messages: filterMessages(state.messages, message)
@@ -135,14 +135,24 @@ export function AcpComponent() {
     }));
   }
 
-  function filterMessages(messages: IAcpMessage[], curr: IAcpMessage): IAcpMessage[] {
+  function filterMessages(messages: SessionNotification[], curr: SessionNotification): SessionNotification[] {
     const prev = messages.pop();
 
-    if (prev && prev.type === curr.type && prev.sessionId === curr.sessionId && curr.type.includes("agent_")) {
-      curr.content = `${prev.content}${curr.content}`;
+    if (
+      prev && prev.sessionId === curr.sessionId && (
+        (prev.update.sessionUpdate === "user_message_chunk" &&  curr.update.sessionUpdate === "user_message_chunk") ||
+        (prev.update.sessionUpdate === "agent_message_chunk" &&  curr.update.sessionUpdate === "agent_message_chunk") ||
+        (prev.update.sessionUpdate === "agent_thought_chunk" &&  curr.update.sessionUpdate === "agent_thought_chunk")
+      ) && prev.update.content.type === "text" && curr.update.content.type === "text"
+    ) {
+      curr.update.content.text = `${prev.update.content.text}${curr.update.content.text}`;
     } else if (prev) {
       messages.push(prev);
-      messages = messages.filter(msg => !curr.toolInfo || msg.toolInfo?.id !== curr.toolInfo.id);
+
+      if (curr.update.sessionUpdate === "tool_call" || curr.update.sessionUpdate === "tool_call_update") {
+        const toolCallId = curr.update.toolCallId;
+        messages = messages.filter(msg => !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
+      }
     }
 
     return [...messages, curr];
@@ -334,58 +344,121 @@ export function AcpComponent() {
     };
   }
 
+  function renderToolContent(content: ToolCallContent) {
+    switch (content.type) {
+      case "content":
+        return renderContent(content.content);
+      case "diff":
+        return (
+          <details>
+            <summary className="clickable"> [DIFF]</summary>
+            <FlexComponent direction="column">
+              <FlexComponent color="green" whiteSpace="pre-wrap">{content.newText}</FlexComponent>
+              <FlexComponent color="red" whiteSpace="pre-wrap">{content.oldText}</FlexComponent>
+            </FlexComponent>
+          </details>
+        );
+      case "terminal":
+        return `[terminal: ${content.terminalId}]`;
+      default:
+        return null;
+    }
+  }
+
+  function renderContent(content: ContentBlock) {
+    switch (content.type) {
+      case "text":
+        return <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{content.text}</div>;
+      case "image":
+        return <img src={content.uri || `data:${content.mimeType};base64,${content.data}`} />;
+      case "resource":
+        return <div style={{ whiteSpace: "pre-wrap" }}>[resource: {content.resource.uri}]</div>;
+      case "resource_link":
+        const icon = icons.find(icon => content.name.match(icon.match))!;
+        return <IconComponent {...icon} text={content.name} />;
+      default:
+        return null;
+    }
+  }
+
+  function renderMessage(message: SessionNotification) {
+    switch (message.update.sessionUpdate) {
+      case "user_message_chunk":
+        return (
+          <FlexComponent color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>
+            {renderContent(message.update.content)}
+          </FlexComponent>
+        );
+      case "agent_message_chunk":
+        return renderContent(message.update.content);
+      case "agent_thought_chunk":
+        return (
+          <details>
+            <summary className="clickable">󰟶 Agent Thought...</summary>
+            {renderContent(message.update.content)}
+          </details>
+        )
+      case "tool_call":
+      case "tool_call_update":
+        const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
+
+        return (
+          <>
+            <details>
+              <summary className="clickable">
+                <FlexComponent vertical="center">
+                  {message.update.title || message.update.kind || message.update.toolCallId}
+                  {typeof message.update._meta?.executionTime === "number" && `(${message.update._meta?.executionTime})s`}
+                  <div className="space" />
+                  {message.update.status === "in_progress" && <div className="animate loading inline" />}
+                  {message.update.status === "completed" && <IconComponent font="" color="green-fg" />}
+                  {message.update.status === "failed" && <IconComponent font="" color="red-fg" />}
+                </FlexComponent>
+              </summary>
+              <FlexComponent direction="column">
+                {message.update.content?.map(renderToolContent)}
+              </FlexComponent>
+            </details>
+            {typeof message.update.rawInput === "string" && (
+              <details>
+                <summary className="clickable"> [INPUT]</summary>
+                <FlexComponent whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
+              </details>
+            )}
+            {typeof message.update.rawOutput === "string" && (
+              <details>
+                <summary className="clickable"> [OUTPUT]</summary>
+                <FlexComponent whiteSpace="pre-wrap">{message.update.rawOutput}</FlexComponent>
+              </details>
+            )}
+            {permissionRequest && !permissionRequest?.selectedOptionId && (
+              <FlexComponent color="default" horizontal="center">
+                <IconComponent font="" float="left" />
+                {permissionRequest.options.map(option => (
+                  <FlexComponent key={option.optionId} border={[1]} color={getPermissionColor(option.kind)} margin={[4]} padding={[4]} rounded={[4]}
+                    onClick={() => handlePermissionChoice(permissionRequest!.requestId, option.optionId)}
+                  >
+                    {option.name}
+                  </FlexComponent>
+                ))}
+              </FlexComponent>
+            )}
+          </>
+        )
+    }
+
+    return null;
+  }
+
+
   return state.visible === false ? null : (
     <FlexComponent color="default" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={styles.panel} onMouseUp={e => e.stopPropagation()}>
       <FlexComponent grow={1} shrink={1} direction="column" spacing>
         {state.status.sessionId ? (
-          <FlexComponent color="gray" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} rounded={[4]}>
-            {state.messages.map((message, i) => (
-              message.sessionId !== state.status.sessionId ? null :
-                <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" color={message.type.includes("user_") ? "lightblue" : "default"} margin={[4]} padding={[8]} rounded={[4]}>
-                  <FlexComponent vertical="center">
-                    {message.type === "agent_thought_chunk" ? (
-                      <details>
-                        <summary className="clickable">󰟶 Agent Thought...</summary>
-                        <FlexComponent whiteSpace="pre-wrap">{message.content.trim()}</FlexComponent>
-                      </details>
-                    ) : (
-                      <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{message.content.trim()}</div>
-                    )}
-                    <div className="space" />
-                    {message.toolInfo?.status === "in_progress" && <div className="animate loading inline" />}
-                    {message.toolInfo?.status === "completed" && <IconComponent font="" color="green-fg" />}
-                    {message.toolInfo?.status === "failed" && <IconComponent font="" color="red-fg" />}
-                  </FlexComponent>
-                  {message.toolInfo?.permissionRequest && !message.toolInfo.permissionRequest.selectedOptionId && (
-                    <FlexComponent color="default" horizontal="center">
-                      <IconComponent font="" float="left" />
-                      {message.toolInfo.permissionRequest.options.map(option => (
-                        <FlexComponent key={option.optionId} border={[1]} color={getPermissionColor(option.kind)} margin={[4]} padding={[4]} rounded={[4]}
-                          onClick={() => handlePermissionChoice(message.toolInfo!.permissionRequest!.requestId, option.optionId)}
-                        >
-                          {option.name}
-                        </FlexComponent>
-                      ))}
-                    </FlexComponent>
-                  )}
-                  {message.toolInfo?.content && (
-                    <details>
-                      <summary className="clickable" />
-                      <FlexComponent whiteSpace="pre-wrap">{message.toolInfo.content}</FlexComponent>
-                    </details>
-                  )}
-                  {message.toolInfo?.diff && (message.toolInfo.diff.add || message.toolInfo.diff.delete) && (
-                    <details>
-                      <summary className="clickable" />
-                      <FlexComponent direction="column">
-                        <FlexComponent color="green" whiteSpace="pre-wrap">{message.toolInfo.diff.add}</FlexComponent>
-                        <FlexComponent color="red" whiteSpace="pre-wrap">{message.toolInfo.diff.delete}</FlexComponent>
-                      </FlexComponent>
-                    </details>
-                  )}
-                </FlexComponent>
-              )
-            )}
+          <FlexComponent direction="column" grow={1} shrink={1} overflow="auto" padding={[4]}>
+            {state.messages.map((message, i) => (message.sessionId !== state.status.sessionId ? null :
+                <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" margin={[4, 0]}>{renderMessage(message)}</FlexComponent>
+            ))}
 
             <div ref={scroll} />
           </FlexComponent>
