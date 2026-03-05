@@ -102,14 +102,18 @@ export class Acp {
       !Acp.handleSessionInfoUpdate(params) &&
       !Acp.handleUsageUpdate(params)
     ) {
-      const content = Acp.parseUpdateContent(params);
-
-      if (content?.trim()) {
-        Acp.addMessage(params.sessionId, params.update.sessionUpdate, content);
-      }
+      Acp.handleUpdateContent(params);
     }
 
     Acp.notifySessionUpdate();
+  }
+
+  private static handleUpdateContent(params: SessionNotification) {
+    const content = Acp.parseUpdateContent(params);
+
+    if (content?.trim()) {
+      Acp.addMessage(params.sessionId, params.update.sessionUpdate, content);
+    }
   }
 
   private static parseUpdateContent(params: SessionNotification) {
@@ -328,11 +332,12 @@ export class Acp {
       return;
     }
 
-    const prompt: ContentBlock[] = [{ type: "text", text }];
+    const prompt: ContentBlock[] = [
+      { type: "text", text },
+      ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as ContentBlock)),
+    ];
 
-    files.forEach(file => prompt.push({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file }));
-
-    Acp.addMessage(sessionId, "user_message_chunk", text);
+    prompt.forEach(content => Acp.handleUpdateContent({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
     Acp.setState({ ...Acp.state, status: "processing" });
     Acp.connection.prompt({
       sessionId,
