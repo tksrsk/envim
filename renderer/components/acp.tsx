@@ -197,10 +197,10 @@ export function AcpComponent() {
     setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
   }
 
-  function getIcon(file: string) {
+  function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
-    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} />;
+    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} onClick={() => Emit.send("envim:command", `edit ${file}`)} />;
   }
 
   function handleRemoveFile(file: string) {
@@ -294,11 +294,12 @@ export function AcpComponent() {
     }
   }
 
-  function getStatusIcon (status: PlanEntry["status"]) {
+  function getStatusIcon (status?: string | null) {
     switch (status) {
       case "pending": return <IconComponent color="gray-fg" font="󰐎" />;
-      case "in_progress": return <IconComponent color="blue-fg" font="" />;
+      case "in_progress": return <div className="animate loading inline" />;
       case "completed": return <IconComponent color="green-fg" font="" />;
+      case "failed": return <IconComponent font="" color="red-fg" />;
       default: return null;
     }
   }
@@ -374,8 +375,9 @@ export function AcpComponent() {
       case "resource":
         return <div style={{ whiteSpace: "pre-wrap" }}>[resource: {content.resource.uri}]</div>;
       case "resource_link":
-        const icon = icons.find(icon => content.name.match(icon.match))!;
-        return <IconComponent {...icon} text={content.name} />;
+        const { pathname } = new URL(content.uri);
+
+        return pathname && renderFile(pathname);
       default:
         return null;
     }
@@ -384,10 +386,10 @@ export function AcpComponent() {
   function renderMessage(message: SessionNotification) {
     switch (message.update.sessionUpdate) {
       case "user_message_chunk":
-        return (
-          <FlexComponent color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>
-            {renderContent(message.update.content)}
-          </FlexComponent>
+        const content = renderContent(message.update.content);
+
+        return message.update.content.type !== "text" ? content : (
+          <FlexComponent color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
         );
       case "agent_message_chunk":
         return renderContent(message.update.content);
@@ -410,9 +412,7 @@ export function AcpComponent() {
                   {message.update.title || message.update.kind || message.update.toolCallId}
                   {typeof message.update._meta?.executionTime === "number" && `(${message.update._meta?.executionTime})s`}
                   <div className="space" />
-                  {message.update.status === "in_progress" && <div className="animate loading inline" />}
-                  {message.update.status === "completed" && <IconComponent font="" color="green-fg" />}
-                  {message.update.status === "failed" && <IconComponent font="" color="red-fg" />}
+                  {getStatusIcon(message.update.status)}
                 </FlexComponent>
               </summary>
               <FlexComponent direction="column">
@@ -492,7 +492,7 @@ export function AcpComponent() {
         {state.status.plan.length > 0 && <div className="divider color-gray" />}
         {state.files.map(file => (
           <FlexComponent key={file} margin={[2]} padding={[2]} animate="fade-in hover">
-            {getIcon(file)}
+            {renderFile(file)}
             <IconComponent font="" color="gray" float="right" onClick={() => handleRemoveFile(file)} hover />
           </FlexComponent>
         ))}
