@@ -20,7 +20,7 @@ interface Props {
   winid: number;
   focusable: boolean;
   focus: boolean;
-  shadow: boolean
+  shadow: boolean;
   type: "normal" | "floating" | "external";
   style: {
     zIndex: number;
@@ -69,7 +69,7 @@ export function EditorComponent(props: Props) {
       Emit.off(`preview:${props.id}`, onPreview);
       Emit.off(`viewport:${props.id}`, onViewport);
     };
-  }, [])
+  }, []);
 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
@@ -206,7 +206,7 @@ export function EditorComponent(props: Props) {
     const width = x2Col(props.style.width);
     const height = y2Row(props.style.height);
 
-    runCommand(e, `call nvim_win_set_config(0, { "width": ${width}, "height": ${height}, "external": 1 })`)
+    runCommand(e, `call nvim_win_set_config(0, { "width": ${width}, "height": ${height}, "external": 1 })`);
   }
 
   function dragExtWIndow(e: MouseEvent) {

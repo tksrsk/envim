@@ -83,7 +83,7 @@ export function HistoryComponent(props: Props) {
       messages = [ ...state.messages, ...messages ];
 
       return { ...state, messages: messages.slice(-1000) };
-    })
+    });
   }
 
   useEffect(() => {

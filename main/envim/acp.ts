@@ -399,7 +399,7 @@ export class Acp {
     const tool = Object.values(Acp.tool)
       .find(t => {
       const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
-        permissionRequest?.requestId === requestId
+        permissionRequest?.requestId === requestId;
       });
     const resolver = Acp.permission[requestId];
 

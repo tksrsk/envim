@@ -67,7 +67,7 @@ export function AcpComponent() {
     const observer = new IntersectionObserver(
       ([entry]) => {
         clearTimeout(timer.current);
-        timer.current = +setTimeout(() => { setState(state => ({ ...state, scroll: !entry.isIntersecting })) }, 200)
+        timer.current = +setTimeout(() => setState(state => ({ ...state, scroll: !entry.isIntersecting })), 200);
       },
       { threshold: 0.1 }
     );
@@ -95,7 +95,7 @@ export function AcpComponent() {
     })();
 
     Emit.send("envim:setting", Setting.get());
-    setState(state => ({ ...state, input: input }));
+    setState(state => ({ ...state, input }));
   }, [state.mode]);
 
   function onAgentToggle() {
@@ -165,25 +165,25 @@ export function AcpComponent() {
 
   function handleStartAgent() {
     Emit.send("acp:start-agent");
-  };
+  }
 
   function handleStopAgent() {
     Emit.send("acp:stop-agent");
-  };
+  }
 
   function handleCreateSession() {
     Emit.send("acp:create-session");
-  };
+  }
 
   function handleSwitchSession(sessionId: string) {
     if (checkAcpStatus("connected")) {
       Emit.send("acp:switch-session", sessionId);
     }
-  };
+  }
 
   function handleDeleteSession(sessionId: string) {
     Emit.send("acp:delete-session", sessionId);
-  };
+  }
 
   function handleSetSessionMode(mode: string) {
     checkAcpStatus("processing") || Emit.send("acp:set-session-mode", mode);
@@ -200,7 +200,7 @@ export function AcpComponent() {
   function getIcon(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
-    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} />
+    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} />;
   }
 
   function handleRemoveFile(file: string) {
@@ -257,7 +257,7 @@ export function AcpComponent() {
           if (Setting.acp.mcpServers[state.mode]) {
             Setting.acp.mcpServers[state.mode].server = server;
           } else {
-            Setting.acp.mcpServers.push({ enabled: true, server })
+            Setting.acp.mcpServers.push({ enabled: true, server });
           }
 
           Emit.send("envim:setting", Setting.get());
@@ -277,7 +277,7 @@ export function AcpComponent() {
     }
 
     setState(state => ({ ...state, input: "", files: [], mode }));
-  };
+  }
 
   function handleCancelPrompt() {
     if (!checkAcpStatus("processing")) {
@@ -397,7 +397,7 @@ export function AcpComponent() {
             <summary className="clickable">󰟶 Agent Thought...</summary>
             {renderContent(message.update.content)}
           </details>
-        )
+        );
       case "tool_call":
       case "tool_call_update":
         const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
@@ -444,7 +444,7 @@ export function AcpComponent() {
               </FlexComponent>
             )}
           </>
-        )
+        );
     }
 
     return null;

@@ -58,7 +58,7 @@ export function PopupmenuComponent() {
 
       state.clicked || setTimeout(() => scope.current?.parentElement?.scrollTo({ top, behavior: "smooth" }));
       return { ...state, selected, clicked: false };
-    })
+    });
   }
 
   function offPopupmenu() {
@@ -105,5 +105,5 @@ export function PopupmenuComponent() {
         </FlexComponent>
       ))}
     </FlexComponent>
-  )
+  );
 }

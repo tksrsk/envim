@@ -42,7 +42,7 @@ export function InputComponent () {
       Emit.off("envim:focusable", onFocusable);
       Emit.off("grid:cursor", onCursor);
     };
-  }, [])
+  }, []);
 
   function onFocus () {
     setState(state => {
@@ -79,7 +79,7 @@ export function InputComponent () {
 
   function makeStyle() {
     const pointerEvent: "none" = "none";
-    const cursor = state.cursor
+    const cursor = state.cursor;
     const multibyte = (encodeURIComponent(state.value).replace(/%../g, "x").length - state.value.length) / 2;
     const offset = Math.max(col2X(cursor.x + state.value.length + multibyte + 1) - document.body.clientWidth, 0);
 
@@ -103,7 +103,7 @@ export function InputComponent () {
       () => (document.activeElement === input.current) === focus && setState(state => ({ ...state, focus })),
       200
     );
-    focus && Emit.share("envim:focused")
+    focus && Emit.share("envim:focused");
   }
 
   function onKeyDown (e: KeyboardEvent) {
