@@ -22,16 +22,19 @@ webview {
 
 details {
   position: relative;
-  margin: .5rem auto;
-  padding: 1rem 0 0;
   width: 100%;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--color-gray);
+  border-radius: 4px;
 
   summary {
     list-style-type: none;
-    position: absolute;
+    position: sticky;
     inset: 0;
     z-index: 1;
-    padding-left: 1rem;
+    padding: .3rem .3rem .3rem 1rem;
+    background: var(--color-bg);
 
     &::before {
       position: absolute;
@@ -44,10 +47,10 @@ details {
     }
   }
 
-  &[open] {
-    padding: 1rem 1rem .2rem;
+  &[open] > summary {
+    border-bottom: 1px solid var(--color-gray);
 
-    & > summary::before {
+    &::before {
       transform: rotate(90deg);
     }
   }

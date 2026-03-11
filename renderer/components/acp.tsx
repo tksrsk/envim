@@ -140,9 +140,9 @@ export function AcpComponent() {
 
     if (
       prev && prev.sessionId === curr.sessionId && (
-        (prev.update.sessionUpdate === "user_message_chunk" &&  curr.update.sessionUpdate === "user_message_chunk") ||
-        (prev.update.sessionUpdate === "agent_message_chunk" &&  curr.update.sessionUpdate === "agent_message_chunk") ||
-        (prev.update.sessionUpdate === "agent_thought_chunk" &&  curr.update.sessionUpdate === "agent_thought_chunk")
+        (prev.update.sessionUpdate === "user_message_chunk" && curr.update.sessionUpdate === "user_message_chunk") ||
+        (prev.update.sessionUpdate === "agent_message_chunk" && curr.update.sessionUpdate === "agent_message_chunk") ||
+        (prev.update.sessionUpdate === "agent_thought_chunk" && curr.update.sessionUpdate === "agent_thought_chunk")
       ) && prev.update.content.type === "text" && curr.update.content.type === "text"
     ) {
       curr.update.content.text = `${prev.update.content.text}${curr.update.content.text}`;
@@ -353,7 +353,7 @@ export function AcpComponent() {
         return (
           <details>
             <summary className="clickable"> [DIFF]</summary>
-            <FlexComponent direction="column">
+            <FlexComponent direction="column" padding={[4]}>
               <FlexComponent color="green" whiteSpace="pre-wrap">{content.newText}</FlexComponent>
               <FlexComponent color="red" whiteSpace="pre-wrap">{content.oldText}</FlexComponent>
             </FlexComponent>
@@ -397,7 +397,7 @@ export function AcpComponent() {
         return (
           <details>
             <summary className="clickable">󰟶 Agent Thought...</summary>
-            {renderContent(message.update.content)}
+            <FlexComponent padding={[4]}>{renderContent(message.update.content)}</FlexComponent>
           </details>
         );
       case "tool_call":
@@ -408,27 +408,27 @@ export function AcpComponent() {
           <>
             <details>
               <summary className="clickable">
-                <FlexComponent vertical="center">
+                <FlexComponent vertical="center" whiteSpace="pre-wrap">
                   {message.update.title || message.update.kind || message.update.toolCallId}
                   {typeof message.update._meta?.executionTime === "number" && `(${message.update._meta?.executionTime})s`}
                   <div className="space" />
                   {getStatusIcon(message.update.status)}
                 </FlexComponent>
               </summary>
-              <FlexComponent direction="column">
+              <FlexComponent direction="column" padding={[4]}>
                 {message.update.content?.map(renderToolContent)}
               </FlexComponent>
             </details>
             {typeof message.update.rawInput === "string" && (
               <details>
                 <summary className="clickable"> [INPUT]</summary>
-                <FlexComponent whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
+                <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
               </details>
             )}
             {typeof message.update.rawOutput === "string" && (
               <details>
                 <summary className="clickable"> [OUTPUT]</summary>
-                <FlexComponent whiteSpace="pre-wrap">{message.update.rawOutput}</FlexComponent>
+                <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawOutput}</FlexComponent>
               </details>
             )}
             {permissionRequest && !permissionRequest?.selectedOptionId && (
@@ -497,21 +497,19 @@ export function AcpComponent() {
           </FlexComponent>
         ))}
         {state.files.length > 0 && <div className="divider color-gray" />}
-        <FlexComponent overflow="visible" spacing>
-          {(checkAcpStatus("connected")) && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
-          {(checkAcpStatus("connected")) && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
+        <FlexComponent overflow="visible">
+          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
+          {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
           {!checkAcpStatus("connected") && <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "command" }))} />}
-          {Setting.acp.mcpServers.length > 0 && (
-            <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>
-              {Setting.acp.mcpServers.map((mcp, i) => (
-                <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: i }))} spacing>
-                  <input type="checkbox" checked={mcp.enabled} onChange={e => handleEditMcp(e, "toggle", i)} />
-                  {mcp.server.name}
-                  <IconComponent color="gray" font="" float="right" onClick={e => handleEditMcp(e, "delete", i)} hover />
-                </FlexComponent>
-              ))}
-            </MenuComponent>
-          )}
+          <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>
+            {Setting.acp.mcpServers.map((mcp, i) => (
+              <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: i }))} spacing>
+                <input type="checkbox" checked={mcp.enabled} onChange={e => handleEditMcp(e, "toggle", i)} />
+                {mcp.server.name}
+                <IconComponent color="gray" font="" float="right" onClick={e => handleEditMcp(e, "delete", i)} hover />
+              </FlexComponent>
+            ))}
+          </MenuComponent>
           <div className="space" />
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={handleCreateSession} />}>
