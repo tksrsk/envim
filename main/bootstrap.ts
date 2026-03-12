@@ -1,6 +1,5 @@
-import { app, session, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, Menu } from "electron";
 import { join } from "path";
-import { readdir } from "fs";
 
 import { Emit } from "./emit";
 import { Browser } from "./browser";
