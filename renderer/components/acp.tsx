@@ -297,7 +297,7 @@ export function AcpComponent() {
   function getStatusIcon (status?: string | null) {
     switch (status) {
       case "pending": return <IconComponent color="gray-fg" font="󰐎" />;
-      case "in_progress": return <div className="animate loading inline" />;
+      case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
       case "completed": return <IconComponent color="green-fg" font="" />;
       case "failed": return <IconComponent font="" color="red-fg" />;
       default: return null;
@@ -410,27 +410,27 @@ export function AcpComponent() {
               <summary className="clickable">
                 <FlexComponent vertical="center" whiteSpace="pre-wrap">
                   {message.update.title || message.update.kind || message.update.toolCallId}
-                  {typeof message.update._meta?.executionTime === "number" && `(${message.update._meta?.executionTime})s`}
                   <div className="space" />
+                  {typeof message.update._meta?.executionTime && `${message.update._meta?.executionTime}s`}
                   {getStatusIcon(message.update.status)}
                 </FlexComponent>
               </summary>
               <FlexComponent direction="column" padding={[4]}>
+                {typeof message.update.rawInput === "string" && (
+                  <details style={{marginBottom: 4}}>
+                    <summary className="clickable"> INPUT</summary>
+                    <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
+                  </details>
+                )}
+                {typeof message.update.rawInput === "object" && Object.entries(message.update.rawInput || {}).map(([key, val]) => (
+                  <details key={`input_${key}`} style={{marginBottom: 4}}>
+                    <summary className="clickable"> {key}</summary>
+                    <FlexComponent padding={[4]} whiteSpace="pre-wrap">{typeof val === "object" ? JSON.stringify(val, null, 2) : val.toLocaleString()}</FlexComponent>
+                  </details>
+                ))}
                 {message.update.content?.map(renderToolContent)}
               </FlexComponent>
             </details>
-            {typeof message.update.rawInput === "string" && (
-              <details>
-                <summary className="clickable"> [INPUT]</summary>
-                <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
-              </details>
-            )}
-            {typeof message.update.rawOutput === "string" && (
-              <details>
-                <summary className="clickable"> [OUTPUT]</summary>
-                <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawOutput}</FlexComponent>
-              </details>
-            )}
             {permissionRequest && !permissionRequest?.selectedOptionId && (
               <FlexComponent color="default" horizontal="center">
                 <IconComponent font="" float="left" />
