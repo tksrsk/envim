@@ -113,7 +113,7 @@ export class Acp {
     Object.keys(Acp.tool[toolCall.toolCallId] || {}).forEach(k => toolCall[k] = toolCall[k] || Acp.tool[toolCall.toolCallId][k]);
     Object.keys((Acp.tool[toolCall.toolCallId]?._meta) || {}).forEach(k => toolCall._meta![k] = toolCall._meta![k] || Acp.tool[toolCall.toolCallId]._meta![k]);
 
-    if (!toolCall._meta.start && toolCall.status === "in_progress") {
+    if (!toolCall._meta.start && toolCall.status !== "pending") {
       toolCall._meta.start = Date.now();
     }
     if (toolCall.status !== "pending") {
@@ -391,8 +391,9 @@ export class Acp {
   private static async handleRequestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     const requestId = `perm_${Date.now()}`;
 
+    params.toolCall._meta = params._meta || {};
+    params.toolCall._meta.permissionRequest = { requestId, options: params.options };
     Acp.processToolUpdate(Acp.state.sessionId!, params.toolCall);
-    params.toolCall._meta!.permissionRequest = { requestId, options: params.options };
 
     return new Promise((resolve) => Acp.permission[requestId] = resolve);
   }
@@ -406,7 +407,7 @@ export class Acp {
 
     if (tool && resolver) {
       resolver({ outcome: { outcome: "selected", optionId } });
-      delete(Acp.tool[tool.toolCallId]);
+      delete(Acp.tool[tool.toolCallId]._meta!.permissionRequest);
       delete(Acp.permission[requestId]);
     }
   }

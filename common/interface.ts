@@ -108,7 +108,6 @@ export interface IMenu {
 export interface IPermissionRequest {
   requestId: string;
   options: PermissionOption[];
-  selectedOptionId?: string;
 }
 
 export interface IAcpSession {

@@ -431,7 +431,7 @@ export function AcpComponent() {
                 {message.update.content?.map(renderToolContent)}
               </FlexComponent>
             </details>
-            {permissionRequest && !permissionRequest?.selectedOptionId && (
+            {permissionRequest && (
               <FlexComponent color="default" horizontal="center">
                 <IconComponent font="" float="left" />
                 {permissionRequest.options.map(option => (
