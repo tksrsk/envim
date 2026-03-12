@@ -109,13 +109,15 @@ export class Acp {
 
   private static processToolUpdate(sessionId: string, toolCall: ToolCallUpdate) {
     toolCall._meta = toolCall._meta || {};
-    toolCall = { ...Acp.tool[toolCall.toolCallId], ...toolCall };
 
-    if (!toolCall._meta!.start && toolCall.status === "in_progress") {
-      toolCall._meta!.start = Date.now();
+    Object.keys(Acp.tool[toolCall.toolCallId] || {}).forEach(k => toolCall[k] = toolCall[k] || Acp.tool[toolCall.toolCallId][k]);
+    Object.keys((Acp.tool[toolCall.toolCallId]?._meta) || {}).forEach(k => toolCall._meta![k] = toolCall._meta![k] || Acp.tool[toolCall.toolCallId]._meta![k]);
+
+    if (!toolCall._meta.start && toolCall.status === "in_progress") {
+      toolCall._meta.start = Date.now();
     }
     if (toolCall.status !== "pending") {
-      toolCall._meta!.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
+      toolCall._meta.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
     }
 
     Acp.tool[toolCall.toolCallId] = toolCall;
@@ -396,11 +398,10 @@ export class Acp {
   }
 
   static handlePermissionResponse(requestId: string, optionId: string): void {
-    const tool = Object.values(Acp.tool)
-      .find(t => {
+    const tool = Object.values(Acp.tool).find(t => {
       const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
-        permissionRequest?.requestId === requestId;
-      });
+      return permissionRequest?.requestId === requestId;
+    });
     const resolver = Acp.permission[requestId];
 
     if (tool && resolver) {
