@@ -50,6 +50,8 @@ export class App {
       case "envim_acp_exited": return Emit.share("acp:exited", args[0]);
       case "envim_acp_error": return Emit.share("acp:error", args[0]);
       case "envim_acp_file_add": return Emit.send("acp:file-add", args[0]);
+      case "envim_acp_terminal_output": return Emit.share("acp:terminal-output", args[0]);
+      case "envim_acp_terminal_exit": return Emit.share("acp:terminal-exit", args[0]);
     }
   }
 

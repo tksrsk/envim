@@ -4,8 +4,14 @@ import {
   ContentBlock,
   ToolCallUpdate,
   SessionNotification,
-  RequestPermissionRequest,
-  RequestPermissionResponse,
+  ReadTextFileRequest, ReadTextFileResponse,
+  WriteTextFileRequest, WriteTextFileResponse,
+  CreateTerminalRequest, CreateTerminalResponse,
+  TerminalOutputRequest, TerminalOutputResponse,
+  WaitForTerminalExitRequest, WaitForTerminalExitResponse,
+  KillTerminalCommandRequest, KillTerminalCommandResponse,
+  ReleaseTerminalRequest, ReleaseTerminalResponse,
+  RequestPermissionRequest, RequestPermissionResponse,
   ndJsonStream
 } from "@agentclientprotocol/sdk";
 
@@ -21,6 +27,7 @@ export class Acp {
   private static connection: ClientSideConnection | null = null;
   private static sessions: { [key: string]: IAcpSession } = {};
   private static tool: { [key: string]: ToolCallUpdate } = {};
+  private static terminal: { [key: string]: { promise: Promise<WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: WaitForTerminalExitResponse) => void } } = {};
   private static permission: { [key: string]: (response: RequestPermissionResponse) => void } = {};
 
   static async setup(init: boolean, workspace: string) {
@@ -36,6 +43,8 @@ export class Acp {
       Emit.on("acp:permission-response", Acp.handlePermissionResponse);
       Emit.on("acp:set-session-mode", Acp.onSetSessionMode);
       Emit.on("acp:set-session-model", Acp.onSetSessionModel);
+      Emit.on("acp:terminal-output", Acp.onTerminalOutput);
+      Emit.on("acp:terminal-exit", Acp.onTerminalExit);
     }
 
     Acp.workspace.state[Acp.workspace.current] = Acp.state;
@@ -85,6 +94,23 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
+  private static onTerminalOutput(data: { terminalId: string; output: string }) {
+    const terminal = Acp.terminal[data.terminalId];
+
+    if (terminal) {
+      terminal.output = [terminal.output, data.output].filter(output => output).join("\n");
+    }
+  }
+
+  private static onTerminalExit(data: { terminalId: string; exitCode: number; signal: string }) {
+    const terminal = Acp.terminal[data.terminalId];
+
+    if (terminal?.resolve) {
+      terminal.pid = 0;
+      terminal.resolve(data);
+    }
+  }
+
   private static setState(state: IAcpStatus) {
     Acp.state = state;
 
@@ -116,8 +142,8 @@ export class Acp {
     if (!toolCall._meta.start && toolCall.status !== "pending") {
       toolCall._meta.start = Date.now();
     }
-    if (toolCall.status !== "pending") {
-      toolCall._meta.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
+    if (toolCall.status !== "pending" && toolCall._meta.start) {
+      toolCall._meta.executionTime = ((Date.now() - (toolCall._meta.start as number)) / 1000).toFixed(1);
     }
 
     Acp.tool[toolCall.toolCallId] = toolCall;
@@ -341,14 +367,65 @@ export class Acp {
     return true;
   }
 
-  private static async handleReadTextFile(params: { path: string }): Promise<{ content: string }> {
+  private static async handleReadTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> {
     const lines = await Emit.share("envim:api", "nvim_call_function", ["readfile", [params.path]]);
 
     return { content: Array.isArray(lines) ? lines.join("\n") : "" };
   }
 
-  private static async handleWriteTextFile(params: { path: string; content: string }): Promise<{}> {
+  private static async handleWriteTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
     await Emit.share("envim:api", "nvim_call_function", ["writefile", [params.content.split("\n"), params.path]]);
+
+    return {};
+  }
+
+  private static async handleCreateTerminal(params: CreateTerminalRequest): Promise<CreateTerminalResponse> {
+    const terminalId = `term__${Date.now()}`;
+    const command = [params.command, ...(params.args || [])];
+    const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
+    const opts = { cwd: params.cwd || undefined, env };
+
+    const pid = await Emit.share("envim:api", "nvim_call_function", ["EnvimAcpTerminalStart", [terminalId, command, opts]]) as number | null;
+
+    if (pid) {
+      Acp.terminal[terminalId] = {
+        promise: new Promise<WaitForTerminalExitResponse>((resolve) => Acp.terminal[terminalId].resolve = resolve),
+        output: "",
+        truncated: false,
+        pid,
+      };
+    }
+
+    return { terminalId };
+  }
+
+  private static async handleTerminalOutput(params: TerminalOutputRequest): Promise<TerminalOutputResponse> {
+    const terminal = Acp.terminal[params.terminalId]!;
+
+    return {
+      output: terminal.output,
+      truncated: terminal.truncated,
+      exitStatus: terminal.pid ? undefined : { exitCode: 0 },
+    };
+  }
+
+  private static async handleWaitForTerminalExit(params: WaitForTerminalExitRequest): Promise<WaitForTerminalExitResponse> {
+    return Acp.terminal[params.terminalId].promise;
+  }
+
+  private static async handleKillTerminal(params: KillTerminalCommandRequest): Promise<KillTerminalCommandResponse> {
+    const { pid } = Acp.terminal[params.terminalId];
+
+    Emit.share("envim:api", "nvim_call_function", ["jobstop", [pid]]);
+
+    return {};
+  }
+
+  private static async handleReleaseTerminal(params: ReleaseTerminalRequest): Promise<ReleaseTerminalResponse> {
+    const { pid } = Acp.terminal[params.terminalId];
+
+    await Emit.share("envim:api", "nvim_call_function", ["jobstop", [pid]]);
+    delete(Acp.terminal[params.terminalId]);
 
     return {};
   }
@@ -414,11 +491,15 @@ export class Acp {
 
   private static createClient(): Client {
     return {
-      readTextFile: async (params: any) => await Acp.handleReadTextFile(params),
-      writeTextFile: async (params: any) => await Acp.handleWriteTextFile(params),
-      terminal: async (_params: any) => ({ exitCode: 0, stdout: "", stderr: "" }),
-      requestPermission: async (params: RequestPermissionRequest) => Acp.handleRequestPermission(params),
-      sessionUpdate: async (params: SessionNotification) => Acp.handleSessionUpdate(params)
+      readTextFile: async params => await Acp.handleReadTextFile(params),
+      writeTextFile: async params => await Acp.handleWriteTextFile(params),
+      createTerminal: async params => Acp.handleCreateTerminal(params),
+      terminalOutput: async params => Acp.handleTerminalOutput(params),
+      waitForTerminalExit: async params => Acp.handleWaitForTerminalExit(params),
+      killTerminal: async params => Acp.handleKillTerminal(params),
+      releaseTerminal: async params => Acp.handleReleaseTerminal(params),
+      requestPermission: async params => Acp.handleRequestPermission(params),
+      sessionUpdate: async params => Acp.handleSessionUpdate(params)
     };
   }
 }

@@ -360,7 +360,6 @@ export function AcpComponent() {
           </details>
         );
       case "terminal":
-        return `[terminal: ${content.terminalId}]`;
       default:
         return null;
     }

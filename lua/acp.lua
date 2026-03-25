@@ -51,13 +51,14 @@ _G.envim_acp_start = function(command_str)
         end
       end
     end,
-    on_exit = function(_, code, signal)
+    on_exit = function()
       _G.envim_acp = nil
-      envim_connect(0, { "envim_acp_exited", { code = code, signal = signal } })
+      envim_connect(0, { "envim_acp_exited" })
     end
   })
 
   if _G.envim_acp <= 0 then
+    _G.envim_acp = nil
     envim_connect(0, { "envim_acp_error", { error = "Failed to start acp job" } })
     return nil
   end
@@ -93,6 +94,35 @@ _G.envim_acp_add_file = function(file)
   end
 end
 
+_G.envim_acp_terminal_start = function(terminalId, command, opts)
+  opts.on_stdout = function(_, data)
+    if data then
+      local output = table.concat(data, "\n")
+      if output ~= "" then
+        envim_connect(0, { "envim_acp_terminal_output", { terminalId = terminalId, output = output } })
+      end
+    end
+  end
+  opts.on_stderr = function(_, data)
+    if data then
+      local output = table.concat(data, "\n")
+      if output ~= "" then
+        envim_connect(0, { "envim_acp_terminal_output", { terminalId = terminalId, output = output } })
+      end
+    end
+  end
+  opts.on_exit = function(_, exitCode, event)
+    local signal = nil
+    if event == "signal" then
+      signal = tostring(exitCode)
+      exitCode = nil
+    end
+    envim_connect(0, { "envim_acp_terminal_exit", { terminalId = terminalId, exitCode = exitCode, signal = signal } })
+  end
+
+  return vim.fn.jobstart(command, opts)
+end
+
 vim.cmd([[
   function! EnvimAcpStart(command_str)
     return v:lua.envim_acp_start(a:command_str)
@@ -108,5 +138,9 @@ vim.cmd([[
 
   function! EnvimAcpAddFile(file)
     return v:lua.envim_acp_add_file(a:file)
+  endfunction
+
+  function! EnvimAcpTerminalStart(terminalId, command, opts)
+    return v:lua.envim_acp_terminal_start(a:terminalId, a:command, a:opts)
   endfunction
 ]])
