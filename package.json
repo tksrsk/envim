@@ -39,7 +39,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^5.1.4",
-    "electron": "^40.6.1",
+    "electron": "^40.8.5",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "sass": "^1.97.3",
