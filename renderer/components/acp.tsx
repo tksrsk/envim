@@ -410,7 +410,7 @@ export function AcpComponent() {
                 <FlexComponent vertical="center" whiteSpace="pre-wrap">
                   {message.update.title || message.update.kind || message.update.toolCallId}
                   <div className="space" />
-                  {typeof message.update._meta?.executionTime && `${message.update._meta?.executionTime}s`}
+                  {typeof message.update._meta?.executionTime === "string" && `${message.update._meta?.executionTime}s`}
                   {getStatusIcon(message.update.status)}
                 </FlexComponent>
               </summary>
