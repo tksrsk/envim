@@ -1,4 +1,5 @@
 import {
+  AgentCapabilities,
   Client,
   ClientSideConnection,
   ContentBlock,
@@ -9,7 +10,7 @@ import {
   CreateTerminalRequest, CreateTerminalResponse,
   TerminalOutputRequest, TerminalOutputResponse,
   WaitForTerminalExitRequest, WaitForTerminalExitResponse,
-  KillTerminalCommandRequest, KillTerminalCommandResponse,
+  KillTerminalRequest, KillTerminalResponse,
   ReleaseTerminalRequest, ReleaseTerminalResponse,
   RequestPermissionRequest, RequestPermissionResponse,
   ndJsonStream
@@ -25,6 +26,7 @@ export class Acp {
   private static state: IAcpStatus = { status: "disconnected", plan: [] };
   private static workspace: { current: string; state: { [k: string]: IAcpStatus } } = { current: "default", state: {} };
   private static connection: ClientSideConnection | null = null;
+  private static capabilities?: AgentCapabilities;
   private static sessions: { [key: string]: IAcpSession } = {};
   private static tool: { [key: string]: ToolCallUpdate } = {};
   private static terminal: { [key: string]: { promise: Promise<WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: WaitForTerminalExitResponse) => void } } = {};
@@ -194,35 +196,70 @@ export class Acp {
           title: "Envim Editor",
           version: "1.0.0"
         }
-      }).then(Acp.createSession);
+      }).then(response => {
+        Acp.capabilities = response.agentCapabilities;
+        Acp.listSession();
+      });
     } else {
       Acp.setState({ status: result === "initialized" ? "connected" : "disconnected", plan: [] });
     }
   }
 
-  static async createSession() {
+  static listSession() {
     if (!Acp.connection) {
       return;
     }
 
-    const sessionResponse = await Acp.connection.newSession({
+    if (Acp.capabilities?.sessionCapabilities?.list) {
+      Acp.connection.listSessions({ cwd: "" }).then(response => {
+        response.sessions.forEach(session => {
+          if (!Acp.sessions[session.sessionId]) {
+            Acp.sessions[session.sessionId] = {
+              id: session.sessionId,
+              name: session.title || session.updatedAt || session.sessionId,
+              workspace: Acp.workspace.current,
+              loaded: false,
+              status: "show",
+              commands: [],
+            };
+          }
+        });
+
+        Acp.notifySessionUpdate();
+        Acp.setState({ ...Acp.state, status: "connected" });
+        response.sessions.length || Acp.createSession();
+      });
+    } else {
+      Acp.createSession();
+    }
+  }
+
+  static createSession() {
+    if (!Acp.connection) {
+      return;
+    }
+
+    Acp.setState({ ...Acp.state, status: "processing" });
+
+    Acp.connection.newSession({
       cwd: "",
       mcpServers: (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server),
+    }).then(response => {
+      const session: IAcpSession = {
+        id: response.sessionId,
+        name: `Session ${new Date().toLocaleTimeString()}`,
+        workspace: Acp.workspace.current,
+        loaded: true,
+        status: "show",
+        modes: response.modes,
+        models: response.models,
+        commands: []
+      };
+
+      Acp.sessions[session.id] = session;
+      Acp.setState({ ...Acp.state, status: "connected", sessionId: session.id });
+      Acp.notifySessionUpdate();
     });
-
-    const session: IAcpSession = {
-      id: sessionResponse.sessionId,
-      name: `Session ${new Date().toLocaleTimeString()}`,
-      workspace: Acp.workspace.current,
-      status: "show",
-      modes: sessionResponse.modes,
-      models: sessionResponse.models,
-      commands: []
-    };
-
-    Acp.sessions[session.id] = session;
-    Acp.setState({ ...Acp.state, status: "connected", sessionId: session.id });
-    Acp.notifySessionUpdate();
   }
 
   static stopAgent() {
@@ -241,8 +278,12 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static async deleteSession(sessionId: string): Promise<void> {
-    delete Acp.sessions[sessionId];
+  static deleteSession(sessionId: string) {
+    if (Acp.connection && Acp.capabilities?.sessionCapabilities?.close) {
+      Acp.connection.closeSession({ sessionId });
+    }
+
+    delete(Acp.sessions[sessionId]);
 
     if (Acp.state.sessionId === sessionId) {
       delete(Acp.state.sessionId);
@@ -251,23 +292,43 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static async setActiveSession(sessionId: string): Promise<void> {
+  static setActiveSession(sessionId: string) {
     const session = Acp.sessions[sessionId];
 
-    if (!session) {
+    if (!session || !Acp.connection) {
       return;
     }
 
-    Acp.setState({ ...Acp.state, sessionId });
-    Acp.notifySessionUpdate();
-  }
+    if (
+      (session.loaded && Acp.capabilities?.sessionCapabilities?.resume) ||
+      (!session.loaded && Acp.capabilities?.loadSession)
+    ) {
+      const mcpServers = (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server);
+      const method = session.loaded ? "resumeSession" : "loadSession";
 
+      Acp.setState({ ...Acp.state, status: "processing", sessionId });
+      Acp.connection[method]({
+        sessionId, cwd: "", mcpServers
+      }).then(response => {
+        session.modes = response.modes;
+        session.models = response.models;
+      }).finally(() => {
+        Acp.setState({ ...Acp.state, status: "connected" });
+        Acp.notifySessionUpdate();
+      });
+
+      session.loaded = true;
+    } else {
+      Acp.setState({ ...Acp.state, sessionId });
+      Acp.notifySessionUpdate();
+    }
+  }
 
   static addMessage(notification: SessionNotification) {
     Emit.send("acp:message-added", notification);
   }
 
-  static async sendPrompt(sessionId: string, text: string, files: string[] = []) {
+  static sendPrompt(sessionId: string, text: string, files: string[] = []) {
     if (!Acp.connection) {
       return;
     }
@@ -296,7 +357,7 @@ export class Acp {
     });
   }
 
-  static async cancelPrompt(sessionId: string) {
+  static cancelPrompt(sessionId: string) {
     if (!Acp.connection) {
       return;
     }
@@ -413,7 +474,7 @@ export class Acp {
     return Acp.terminal[params.terminalId].promise;
   }
 
-  private static async handleKillTerminal(params: KillTerminalCommandRequest): Promise<KillTerminalCommandResponse> {
+  private static async handleKillTerminal(params: KillTerminalRequest): Promise<KillTerminalResponse> {
     const { pid } = Acp.terminal[params.terminalId];
 
     Emit.share("envim:api", "nvim_call_function", ["jobstop", [pid]]);

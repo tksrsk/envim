@@ -114,6 +114,7 @@ export interface IAcpSession {
   id: string;
   name: string;
   workspace: string;
+  loaded: boolean;
   status: "show" | "hide";
   commands: AvailableCommand[];
   modes?: SessionModeState | null;
