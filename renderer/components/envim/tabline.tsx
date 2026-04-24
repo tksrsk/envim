@@ -55,7 +55,7 @@ export function TablineComponent(props: Props) {
     const bookmarks = Setting.bookmarks;
     const current = bookmarks.find(({ selected }) => selected);
     const selected = bookmarks
-      .filter(({ path }) => cwd.indexOf(path) === 0)
+      .filter(({ path }) => cwd === path || cwd.indexOf(`${path}/`) === 0)
       .sort((a, b) => a.path.length - b.path.length)
       .pop();
     Setting.bookmarks = bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark === selected }));
