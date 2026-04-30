@@ -556,8 +556,8 @@ export function AcpComponent() {
           {state.session && state.session.commands.length > 0 && (
             <MenuComponent label="" color="green-fg">
               {state.session.commands.map((command) => (
-                <FlexComponent key={command.name} onClick={() => handleSelectCommand(command.name)} spacing>
-                  {command.description}
+                <FlexComponent key={command.name} onClick={() => handleSelectCommand(command.name)} title={command.description} spacing>
+                  /{command.name}
                 </FlexComponent>
               ))}
             </MenuComponent>
