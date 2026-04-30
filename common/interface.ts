@@ -1,7 +1,6 @@
 import {
   McpServer,
-  SessionModeState,
-  SessionModelState,
+  SessionConfigOption,
   PermissionOption,
   AvailableCommand,
   PlanEntry,
@@ -117,8 +116,7 @@ export interface IAcpSession {
   loaded: boolean;
   status: "show" | "hide";
   commands: AvailableCommand[];
-  modes?: SessionModeState | null;
-  models?: SessionModelState | null;
+  configOptions: SessionConfigOption[];
   usage?: UsageUpdate;
 }
 

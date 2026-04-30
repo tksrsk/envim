@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEvent } from "react";
-import { ContentBlock, ToolCallContent, PlanEntry, SessionNotification } from "@agentclientprotocol/sdk";
+import { ContentBlock, ToolCallContent, PlanEntry, SessionNotification, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
 import { IPermissionRequest, IAcpStatus, IAcpSession  } from "common/interface";
@@ -185,12 +185,8 @@ export function AcpComponent() {
     Emit.send("acp:delete-session", sessionId);
   }
 
-  function handleSetSessionMode(mode: string) {
-    checkAcpStatus("processing") || Emit.send("acp:set-session-mode", mode);
-  }
-
-  function handleSetSessionModel(modelId: string) {
-    checkAcpStatus("processing") || Emit.send("acp:set-session-model", modelId);
+  function handleSetSessionConfigOption(configId: string, value: string | boolean) {
+    checkAcpStatus("processing") || Emit.send("acp:config-session", configId, value);
   }
 
   function handleSelectCommand(selected: string) {
@@ -449,6 +445,34 @@ export function AcpComponent() {
     return null;
   }
 
+  function renderConfigOption(config: SessionConfigOption) {
+    switch (config.type) {
+      case "boolean":
+        return (
+          <FlexComponent key={config.id} animate="hover" onClick={() => handleSetSessionConfigOption(config.id, !config.currentValue)} spacing>
+            <input type="checkbox" checked={config.currentValue} readOnly />
+            {config.name}
+          </FlexComponent>
+        );
+      case "select":
+        const label = config.options.flatMap(o => "options" in o ? o.options : [o]).find(o => o.value === config.currentValue)?.name || `[${config.name}]`;
+        const renderConfigSelectOption = (option: SessionConfigSelectOption) => (
+          <FlexComponent key={option.value} active={config.currentValue === option.value} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
+            {option.name}
+          </FlexComponent>
+        );
+        return (
+          <MenuComponent key={config.id} label={label}>
+            {config.options.map(option => "group" in option
+              ? <MenuComponent key={option.group} label={option.name}>{option.options.map(renderConfigSelectOption)}</MenuComponent>
+              : renderConfigSelectOption(option))
+            }
+          </MenuComponent>
+        );
+      default:
+        return null;
+    }
+  }
 
   return state.visible === false ? null : (
     <FlexComponent color="default" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={styles.panel} onMouseUp={e => e.stopPropagation()}>
@@ -524,7 +548,7 @@ export function AcpComponent() {
         <textarea
           placeholder={getPlaceholder()}
           value={state.input}
-          onChange={(e) => setState(state => ({ ...state, input: e.target.value }))}
+          onChange={e => setState(state => ({ ...state, input: e.target.value }))}
           onKeyDown={handleInputKeyDown}
           rows={8}
         />
@@ -538,24 +562,7 @@ export function AcpComponent() {
               ))}
             </MenuComponent>
           )}
-          {state.session?.modes?.availableModes && state.session.modes.availableModes.length > 0 && (
-            <MenuComponent label="" color="yellow-fg">
-              {state.session.modes.availableModes.map((mode) => (
-                <FlexComponent key={mode.id} active={state.session!.modes!.currentModeId === mode.id} onClick={() => handleSetSessionMode(mode.id)} spacing>
-                  {mode.name}
-                </FlexComponent>
-              ))}
-            </MenuComponent>
-          )}
-          {state.session?.models?.availableModels && state.session.models.availableModels.length > 0 && (
-            <MenuComponent label="󰆼" color="pink-fg">
-              {state.session.models.availableModels.map((model) => (
-                <FlexComponent key={model.modelId} active={state.session!.models!.currentModelId === model.modelId} onClick={() => handleSetSessionModel(model.modelId)} spacing>
-                  {model.name}
-                </FlexComponent>
-              ))}
-            </MenuComponent>
-          )}
+          {state.session?.configOptions?.map(renderConfigOption)}
           <div className="space" />
           {checkAcpStatus("processing") && <div className="animate loading inline" />}
           <IconComponent font="" color="red-fg" onClick={handleCancelPrompt} style={getDisabledStyle(state.mode !== "prompt" || !checkAcpStatus("processing"))} />

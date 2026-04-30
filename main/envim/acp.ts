@@ -43,8 +43,7 @@ export class Acp {
       Emit.on("acp:send-prompt", Acp.sendPrompt);
       Emit.on("acp:cancel-prompt", Acp.cancelPrompt);
       Emit.on("acp:permission-response", Acp.handlePermissionResponse);
-      Emit.on("acp:set-session-mode", Acp.onSetSessionMode);
-      Emit.on("acp:set-session-model", Acp.onSetSessionModel);
+      Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
     }
@@ -60,40 +59,23 @@ export class Acp {
     Emit.share("envim:luafile", "acp.lua");
   }
 
-  private static onSetSessionMode(mode: string) {
+  private static onSetSessionConfigOption(configId: string, value: string | boolean) {
     if (!Acp.connection || !Acp.state.sessionId) {
       return;
     }
 
-    Acp.connection.setSessionMode({
-      sessionId: Acp.state.sessionId,
-      modeId: mode
+    const sessionId = Acp.state.sessionId;
+    const params = typeof value === "boolean"
+      ? { sessionId, configId, type: "boolean" as const, value }
+      : { sessionId, configId, value };
+
+    Acp.connection.setSessionConfigOption(params).then(response => {
+      const session = Acp.sessions[sessionId];
+      if (session) {
+        session.configOptions = response.configOptions;
+        Acp.notifySessionUpdate();
+      }
     });
-
-    const session = Acp.sessions[Acp.state.sessionId];
-    if (session?.modes) {
-      session.modes.currentModeId = mode;
-    }
-
-    Acp.notifySessionUpdate();
-  }
-
-  private static onSetSessionModel(modelId: string) {
-    if (!Acp.connection || !Acp.state.sessionId) {
-      return;
-    }
-
-    Acp.connection.unstable_setSessionModel({
-      sessionId: Acp.state.sessionId,
-      modelId
-    });
-
-    const session = Acp.sessions[Acp.state.sessionId];
-    if (session?.models) {
-      session.models.currentModelId = modelId;
-    }
-
-    Acp.notifySessionUpdate();
   }
 
   private static onTerminalOutput(data: { terminalId: string; output: string }) {
@@ -126,6 +108,7 @@ export class Acp {
       !Acp.handleToolCallUpdate(params) &&
       !Acp.handlePlanUpdate(params) &&
       !Acp.handleAvailableCommandsUpdate(params) &&
+      !Acp.handleConfigOptionUpdate(params) &&
       !Acp.handleSessionInfoUpdate(params) &&
       !Acp.handleUsageUpdate(params)
     ) {
@@ -251,8 +234,7 @@ export class Acp {
         workspace: Acp.workspace.current,
         loaded: true,
         status: "show",
-        modes: response.modes,
-        models: response.models,
+        configOptions: response.configOptions || [],
         commands: []
       };
 
@@ -310,8 +292,7 @@ export class Acp {
       Acp.connection[method]({
         sessionId, cwd: "", mcpServers
       }).then(response => {
-        session.modes = response.modes;
-        session.models = response.models;
+        session.configOptions = response.configOptions || [];
       }).finally(() => {
         Acp.setState({ ...Acp.state, status: "connected" });
         Acp.notifySessionUpdate();
@@ -392,6 +373,21 @@ export class Acp {
 
     if (session) {
       session.commands = params.update.availableCommands;
+      Acp.notifySessionUpdate();
+    }
+
+    return true;
+  }
+
+  private static handleConfigOptionUpdate(params: SessionNotification): boolean {
+    if (params.update.sessionUpdate !== "config_option_update") {
+      return false;
+    }
+
+    const session = Acp.sessions[params.sessionId];
+
+    if (session) {
+      session.configOptions = params.update.configOptions;
       Acp.notifySessionUpdate();
     }
 
