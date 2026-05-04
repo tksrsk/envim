@@ -428,7 +428,6 @@ export function AcpComponent() {
             </details>
             {permissionRequest && (
               <FlexComponent color="default" horizontal="center">
-                <IconComponent font="" float="left" />
                 {permissionRequest.options.map(option => (
                   <FlexComponent key={option.optionId} border={[1]} color={getPermissionColor(option.kind)} margin={[4]} padding={[4]} rounded={[4]}
                     onClick={() => handlePermissionChoice(permissionRequest!.requestId, option.optionId)}
@@ -455,14 +454,13 @@ export function AcpComponent() {
           </FlexComponent>
         );
       case "select":
-        const label = config.options.flatMap(o => "options" in o ? o.options : [o]).find(o => o.value === config.currentValue)?.name || `[${config.name}]`;
         const renderConfigSelectOption = (option: SessionConfigSelectOption) => (
-          <FlexComponent key={option.value} active={config.currentValue === option.value} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
+          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
             {option.name}
           </FlexComponent>
         );
         return (
-          <MenuComponent key={config.id} label={label}>
+          <MenuComponent key={config.id} label={config.name}>
             {config.options.map(option => "group" in option
               ? <MenuComponent key={option.group} label={option.name}>{option.options.map(renderConfigSelectOption)}</MenuComponent>
               : renderConfigSelectOption(option))
@@ -480,7 +478,7 @@ export function AcpComponent() {
         {state.status.sessionId ? (
           <FlexComponent direction="column" grow={1} shrink={1} overflow="auto" padding={[4]}>
             {state.messages.map((message, i) => (message.sessionId !== state.status.sessionId ? null :
-                <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" margin={[4, 0]}>{renderMessage(message)}</FlexComponent>
+                <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" padding={[4, 2]}>{renderMessage(message)}</FlexComponent>
             ))}
 
             <div ref={scroll} />

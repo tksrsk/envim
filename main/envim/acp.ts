@@ -204,6 +204,7 @@ export class Acp {
               loaded: false,
               status: "show",
               commands: [],
+              configOptions: [],
             };
           }
         });
