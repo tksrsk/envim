@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEvent } from "react";
 import { ContentBlock, ToolCallContent, PlanEntry, SessionNotification, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHilight from "rehype-highlight";
 
 import { IPermissionRequest, IAcpStatus, IAcpSession  } from "common/interface";
 
@@ -364,7 +367,7 @@ export function AcpComponent() {
   function renderContent(content: ContentBlock) {
     switch (content.type) {
       case "text":
-        return <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{content.text}</div>;
+        return <div className="selectable"><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{content.text}</Markdown></div>;
       case "image":
         return <img src={content.uri || `data:${content.mimeType};base64,${content.data}`} />;
       case "resource":
@@ -384,7 +387,7 @@ export function AcpComponent() {
         const content = renderContent(message.update.content);
 
         return message.update.content.type !== "text" ? content : (
-          <FlexComponent color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
+          <FlexComponent direction="column" color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
         );
       case "agent_message_chunk":
         return renderContent(message.update.content);
@@ -392,7 +395,7 @@ export function AcpComponent() {
         return (
           <details>
             <summary className="clickable">󰟶 Agent Thought...</summary>
-            <FlexComponent padding={[4]}>{renderContent(message.update.content)}</FlexComponent>
+            <FlexComponent direction="column" padding={[4]}>{renderContent(message.update.content)}</FlexComponent>
           </details>
         );
       case "tool_call":
@@ -414,13 +417,13 @@ export function AcpComponent() {
                 {typeof message.update.rawInput === "string" && (
                   <details style={{marginBottom: 4}}>
                     <summary className="clickable"> INPUT</summary>
-                    <FlexComponent padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
+                    <FlexComponent direction="column" padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
                   </details>
                 )}
                 {typeof message.update.rawInput === "object" && Object.entries(message.update.rawInput || {}).map(([key, val]) => (
                   <details key={`input_${key}`} style={{marginBottom: 4}}>
                     <summary className="clickable"> {key}</summary>
-                    <FlexComponent padding={[4]} whiteSpace="pre-wrap">{typeof val === "object" ? JSON.stringify(val, null, 2) : val.toLocaleString()}</FlexComponent>
+                    <FlexComponent direction="column" padding={[4]} whiteSpace="pre-wrap">{typeof val === "object" ? JSON.stringify(val, null, 2) : val.toLocaleString()}</FlexComponent>
                   </details>
                 ))}
                 {message.update.content?.map(renderToolContent)}
