@@ -48,7 +48,7 @@
     "vite": "^8.0.8"
   },
   "dependencies": {
-    "dockerode": "^4.0.10",
+    "dockerode": "^5.0.0",
     "neovim": "^5.4.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
