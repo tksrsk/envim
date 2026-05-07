@@ -401,6 +401,21 @@ export function AcpComponent() {
       case "tool_call":
       case "tool_call_update":
         const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
+        const input = ((input?: unknown) => {
+          const json = (() => {
+            try {
+              if (typeof input === "object") return input;
+              if (typeof input === "string") return JSON.parse(input);
+            } catch {
+              return;
+            }
+          })();
+
+          if (json && Object.keys(json).length) return `\`\`\`json\n${JSON.stringify(json, null, 2 )}\n\`\`\``;
+
+          return !json && input && typeof input === "string" ? `\`\`\`\n${input}\n\`\`\`` : "";
+        })(message.update.rawInput);
+
 
         return (
           <>
@@ -414,18 +429,12 @@ export function AcpComponent() {
                 </FlexComponent>
               </summary>
               <FlexComponent direction="column" padding={[4]}>
-                {typeof message.update.rawInput === "string" && (
+                {input && (
                   <details style={{marginBottom: 4}}>
                     <summary className="clickable"> INPUT</summary>
-                    <FlexComponent direction="column" padding={[4]} whiteSpace="pre-wrap">{message.update.rawInput}</FlexComponent>
+                    <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{input}</Markdown></div>
                   </details>
                 )}
-                {typeof message.update.rawInput === "object" && Object.entries(message.update.rawInput || {}).map(([key, val]) => (
-                  <details key={`input_${key}`} style={{marginBottom: 4}}>
-                    <summary className="clickable"> {key}</summary>
-                    <FlexComponent direction="column" padding={[4]} whiteSpace="pre-wrap">{typeof val === "object" ? JSON.stringify(val, null, 2) : val.toLocaleString()}</FlexComponent>
-                  </details>
-                ))}
                 {message.update.content?.map(renderToolContent)}
               </FlexComponent>
             </details>
