@@ -211,10 +211,7 @@ export class Acp {
 
         Acp.notifySessionUpdate();
         Acp.setState({ ...Acp.state, status: "connected" });
-        response.sessions.length || Acp.createSession();
       });
-    } else {
-      Acp.createSession();
     }
   }
 
@@ -225,7 +222,7 @@ export class Acp {
 
     Acp.setState({ ...Acp.state, status: "processing" });
 
-    Acp.connection.newSession({
+    return Acp.connection.newSession({
       cwd: "",
       mcpServers: (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server),
     }).then(response => {
@@ -272,6 +269,7 @@ export class Acp {
       delete(Acp.state.sessionId);
     }
 
+    Acp.setState({ status: "connected", plan: [] });
     Acp.notifySessionUpdate();
   }
 
@@ -311,32 +309,43 @@ export class Acp {
   }
 
   static sendPrompt(sessionId: string, text: string, files: string[] = []) {
-    if (!Acp.connection) {
-      return;
+    const callback = (sessionId: string) => {
+      if (!Acp.connection || !Acp.sessions[sessionId]) {
+        return;
+      }
+
+      const prompt: ContentBlock[] = [
+        { type: "text", text },
+        ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as ContentBlock)),
+      ];
+
+      prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
+      Acp.setState({ ...Acp.state, status: "processing" });
+      Acp.connection.prompt({
+        sessionId,
+        prompt
+      }).catch((err: unknown) => {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Failed to send message: ${errorMessage}` } } });
+      }).then(result => {
+        if (result && result.stopReason !== "end_turn") {
+          Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
+        }
+      }).finally(() => {
+        Acp.tool = {};
+        Acp.permission = {};
+        Acp.setState({ ...Acp.state, status: "connected" });
+      });
     }
 
-    const prompt: ContentBlock[] = [
-      { type: "text", text },
-      ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as ContentBlock)),
-    ];
+    if (!sessionId) {
+      Acp.createSession().then(() => {
+        callback(Acp.state.sessionId!);
+      });
+    } else {
+      callback(sessionId);
+    }
 
-    prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
-    Acp.setState({ ...Acp.state, status: "processing" });
-    Acp.connection.prompt({
-      sessionId,
-      prompt
-    }).catch((err: unknown) => {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Failed to send message: ${errorMessage}` } } });
-    }).then(result => {
-      if (result && result.stopReason !== "end_turn") {
-        Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
-      }
-    }).finally(() => {
-      Acp.tool = {};
-      Acp.permission = {};
-      Acp.setState({ ...Acp.state, status: "connected" });
-    });
   }
 
   static cancelPrompt(sessionId: string) {
