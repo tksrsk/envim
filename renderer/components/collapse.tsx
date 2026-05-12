@@ -9,7 +9,7 @@ interface Props {
   style?: React.CSSProperties;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   text: {
     display: "inline",
     paddingRight: 4,

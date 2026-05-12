@@ -14,7 +14,7 @@ interface States {
   enabled: boolean;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   scope: {
     overflow: "hidden auto",
     width: 300,

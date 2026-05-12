@@ -15,11 +15,9 @@ interface States {
   inset: (0 | "100%" | "auto")[];
 }
 
-const position: "relative" = "relative";
-const whiteSpace: "nowrap" = "nowrap";
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   wrap: {
-    position,
+    position: "relative",
     display: "flex",
     width: "100%",
     height: "100%",
@@ -27,11 +25,11 @@ const styles = {
   menu: {
     minWidth: "100%",
     lineHeight: 1.5,
-    whiteSpace,
+    whiteSpace: "nowrap",
   },
   sidemenu: {
     lineHeight: 1.5,
-    whiteSpace,
+    whiteSpace: "nowrap",
   },
 };
 

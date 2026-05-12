@@ -16,10 +16,9 @@ interface States {
   focusable: boolean;
 }
 
-const position: "absolute" = "absolute";
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   input: {
-    position,
+    position: "absolute",
     width: "100%",
     padding: 0,
     margin: 0,
@@ -78,13 +77,12 @@ export function InputComponent () {
   }, [mode]);
 
   function makeStyle() {
-    const pointerEvent: "none" = "none";
     const cursor = state.cursor;
     const multibyte = (encodeURIComponent(state.value).replace(/%../g, "x").length - state.value.length) / 2;
     const offset = Math.max(col2X(cursor.x + state.value.length + multibyte + 1) - document.body.clientWidth, 0);
 
     return {
-      pointerEvent,
+      pointerEvent: "none",
       minWidth: state.busy || !state.focus ? 0 : col2X(state.cursor.width),
       height: row2Y(1),
       transform: `translate(${col2X(cursor.x) - offset}px, ${row2Y(cursor.y)}px)`,

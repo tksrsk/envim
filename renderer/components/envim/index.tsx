@@ -48,7 +48,7 @@ interface States {
   }};
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   backdrop: {
     opacity: 0.2,
     cursor: "wait",

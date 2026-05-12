@@ -17,7 +17,7 @@ interface States {
   open: boolean;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   message: {
     textOverflow: "ellipsis",
     overflow: "hidden"

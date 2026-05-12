@@ -13,7 +13,7 @@ import { IconComponent } from "./icon";
 interface Props {
   src: string;
   active: boolean;
-  style: { [k: string]: string };
+  style: React.CSSProperties;
 }
 
 interface States {
@@ -27,10 +27,9 @@ interface States {
   zoom: number;
 }
 
-const position: "absolute" = "absolute";
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   command: {
-    position,
+    position: "absolute",
     width: 0,
     height: 0,
     padding: 0,

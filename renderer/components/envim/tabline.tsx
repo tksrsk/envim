@@ -29,7 +29,7 @@ interface States {
   enabled: boolean;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   tab: {
     width: 150,
     minWidth: "2rem",

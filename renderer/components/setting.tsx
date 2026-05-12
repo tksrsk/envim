@@ -10,22 +10,20 @@ interface Props {
   height: number;
 }
 
-const flexDirection: "column" = "column";
-const position: "absolute" = "absolute";
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   scope: {
     padding: 8,
     display: "flex",
     alignItems: "center",
     overflow: "auto",
-    flexDirection,
+    flexDirection: "column",
   },
   backdrop: {
     width: "100%",
     height: "100%",
     top: 0,
     left: 0,
-    position,
+    position: "absolute",
     zIndex: -1,
   },
   logo: {

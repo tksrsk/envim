@@ -17,7 +17,7 @@ interface States {
   enabled: boolean;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   scope: {
     left: "10%",
     right: "10%",

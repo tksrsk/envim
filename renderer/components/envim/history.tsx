@@ -26,7 +26,7 @@ interface States {
   debug: string;
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   scope: {
     bottom: 0,
   },

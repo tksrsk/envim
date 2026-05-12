@@ -26,7 +26,7 @@ interface State {
   files: string[];
 }
 
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   panel: {
     width: 400,
     fontSize: "9px",

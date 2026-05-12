@@ -7,7 +7,7 @@ import { FlexComponent } from "./flex";
 interface Props {
   font: string;
   color?: string;
-  style?: { [k: string]: number | string };
+  style?: React.CSSProperties;
   text?: number | string;
   hover?: boolean;
   active?: boolean;
@@ -15,14 +15,13 @@ interface Props {
   onClick?: (...args: any[]) => void;
 }
 
-const whiteSpace: "nowrap" = "nowrap";
-const styles = {
+const styles: { [k: string]: React.CSSProperties } = {
   text: {
     display: "inline",
     paddingLeft: 4,
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace,
+    whiteSpace: "nowrap",
   },
 };
 

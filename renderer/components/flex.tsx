@@ -39,7 +39,7 @@ interface Props {
   whiteSpace?: "nowrap" | "pre-wrap";
   nomouse?: boolean;
   zIndex?: number;
-  style?: Object;
+  style?: React.CSSProperties;
 }
 
 export function FlexComponent(props: PropsWithChildren<Props>)  {
