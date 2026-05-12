@@ -11,6 +11,7 @@ import { icons } from "../../utils/icons";
 
 import { FlexComponent } from "../flex";
 import { IconComponent } from "../icon";
+import { CollapseComponent } from "../collapse";
 
 const MessageMemo = React.memo(({ message }: { message: SessionNotification }) => {
   function renderFile(file: string) {
@@ -52,14 +53,11 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
         return renderContent(content.content);
       case "diff":
         return (
-          <details>
-            <summary className="clickable"> {content.path}</summary>
-            <FlexComponent direction="column" padding={[4]}>
-              {renderFile(content.path)}
-              <FlexComponent color="green" whiteSpace="pre-wrap">{content.newText}</FlexComponent>
-              <FlexComponent color="red" whiteSpace="pre-wrap">{content.oldText}</FlexComponent>
-            </FlexComponent>
-          </details>
+          <CollapseComponent label={` ${content.path}`}>
+            {renderFile(content.path)}
+            <FlexComponent color="green" whiteSpace="pre-wrap">{content.newText}</FlexComponent>
+            <FlexComponent color="red" whiteSpace="pre-wrap">{content.oldText}</FlexComponent>
+          </CollapseComponent>
         );
       case "terminal":
       default:
@@ -87,20 +85,16 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
     case "user_message_chunk":
       const content = renderContent(message.update.content);
       return message.update.content.type !== "text" ? content : (
-        <FlexComponent direction="column" color="lightblue" margin={[2]} padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
+        <FlexComponent direction="column" color="lightblue" padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
       );
     case "agent_message_chunk":
       return renderContent(message.update.content);
     case "agent_thought_chunk":
-      return (
-        <details>
-          <summary className="clickable">󰟶 Agent Thought...</summary>
-          <FlexComponent direction="column" padding={[4]}>{renderContent(message.update.content)}</FlexComponent>
-        </details>
-      );
+      return <CollapseComponent label="󰟶 Agent Thought...">{renderContent(message.update.content)}</CollapseComponent>;
     case "tool_call":
     case "tool_call_update":
       const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
+      const icon = getStatusIcon(message.update.status);
       const input = ((input?: unknown) => {
         const json = (() => {
           try {
@@ -118,25 +112,17 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
 
       return (
         <>
-          <details>
-            <summary className="clickable">
-              <FlexComponent vertical="center" whiteSpace="pre-wrap">
-                {message.update.title || message.update.kind || message.update.toolCallId}
-                <div className="space" />
-                {typeof message.update._meta?.executionTime === "string" && `${message.update._meta?.executionTime}s`}
-                {getStatusIcon(message.update.status)}
-              </FlexComponent>
-            </summary>
-            <FlexComponent direction="column" padding={[4]}>
-              {input && (
-                <details style={{marginBottom: 4}}>
-                  <summary className="clickable"> INPUT</summary>
-                  <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{input}</Markdown></div>
-                </details>
-              )}
-              {message.update.content?.map(renderToolCallContent)}
-            </FlexComponent>
-          </details>
+          <CollapseComponent
+            label={message.update.title || message.update.kind || message.update.toolCallId}
+            badge={() => <>{typeof message.update._meta?.executionTime === "string" && `${message.update._meta?.executionTime}s`}{icon}</>}
+          >
+            {input && (
+              <CollapseComponent label=" INPUT" style={{marginBottom: 4}}>
+                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{input}</Markdown></div>
+              </CollapseComponent>
+            )}
+            {message.update.content?.map(renderToolCallContent)}
+          </CollapseComponent>
           {permissionRequest && (
             <FlexComponent color="default" horizontal="center">
               {permissionRequest.options.map(option => (

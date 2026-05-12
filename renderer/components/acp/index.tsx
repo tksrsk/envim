@@ -11,6 +11,7 @@ import { icons } from "../../utils/icons";
 import { FlexComponent } from "../flex";
 import { IconComponent } from "../icon";
 import { MenuComponent } from "../menu";
+import { CollapseComponent } from "../collapse";
 import { MessageComponent } from "./message";
 
 interface State {
@@ -383,20 +384,37 @@ export function AcpComponent() {
           </FlexComponent>
         }
         {state.session?.usage && <div className="divider color-gray" /> }
-        {state.status.plan.map((entry, index) => (
-          <FlexComponent key={index} vertical="center" color={getPriorityColor(entry.priority)} margin={[1]} padding={[2]} rounded={[2]}>
-            {getStatusIcon(entry.status)}
-            <FlexComponent grow={1} shrink={1} whiteSpace="pre-wrap" spacing>{entry.content}</FlexComponent>
-          </FlexComponent>
-        ))}
-        {state.status.plan.length > 0 && <div className="divider color-gray" />}
-        {state.files.map(file => (
-          <FlexComponent key={file} margin={[2]} padding={[2]} animate="fade-in hover">
-            {renderFile(file)}
-            <IconComponent font="" color="gray" float="right" onClick={() => handleRemoveFile(file)} hover />
-          </FlexComponent>
-        ))}
-        {state.files.length > 0 && <div className="divider color-gray" />}
+        {state.status.plan.length > 0 && (
+          <CollapseComponent
+            label=" Plans"
+            badge={`${state.status.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.status.plan.length}`}
+            style={{marginBottom: 4}}
+            open
+          >
+              {state.status.plan.map((entry, index) => (
+                <FlexComponent key={index} vertical="center" color={getPriorityColor(entry.priority)} margin={[1]} padding={[2]} rounded={[2]}>
+                  {getStatusIcon(entry.status)}
+                  <FlexComponent grow={1} shrink={1} whiteSpace="pre-wrap" spacing>{entry.content}</FlexComponent>
+                </FlexComponent>
+              ))}
+          </CollapseComponent>
+        ) }
+        {state.files.length > 0 && (
+          <CollapseComponent
+            label=" Files"
+            badge={`${state.files.length}`}
+            style={{marginBottom: 4}}
+            open
+          >
+              {state.files.map(file => (
+                <FlexComponent key={file}>
+                  {renderFile(file)}
+                  <div className="space" />
+                  <IconComponent font="" color="gray-fg" float="right" onClick={() => handleRemoveFile(file)} />
+                </FlexComponent>
+              ))}
+          </CollapseComponent>
+        ) }
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
