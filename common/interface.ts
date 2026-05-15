@@ -118,10 +118,10 @@ export interface IAcpSession {
   commands: AvailableCommand[];
   configOptions: SessionConfigOption[];
   usage?: UsageUpdate;
+  plan: PlanEntry[];
 }
 
 export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing";
   sessionId?: string;
-  plan: PlanEntry[];
 }

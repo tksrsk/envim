@@ -36,7 +36,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 export function AcpComponent() {
   const [state, setState] = useState<State>({
     visible: false,
-    status: { status: "disconnected", plan: [] },
+    status: { status: "disconnected" },
     sessions: [],
     messages: [],
     input: Setting.acp.command,
@@ -384,21 +384,21 @@ export function AcpComponent() {
           </FlexComponent>
         }
         {state.session?.usage && <div className="divider color-gray" /> }
-        {state.status.plan.length > 0 && (
+        {state.session?.plan && state.session.plan.length > 0 && (
           <CollapseComponent
             label=" Plans"
-            badge={`${state.status.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.status.plan.length}`}
+            badge={`${state.session.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.session.plan.length}`}
             style={{marginBottom: 4}}
             open
           >
-              {state.status.plan.map((entry, index) => (
+              {state.session.plan.map((entry, index) => (
                 <FlexComponent key={index} vertical="center" color={getPriorityColor(entry.priority)} margin={[1]} padding={[2]} rounded={[2]}>
                   {getStatusIcon(entry.status)}
                   <FlexComponent grow={1} shrink={1} whiteSpace="pre-wrap" spacing>{entry.content}</FlexComponent>
                 </FlexComponent>
               ))}
           </CollapseComponent>
-        ) }
+        )}
         {state.files.length > 0 && (
           <CollapseComponent
             label=" Files"

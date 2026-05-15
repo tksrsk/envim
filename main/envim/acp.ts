@@ -23,7 +23,7 @@ import { Setting } from "../setting";
 
 export class Acp {
   private static initialized = false;
-  private static state: IAcpStatus = { status: "disconnected", plan: [] };
+  private static state: IAcpStatus = { status: "disconnected" };
   private static workspace: { current: string; state: { [k: string]: IAcpStatus } } = { current: "default", state: {} };
   private static connection: ClientSideConnection | null = null;
   private static capabilities?: AgentCapabilities;
@@ -54,7 +54,7 @@ export class Acp {
 
     Object.values(Acp.sessions).forEach(s => s.status = s.workspace === Acp.workspace.current ? "show" : "hide");
 
-    Acp.setState((!init && Acp.workspace.state[workspace]) || { status: "disconnected", plan: [] });
+    Acp.setState((!init && Acp.workspace.state[workspace]) || { status: "disconnected" });
     Acp.notifySessionUpdate();
     Emit.share("envim:luafile", "acp.lua");
   }
@@ -156,7 +156,7 @@ export class Acp {
 
 
   static async startAgent() {
-    Acp.setState({ status: "connecting", plan: [] });
+    Acp.setState({ status: "connecting" });
 
     const result = await Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStart", [Setting.get().acp.command]]);
 
@@ -184,7 +184,7 @@ export class Acp {
         Acp.listSession();
       });
     } else {
-      Acp.setState({ status: result === "initialized" ? "connected" : "disconnected", plan: [] });
+      Acp.setState({ status: result === "initialized" ? "connected" : "disconnected" });
     }
   }
 
@@ -243,7 +243,7 @@ export class Acp {
   }
 
   static stopAgent() {
-    Acp.setState({ status: "disconnected", plan: [] });
+    Acp.setState({ status: "disconnected" });
 
     Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStop", []]);
   }
@@ -254,7 +254,7 @@ export class Acp {
     Acp.permission = {};
     Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current));
 
-    Acp.setState({ status: "disconnected", plan: [] });
+    Acp.setState({ status: "disconnected" });
     Acp.notifySessionUpdate();
   }
 
@@ -269,7 +269,7 @@ export class Acp {
       delete(Acp.state.sessionId);
     }
 
-    Acp.setState({ status: "connected", plan: [] });
+    Acp.setState({ status: "connected" });
     Acp.notifySessionUpdate();
   }
 
@@ -369,7 +369,12 @@ export class Acp {
       return false;
     }
 
-    Acp.setState({ ...Acp.state, plan: params.update.entries });
+    const session = Acp.sessions[params.sessionId];
+
+    if (session) {
+      session.plan = params.update.entries;
+      Acp.notifySessionUpdate();
+    }
 
     return true;
   }
