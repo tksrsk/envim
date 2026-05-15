@@ -30,13 +30,15 @@
     border-bottom: 1.1em solid rgba(255, 255, 255, 0.2);
     border-left: 1.1em solid;
     animation-name: loading;
-    animation-duration: 1500ms;
-    animation-timing-function: linear;
+    animation-duration: 1000ms;
+    animation-timing-function: linear(0, .5 75%, 1);
     animation-iteration-count: infinite;
 
     &.inline {
-      width: 1em;
-      height: 1em;
+      max-width: 1em;
+      max-height: 1em;
+      min-width: 1em;
+      min-height: 1em;
       border-width: 0.2em;
     }
   }
