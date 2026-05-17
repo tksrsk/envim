@@ -205,6 +205,7 @@ export class Acp {
               status: "show",
               commands: [],
               configOptions: [],
+              plan: [],
             };
           }
         });
@@ -233,7 +234,8 @@ export class Acp {
         loaded: true,
         status: "show",
         configOptions: response.configOptions || [],
-        commands: []
+        commands: [],
+        plan: [],
       };
 
       Acp.sessions[session.id] = session;
@@ -339,7 +341,7 @@ export class Acp {
     }
 
     if (!sessionId) {
-      Acp.createSession().then(() => {
+      Acp.createSession()?.then(() => {
         callback(Acp.state.sessionId!);
       });
     } else {
