@@ -3,6 +3,7 @@ import { ContentBlock, ToolCallContent, SessionNotification } from "@agentclient
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
+import { diffLines } from "diff";
 
 import { IPermissionRequest } from "common/interface";
 
@@ -47,18 +48,41 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
     }
   }
 
+  function renderDiffLines(path: string, oldText: string, newText: string) {
+    const diff = diffLines(oldText, newText);
+
+    return (
+      <>
+        {renderFile(path)}
+        <div className="selectable">
+          <FlexComponent overflow="auto">
+            <FlexComponent position="absolute" inset={[0]}>
+              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
+                {`\`\`\`diff\n${diff.map(change => {
+                  const arr = new Array<string>(change.value.split("\n").filter(line => line).length).fill(" ");
+
+                  if (change.added) arr.fill("+");
+                  if (change.removed) arr.fill("-");
+
+                  return arr.join("\n");
+                }).join("\n")}\n\`\`\``}
+              </Markdown>
+            </FlexComponent>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
+              {`\`\`\`${path.split(".").pop()}\n${diff.map(change => change.value.split("\n").filter(line => line).join("\n")).join("\n")}\n\`\`\``}
+            </Markdown>
+          </FlexComponent>
+        </div>
+      </>
+    );
+  }
+
   function renderToolCallContent(content: ToolCallContent) {
     switch (content.type) {
       case "content":
         return renderContent(content.content);
       case "diff":
-        return (
-          <CollapseComponent label={` ${content.path}`}>
-            {renderFile(content.path)}
-            <FlexComponent color="green" whiteSpace="pre-wrap">{content.newText}</FlexComponent>
-            <FlexComponent color="red" whiteSpace="pre-wrap">{content.oldText}</FlexComponent>
-          </CollapseComponent>
-        );
+        return renderDiffLines(content.path, content.oldText || "", content.newText || "") ;
       case "terminal":
       default:
         return null;

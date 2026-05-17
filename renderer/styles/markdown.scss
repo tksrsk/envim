@@ -49,7 +49,9 @@ p {
 }
 
 pre {
+  width: 100%;
   margin: 0;
+  z-index: 1;
 }
 
 table {
@@ -79,6 +81,7 @@ code {
 .hljs {
   display: block;
   padding: 4px;
+  background: none;
   box-shadow: inset 0 0 2px 2px rgba(0, 0, 0, .5);
   overflow: auto;
 }
@@ -98,9 +101,15 @@ code {
 .hljs-section,
 .hljs-name,
 .hljs-selector-tag,
-.hljs-deletion,
 .hljs-subst {
   color: var(--color-red);
+}
+
+.hljs-deletion {
+  display: inline-block;
+  width: 100%;
+  color: rgba(0, 0, 0, 0);
+  background: var(--color-red-alpha);
 }
 
 .hljs-literal {
@@ -109,10 +118,16 @@ code {
 
 .hljs-string,
 .hljs-regexp,
-.hljs-addition,
 .hljs-attribute,
 .hljs-meta .hljs-string {
   color: var(--color-green);
+}
+
+.hljs-addition {
+  display: inline-block;
+  width: 100%;
+  color: rgba(0, 0, 0, 0);
+  background: var(--color-green-alpha);
 }
 
 .hljs-attr,
