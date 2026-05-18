@@ -40,6 +40,9 @@ const styles: { [k: string]: React.CSSProperties } = {
   input: {
     width: "100%",
   },
+  title: {
+    maxWidth: 200,
+  },
 };
 
 export function WebviewComponent(props: Props) {
@@ -360,8 +363,8 @@ export function WebviewComponent(props: Props) {
       <input style={styles.command} type="text" ref={command} onChange={onChange} onFocus={onFocus} onKeyDown={preview ? undefined : onKeyDown} tabIndex={-1} />
       <FlexComponent color="gray-fg" vertical="center" horizontal="center">
         { state.loading
-          ? <><div className="animate loading inline"></div><FlexComponent margin={[0, 4]}>{ state.title }</FlexComponent></>
-          : <IconComponent font={state.favicon || ""} text={state.title} />
+          ? <><div className="animate loading inline"></div><FlexComponent margin={[0, 4]} style={styles.title}>{ state.title }</FlexComponent></>
+          : <IconComponent font={state.favicon || ""} text={state.title} style={styles.title} />
         }
       </FlexComponent>
       <FlexComponent vertical="center" overflow="visible" nomouse={preview}>
