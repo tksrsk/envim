@@ -560,6 +560,8 @@ export class Acp {
       resolver({ outcome: { outcome: "selected", optionId } });
       delete(Acp.tool[tool.toolCallId]._meta!.permissionRequest);
       delete(Acp.permission[requestId]);
+
+      Acp.processToolUpdate(Acp.state.sessionId!, tool);
     }
   }
 
