@@ -47,7 +47,7 @@ export class App {
       case "envim_preview": return args.length === 2 && Emit.share("envim:preview", args[0], args[1]);
       case "envim_preview_toggle": return args.length === 3 && Emit.share("envim:preview:toggle", args[0], args[1], args[2]);
       case "envim_acp_stdout": return Emit.share("acp:stdout", args[0]);
-      case "envim_acp_exited": return Emit.share("acp:exited", args[0]);
+      case "envim_acp_exited": return Emit.share("acp:exited");
       case "envim_acp_error": return Emit.share("acp:error", args[0]);
       case "envim_acp_file_add": return Emit.send("acp:file-add", args[0]);
       case "envim_acp_terminal_output": return Emit.share("acp:terminal-output", args[0]);

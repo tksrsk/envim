@@ -43,7 +43,7 @@ _G.envim_acp_start = function(command_str)
     return "initialized"
   end
 
-  _G.envim_acp = vim.fn.jobstart(command, {
+  local success, result = pcall(vim.fn.jobstart, command, {
     on_stdout = function(_, data)
       for _, line in ipairs(data) do
         if line and line ~= "" then
@@ -57,13 +57,13 @@ _G.envim_acp_start = function(command_str)
     end
   })
 
-  if _G.envim_acp <= 0 then
+  if success then
+    _G.envim_acp = result
+    return "executed"
+  else
     _G.envim_acp = nil
-    envim_connect(0, { "envim_acp_error", { error = "Failed to start acp job" } })
     return nil
   end
-
-  return "executed"
 end
 
 _G.envim_acp_stop = function()
