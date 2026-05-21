@@ -195,6 +195,22 @@ export function AcpComponent() {
     setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
   }
 
+  function handleEditHistory(e: MouseEvent, mode: "select" | "delete", history: string) {
+    e.stopPropagation();
+
+    switch (mode) {
+      case "select":
+        Setting.acp = { ...Setting.acp, command: history, history: [Setting.acp.command, ...Setting.acp.history].filter(h => h !== history) };
+        break;
+      case "delete":
+        Setting.acp.history.splice(Setting.acp.history.indexOf(history), 1);
+        Emit.send("envim:setting", Setting.get());
+        break;
+    }
+
+    setState(state => ({ ...state, mode: "command", input: Setting.acp.command }));
+  }
+
   function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
@@ -226,7 +242,7 @@ export function AcpComponent() {
 
   function getPlaceholder() {
     switch (typeof state.mode === "number" ? "mcp" : state.mode) {
-      case "command": return "Type your acp command... (Shift+Enter to save)";
+      case "command": return "Type your acp command... (Enter to save)";
       case "mcp": return "Enter mcp server settings as JSON... (Shift+Enter to save)";
       case "prompt": return "Type your message... (Shift+Enter to send)";
     }
@@ -238,7 +254,8 @@ export function AcpComponent() {
 
     switch (typeof state.mode === "number" ? "mcp" : state.mode) {
       case "command":
-        Setting.acp = { command: value, mcpServers: Setting.acp.mcpServers };
+        const history = [Setting.acp.command, ...Setting.acp.history].filter(h => h !== value);
+        Setting.acp = { command: value, mcpServers: Setting.acp.mcpServers, history };
 
         Emit.send("envim:setting", Setting.get());
         handleStartAgent();
@@ -286,7 +303,7 @@ export function AcpComponent() {
   }
 
   function handleInputKeyDown(e: KeyboardEvent) {
-    if (e.key === "Enter" && e.shiftKey) {
+    if (e.key === "Enter" && (e.shiftKey || state.mode === "command")) {
       e.preventDefault();
       handleConfirmInput();
     }
@@ -418,7 +435,16 @@ export function AcpComponent() {
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
-          {!checkAcpStatus("connected") && <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "command" }))} />}
+          {!checkAcpStatus("connected") && (
+            <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "command" }))} />}>
+              {Setting.acp.history.map(history => (
+                <FlexComponent key={history} animate="hover" onClick={e => handleEditHistory(e, "select", history)} spacing>
+                  {history}
+                  <IconComponent color="gray" font="" float="right" onClick={e => handleEditHistory(e, "delete", history)} hover />
+                </FlexComponent>
+              ))}
+            </MenuComponent>
+          )}
           <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>
             {Setting.acp.mcpServers.map((mcp, i) => (
               <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: i }))} spacing>

@@ -20,7 +20,7 @@ const defaultSetting: ISetting = {
   searchengines: [
     { name: "Google", uri: "https://google.com/search?q=${query}", selected: true },
   ],
-  acp: { command: "", mcpServers: [] },
+  acp: { command: "", mcpServers: [], history: [] },
   presets: {},
 };
 

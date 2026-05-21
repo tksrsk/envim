@@ -15,7 +15,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { command: string; mcpServers: { enabled: boolean; server: McpServer }[]; };
+  acp: { command: string; mcpServers: { enabled: boolean; server: McpServer }[]; history: string[]; };
   presets: { [k: string]: ISetting };
 }
 
