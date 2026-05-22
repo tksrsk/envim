@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import {
   AgentCapabilities,
   Client,
@@ -540,9 +541,9 @@ export class Acp {
   }
 
   private static async handleRequestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    const requestId = `perm_${Date.now()}`;
+    const requestId = `perm_${randomBytes(16).toString("hex")}`;
 
-    params.toolCall._meta = params._meta || {};
+    params.toolCall._meta = params.toolCall._meta || {};
     params.toolCall._meta.permissionRequest = { requestId, options: params.options };
     Acp.processToolUpdate(Acp.state.sessionId!, params.toolCall);
 
@@ -550,17 +551,22 @@ export class Acp {
   }
 
   static handlePermissionResponse(requestId: string, optionId: string): void {
+    const resolver = Acp.permission[requestId];
+
+    if (!resolver) {
+      return;
+    }
+
+    resolver({ outcome: { outcome: "selected", optionId } });
+    delete(Acp.permission[requestId]);
+
     const tool = Object.values(Acp.tool).find(t => {
       const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
       return permissionRequest?.requestId === requestId;
     });
-    const resolver = Acp.permission[requestId];
 
-    if (tool && resolver) {
-      resolver({ outcome: { outcome: "selected", optionId } });
+    if (tool) {
       delete(Acp.tool[tool.toolCallId]._meta!.permissionRequest);
-      delete(Acp.permission[requestId]);
-
       Acp.processToolUpdate(Acp.state.sessionId!, tool);
     }
   }
