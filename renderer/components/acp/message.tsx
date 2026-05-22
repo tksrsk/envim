@@ -14,6 +14,12 @@ import { FlexComponent } from "../flex";
 import { IconComponent } from "../icon";
 import { CollapseComponent } from "../collapse";
 
+const styles: { [k: string]: React.CSSProperties } = {
+  permission: {
+    flexBasis: "100%",
+  }
+};
+
 const MessageMemo = React.memo(({ message }: { message: SessionNotification }) => {
   function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
@@ -35,16 +41,16 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
     Emit.send("acp:permission-response", requestId, optionId);
   }
 
-  function getPermissionColor(kind: string): string {
+  function getPermissionIcon(kind: string, suffix: string = "") {
     switch (kind) {
       case "allow_once":
       case "allow_always":
-        return "green";
+        return { color: `green${suffix}`, font: "" };
       case "reject_once":
       case "reject_always":
-        return "red";
+        return { color: `red${suffix}`, font: "" };
       default:
-        return "blue";
+        return { color: `blue${suffix}`, font: "" };
     }
   }
 
@@ -150,10 +156,10 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
           {permissionRequest && (
             <FlexComponent color="default" horizontal="center">
               {permissionRequest.options.map(option => (
-                <FlexComponent key={option.optionId} border={[1]} color={getPermissionColor(option.kind)} margin={[4]} padding={[4]} rounded={[4]}
+                <FlexComponent key={option.optionId} border={[1]} color={getPermissionIcon(option.kind).color} margin={[4]} padding={[4]} rounded={[4]} shrink={1} title={option.name} style={styles.permission}
                   onClick={() => handlePermissionChoice(permissionRequest!.requestId, option.optionId)}
                 >
-                  {option.name}
+                  <IconComponent {...getPermissionIcon(option.kind, "-fg")} text={option.name} />
                 </FlexComponent>
               ))}
             </FlexComponent>
