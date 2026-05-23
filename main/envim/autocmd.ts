@@ -6,6 +6,7 @@ export class Autocmd {
   }
 
   static dirchanged(cwd: string) {
+    Emit.share("envim:cwd", cwd);
     Emit.send("envim:cwd", cwd);
   }
 }

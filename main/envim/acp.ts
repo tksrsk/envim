@@ -25,7 +25,7 @@ import { Setting } from "../setting";
 export class Acp {
   private static initialized = false;
   private static state: IAcpStatus = { status: "disconnected" };
-  private static workspace: { current: string; state: { [k: string]: IAcpStatus } } = { current: "default", state: {} };
+  private static workspace: { current: { name: string; cwd: string }; state: { [k: string]: { cwd: string; status: IAcpStatus } }; } = { current: { name: "default", cwd: "" }, state: {} };
   private static connection: ClientSideConnection | null = null;
   private static capabilities?: AgentCapabilities;
   private static sessions: { [key: string]: IAcpSession } = {};
@@ -47,17 +47,25 @@ export class Acp {
       Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
+      Emit.on("envim:cwd", Acp.setCwd);
     }
 
-    Acp.workspace.state[Acp.workspace.current] = Acp.state;
-    Acp.workspace.current = workspace;
+    Acp.workspace.state[Acp.workspace.current.name] = { cwd: Acp.workspace.current.cwd, status: Acp.state };
+    Acp.workspace.current = { name: workspace, cwd: Acp.workspace.state[workspace]?.cwd || "" };
     Acp.sessions = !init ? Acp.sessions : Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== workspace));
 
-    Object.values(Acp.sessions).forEach(s => s.status = s.workspace === Acp.workspace.current ? "show" : "hide");
+    Object.values(Acp.sessions).forEach(s => s.status = s.workspace === Acp.workspace.current.name ? "show" : "hide");
 
-    Acp.setState((!init && Acp.workspace.state[workspace]) || { status: "disconnected" });
+    Acp.setState((!init && Acp.workspace.state[workspace]?.status) || { status: "disconnected" });
     Acp.notifySessionUpdate();
     Emit.share("envim:luafile", "acp.lua");
+  }
+
+  private static setCwd(cwd: string): void {
+    if (cwd) {
+      Acp.workspace.current.cwd = cwd;
+      Acp.workspace.state[Acp.workspace.current.name] = { cwd, status: Acp.state };
+    }
   }
 
   private static onSetSessionConfigOption(configId: string, value: string | boolean) {
@@ -195,13 +203,13 @@ export class Acp {
     }
 
     if (Acp.capabilities?.sessionCapabilities?.list) {
-      Acp.connection.listSessions({ cwd: "" }).then(response => {
+      Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd }).then(response => {
         response.sessions.forEach(session => {
           if (!Acp.sessions[session.sessionId]) {
             Acp.sessions[session.sessionId] = {
               id: session.sessionId,
               name: session.title || session.updatedAt || session.sessionId,
-              workspace: Acp.workspace.current,
+              workspace: Acp.workspace.current.name,
               loaded: false,
               status: "show",
               commands: [],
@@ -225,13 +233,13 @@ export class Acp {
     Acp.setState({ ...Acp.state, status: "processing" });
 
     return Acp.connection.newSession({
-      cwd: "",
+      cwd: Acp.workspace.current.cwd,
       mcpServers: (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server),
     }).then(response => {
       const session: IAcpSession = {
         id: response.sessionId,
         name: `Session ${new Date().toLocaleTimeString()}`,
-        workspace: Acp.workspace.current,
+        workspace: Acp.workspace.current.name,
         loaded: true,
         status: "show",
         configOptions: response.configOptions || [],
@@ -255,7 +263,7 @@ export class Acp {
   static cleanup() {
     Acp.tool = {};
     Acp.permission = {};
-    Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current));
+    Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current.name));
 
     Acp.setState({ status: "disconnected" });
     Acp.notifySessionUpdate();
@@ -292,7 +300,7 @@ export class Acp {
 
       Acp.setState({ ...Acp.state, status: "processing", sessionId });
       Acp.connection[method]({
-        sessionId, cwd: "", mcpServers
+        sessionId, cwd: Acp.workspace.current.cwd, mcpServers
       }).then(response => {
         session.configOptions = response.configOptions || [];
       }).finally(() => {
