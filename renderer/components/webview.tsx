@@ -182,8 +182,8 @@ export function WebviewComponent(props: Props) {
       case "j": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Down" });
       case "k": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Up" });
       case "l": return runAction("navigate-forward");
-      case "N": return runAction("search-backward");
-      case "n": return runAction("search-forward");
+      case "N": return runAction(state.search ? "search-backward" : "search-stop");
+      case "n": return runAction(state.search ? "search-forward" : "search-stop");
       case "g": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" });
       case "G": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" });
       case "Y": return Emit.send(`capture:${webview.current.getWebContentsId()}`);
@@ -192,8 +192,8 @@ export function WebviewComponent(props: Props) {
       case "i": return runAction("mode-browser");
       case ":": return runAction("mode-input");
       case "/": return runAction("mode-search");
-      case "Escape": return runAction(state.loading ? "cancel-load" : "mode-command");
-      case "Enter": return webview.current.stopFindInPage("activateSelection");
+      case "Escape": return (runAction(state.loading ? "cancel-load" : "mode-command"), runAction("search-stop"));
+      case "Enter": return runAction(state.search ? "search-start" : "search-stop");
     }
   }
 
@@ -264,8 +264,10 @@ export function WebviewComponent(props: Props) {
       if (webview.current.getURL() === "about:blank") return input.current?.focus();
 
       switch (action) {
-        case "search-backward": return state.search && webview.current.findInPage(state.search, { forward: false });
-        case "search-forward": return state.search && webview.current.findInPage(state.search, { forward: true });
+        case "search-start": return webview.current.stopFindInPage("activateSelection");
+        case "search-stop": return webview.current.stopFindInPage(state.search ? "keepSelection" : "clearSelection");
+        case "search-backward": return webview.current.findInPage(state.search, { forward: false });
+        case "search-forward": return webview.current.findInPage(state.search, { forward: true });
         case "navigate-backward": return webview.current.goBack();
         case "navigate-forward": return webview.current.goForward();
         case "reload": return webview.current.reloadIgnoringCache();
