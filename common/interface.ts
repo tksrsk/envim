@@ -15,7 +15,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { command: string; mcpServers: { enabled: boolean; server: McpServer }[]; history: string[]; };
+  acp: { customs: IAcpRegistryPackage[]; mcpServers: { enabled: boolean; server: McpServer }[]; };
   presets: { [k: string]: ISetting };
 }
 
@@ -125,3 +125,20 @@ export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing";
   sessionId?: string;
 }
+
+export interface IAcpRegistryPackage {
+  name: string;
+  description?: string;
+  package: { command: string[]; env?: { [key: string]: string } };
+  distribution?: {
+    npx?: { package: string; args?: string[]; env?: { [key: string]: string } };
+    uvx?: { package: string; args?: string[]; env?: { [key: string]: string } };
+  };
+}
+
+export type IAcpRegistry = {
+  [key in "npx" | "uvx"]: {
+    available: boolean;
+    packages: IAcpRegistryPackage[];
+  };
+};

@@ -1,49 +1,15 @@
-local function parse_command_args(command_str)
-  if not command_str or command_str == "" then
-    return {}
-  end
-
-  local command = {}
-  local in_quotes = false
-  local current = ""
-  local quote_char = nil
-
-  for i = 1, #command_str do
-    local char = command_str:sub(i, i)
-
-    if char == '"' or char == "'" then
-      if in_quotes and quote_char == char then
-        in_quotes = false
-        quote_char = nil
-      elseif not in_quotes then
-        in_quotes = true
-        quote_char = char
-      end
-    elseif char == ' ' and not in_quotes then
-      if current ~= "" then
-        table.insert(command, current)
-        current = ""
-      end
-    else
-      current = current .. char
-    end
-  end
-
-  if current ~= "" then
-    table.insert(command, current)
-  end
-
-  return command
-end
-
-_G.envim_acp_start = function(command_str)
-  local command = parse_command_args(command_str)
+_G.envim_acp_start = function(pkg)
 
   if _G.envim_acp then
     return "initialized"
   end
 
-  local success, result = pcall(vim.fn.jobstart, command, {
+  if not pkg or type(pkg.command) ~= "table" or #pkg.command == 0 then
+    return nil
+  end
+
+  local success, result = pcall(vim.fn.jobstart, pkg.command, {
+    env = pkg.env,
     on_stdout = function(_, data)
       for _, line in ipairs(data) do
         if line and line ~= "" then
@@ -57,7 +23,7 @@ _G.envim_acp_start = function(command_str)
     end
   })
 
-  if success then
+  if success and result > 0 then
     _G.envim_acp = result
     return "executed"
   else
@@ -124,8 +90,8 @@ _G.envim_acp_terminal_start = function(terminalId, command, opts)
 end
 
 vim.cmd([[
-  function! EnvimAcpStart(command_str)
-    return v:lua.envim_acp_start(a:command_str)
+  function! EnvimAcpStart(package)
+    return v:lua.envim_acp_start(a:package)
   endfunction
 
   function! EnvimAcpStop()

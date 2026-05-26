@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEv
 import { PlanEntry, SessionNotification, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
-import { IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryPackage, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Emit } from "../../utils/emit";
 import { Setting } from "../../utils/setting";
@@ -20,10 +20,11 @@ interface State {
   sessions: IAcpSession[];
   messages: SessionNotification[];
   input: string;
-  mode: "command" | "prompt" | number;
+  mode: "package" | "prompt" | number;
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
+  registry: IAcpRegistry;
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -39,11 +40,12 @@ export function AcpComponent() {
     status: { status: "disconnected" },
     sessions: [],
     messages: [],
-    input: Setting.acp.command,
-    mode: "command",
+    input: JSON.stringify({name: "", package: { command: [] }}, null, 2),
+    mode: "package",
     session: null,
     scroll: false,
     files: [],
+    registry: { npx: { available: false, packages: [] }, uvx: { available: false, packages: [] } },
   });
 
   const scroll = useRef<HTMLDivElement>(null);
@@ -84,13 +86,13 @@ export function AcpComponent() {
   }, [state.messages]);
 
   useEffect(() => {
-    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "command" }));
+    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "package" }));
   }, [state.status.status]);
 
   useEffect(() => {
     const input = (() => {
       switch (typeof state.mode === "number" ? "mcp" : state.mode) {
-        case "command": return Setting.acp.command;
+        case "package": return JSON.stringify({name: "", package: { command: [] }}, null, 2);
         case "mcp": return JSON.stringify(Setting.acp.mcpServers[state.mode]?.server || {}, null, 2);
         case "prompt": return "";
       }
@@ -100,10 +102,10 @@ export function AcpComponent() {
     setState(state => ({ ...state, input }));
   }, [state.mode]);
 
-  function onAgentToggle() {
+  function onAgentToggle(registry: IAcpRegistry) {
     setState(state => {
-      !state.visible && (state.status.status === "disconnected" ? handleStartAgent() : scrollToBottom());
-      return { ...state, visible: !state.visible };
+      !state.visible && state.status.status !== "disconnected" && scrollToBottom();
+      return { ...state, visible: !state.visible, registry };
     });
   }
 
@@ -165,6 +167,21 @@ export function AcpComponent() {
     setState(state => ({ ...state, scroll: false }));
   }
 
+  function handleSelectPackage(provider: string, pkg: IAcpRegistryPackage) {
+    if (provider === "custom") {
+      setState(state => ({ ...state, mode: "package", input: JSON.stringify(pkg, null, 2) }));
+    } else {
+      handleStartAgent();
+    }
+  }
+
+  function handleDeleteCustomPackage(e: MouseEvent, pkg: IAcpRegistryPackage) {
+    e.stopPropagation();
+
+    Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== pkg.name) };
+    Emit.send("envim:setting", Setting.get());
+  }
+
   function handleStartAgent() {
     Emit.send("acp:start-agent");
   }
@@ -195,22 +212,6 @@ export function AcpComponent() {
     setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
   }
 
-  function handleEditHistory(e: MouseEvent, mode: "select" | "delete", history: string) {
-    e.stopPropagation();
-
-    switch (mode) {
-      case "select":
-        Setting.acp = { ...Setting.acp, command: history, history: [Setting.acp.command, ...Setting.acp.history].filter(h => h !== history) };
-        break;
-      case "delete":
-        Setting.acp.history.splice(Setting.acp.history.indexOf(history), 1);
-        Emit.send("envim:setting", Setting.get());
-        break;
-    }
-
-    setState(state => ({ ...state, mode: "command", input: Setting.acp.command }));
-  }
-
   function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
@@ -236,13 +237,13 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "command" }));
+    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "package" }));
     Emit.send("envim:setting", Setting.get());
   }
 
   function getPlaceholder() {
     switch (typeof state.mode === "number" ? "mcp" : state.mode) {
-      case "command": return "Type your acp command... (Enter to save)";
+      case "package": return "Select or Type an ACP package... (Shift+Enter to connect)";
       case "mcp": return "Enter mcp server settings as JSON... (Shift+Enter to save)";
       case "prompt": return "Type your message... (Shift+Enter to send)";
     }
@@ -250,17 +251,21 @@ export function AcpComponent() {
 
   function handleConfirmInput() {
     const value = state.input.trim();
-    const mode = checkAcpStatus("connected") ? "prompt" : "command";
+    const mode = checkAcpStatus("connected") ? "prompt" : "package";
 
     switch (typeof state.mode === "number" ? "mcp" : state.mode) {
-      case "command":
-        const history = [Setting.acp.command, ...Setting.acp.history].filter(h => h !== value);
-        Setting.acp = { command: value, mcpServers: Setting.acp.mcpServers, history };
+      case "package":
+        try {
+          const pkg = JSON.parse(value);
 
-        Emit.send("envim:setting", Setting.get());
-        handleStartAgent();
+          if (!pkg) return;
 
-        break;
+          Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== pkg?.name), pkg] };
+          Emit.send("envim:setting", Setting.get());
+          handleStartAgent();
+        } finally {
+          return;
+        }
       case "mcp":
         try {
           const server = JSON.parse(value);
@@ -303,7 +308,7 @@ export function AcpComponent() {
   }
 
   function handleInputKeyDown(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.shiftKey || state.mode === "command")) {
+    if (e.key === "Enter" && e.shiftKey) {
       e.preventDefault();
       handleConfirmInput();
     }
@@ -341,6 +346,19 @@ export function AcpComponent() {
       opacity: disabled ? 0.5 : 1,
       cursor: disabled ? "not-allowed" : "pointer"
     };
+  }
+
+  function renderRegistryProvider([kind, registry]: [string, IAcpRegistry[keyof IAcpRegistry]]) {
+    return !registry.available || registry.packages.length === 0 ? null : (
+      <MenuComponent key={kind} side label={kind}>
+        {registry.packages.map((pkg, i) => (
+          <FlexComponent key={i} animate="hover" title={pkg.description} onClick={() => handleSelectPackage(kind, pkg)} spacing>
+            {pkg.name}
+            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => handleDeleteCustomPackage(e, pkg)} hover />}
+          </FlexComponent>
+        ))}
+      </MenuComponent>
+    );
   }
 
   function renderConfigOption(config: SessionConfigOption) {
@@ -436,13 +454,8 @@ export function AcpComponent() {
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
           {!checkAcpStatus("connected") && (
-            <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "command" }))} />}>
-              {Setting.acp.history.map(history => (
-                <FlexComponent key={history} animate="hover" onClick={e => handleEditHistory(e, "select", history)} spacing>
-                  {history}
-                  <IconComponent color="gray" font="" float="right" onClick={e => handleEditHistory(e, "delete", history)} hover />
-                </FlexComponent>
-              ))}
+            <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "package" }))} />}>
+              {Object.entries({ ...state.registry, custom: { available: true, packages: Setting.acp.customs } }).map(renderRegistryProvider)}
             </MenuComponent>
           )}
           <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>
