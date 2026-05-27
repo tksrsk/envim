@@ -46,10 +46,14 @@ export function InputComponent () {
   function onFocus () {
     setState(state => {
       if (state.focusable) {
-        const selected = window.getSelection()?.toString();
+        const active = document.activeElement;
+        const otherInputFocused = active && active !== input.current && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
 
-        selected && navigator.clipboard.writeText(selected);
-        input.current?.focus();
+        if (!otherInputFocused) {
+          const selected = window.getSelection()?.toString();
+          selected && navigator.clipboard.writeText(selected);
+          input.current?.focus();
+        }
       }
 
       return { ...state, focus: state.focusable };

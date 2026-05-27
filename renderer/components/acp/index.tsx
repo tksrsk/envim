@@ -20,7 +20,7 @@ interface State {
   sessions: IAcpSession[];
   messages: SessionNotification[];
   input: string;
-  mode: "package" | "prompt" | number;
+  mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
@@ -28,6 +28,12 @@ interface State {
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
+  command: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    padding: 0,
+  },
   panel: {
     width: 400,
     fontSize: "9px",
@@ -41,7 +47,7 @@ export function AcpComponent() {
     sessions: [],
     messages: [],
     input: JSON.stringify({name: "", package: { command: [] }}, null, 2),
-    mode: "package",
+    mode: { main: "input", sub: "package" },
     session: null,
     scroll: false,
     files: [],
@@ -49,7 +55,10 @@ export function AcpComponent() {
   });
 
   const scroll = useRef<HTMLDivElement>(null);
+  const command = useRef<HTMLInputElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<number>(0);
+  const color = { input: "default", normal: "green", blur: "default" }[state.mode.main];
 
   useEffect(() => {
     Emit.on("acp:toggle", onAgentToggle);
@@ -57,6 +66,7 @@ export function AcpComponent() {
     Emit.on("acp:session-update", onAcpSessionUpdate);
     Emit.on("acp:message-added", onMessageAdded);
     Emit.on("acp:file-add", onFileAdd);
+    Emit.on("envim:focused", onFocused);
 
     return () => {
       Emit.off("acp:toggle", onAgentToggle);
@@ -64,6 +74,7 @@ export function AcpComponent() {
       Emit.off("acp:session-update", onAcpSessionUpdate);
       Emit.off("acp:message-added", onMessageAdded);
       Emit.off("acp:file-add", onFileAdd);
+      Emit.off("envim:focused", onFocused);
     };
   }, []);
 
@@ -82,30 +93,37 @@ export function AcpComponent() {
   }, [scroll.current]);
 
   useEffect(() => {
-    state.messages.length && !state.scroll && scrollToBottom();
+    state.messages.length && !state.scroll && scrollTo("bottom");
   }, [state.messages]);
 
   useEffect(() => {
-    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "package" }));
+    setState(state => ({ ...state, mode: { ...state.mode, sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }, [state.status.status]);
 
   useEffect(() => {
     const input = (() => {
-      switch (typeof state.mode === "number" ? "mcp" : state.mode) {
+      switch (state.mode.sub) {
         case "package": return JSON.stringify({name: "", package: { command: [] }}, null, 2);
-        case "mcp": return JSON.stringify(Setting.acp.mcpServers[state.mode]?.server || {}, null, 2);
+        case "mcp": return JSON.stringify(state.mode.mcp ? Setting.acp.mcpServers[state.mode.mcp].server : {}, null, 2);
         case "prompt": return "";
+        default: return "";
       }
     })();
 
-    Emit.send("envim:setting", Setting.get());
+    state.mode.mcp && Emit.send("envim:setting", Setting.get());
     setState(state => ({ ...state, input }));
-  }, [state.mode]);
+  }, [state.mode.sub, state.mode.mcp]);
+
+  useEffect(() => {
+    if (state.mode.main === "blur") return;
+
+    state.mode.main === "normal" ? command.current?.focus() : textarea.current?.focus();
+  }, [state.mode.main]);
 
   function onAgentToggle(registry: IAcpRegistry) {
     setState(state => {
-      !state.visible && state.status.status !== "disconnected" && scrollToBottom();
-      return { ...state, visible: !state.visible, registry };
+      !state.visible && state.status.status !== "disconnected" && scrollTo("bottom");
+      return { ...state, visible: !state.visible, mode: { ...state.mode, main: state.visible ? "blur" : "normal" }, registry };
     });
   }
 
@@ -162,14 +180,21 @@ export function AcpComponent() {
     return [...messages, curr];
   }
 
-  function scrollToBottom() {
-    scroll.current?.scrollIntoView({ behavior: "smooth" });
-    setState(state => ({ ...state, scroll: false }));
+  function scrollTo(direction: "top" | "bottom" | "up" | "down" | "pageup" | "pagedown") {
+    if (!scroll.current?.parentElement) return;
+    switch (direction) {
+      case "pagedown": return scroll.current.parentElement.scrollBy({ top: scroll.current.parentElement.clientHeight, behavior: "smooth" });
+      case "pageup": return scroll.current.parentElement.scrollBy({ top: -scroll.current.parentElement.clientHeight, behavior: "smooth" });
+      case "top": return scroll.current.parentElement.scrollTo({ top: 0, behavior: "smooth" });
+      case "bottom": return (scroll.current.scrollIntoView({ behavior: "smooth" }), setState(state => ({ ...state, scroll: false })));
+      case "up": return scroll.current.parentElement.scrollBy({ top: -50, behavior: "smooth" });
+      case "down": return scroll.current.parentElement.scrollBy({ top: 50, behavior: "smooth" });
+    }
   }
 
   function handleSelectPackage(provider: string, agent: IAcpRegistryAgent) {
     if (provider === "custom") {
-      setState(state => ({ ...state, mode: "package", input: JSON.stringify(agent, null, 2) }));
+      setState(state => ({ ...state, mode: { main: "input", sub: "package" }, input: JSON.stringify(agent, null, 2) }));
     } else {
       handleStartAgent(agent);
     }
@@ -225,10 +250,10 @@ export function AcpComponent() {
     }));
   }
 
-  function handleEditMcp(e: MouseEvent | ChangeEvent, mode: "toggle" | "delete", index: number) {
+  function handleEditMcp(e: MouseEvent | ChangeEvent, action: "toggle" | "delete", index: number) {
     e.stopPropagation();
 
-    switch (mode) {
+    switch (action) {
       case "toggle":
         Setting.acp.mcpServers[index].enabled = !Setting.acp.mcpServers[index].enabled;
         break;
@@ -237,23 +262,23 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, mode: checkAcpStatus("connected") ? "prompt" : "package" }));
+    setState(state => ({ ...state, mode: { main: "input", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
     Emit.send("envim:setting", Setting.get());
   }
 
   function getPlaceholder() {
-    switch (typeof state.mode === "number" ? "mcp" : state.mode) {
-      case "package": return "Select or Type an ACP package... (Shift+Enter to connect)";
-      case "mcp": return "Enter mcp server settings as JSON... (Shift+Enter to save)";
-      case "prompt": return "Type your message... (Shift+Enter to send)";
+    switch (state.mode.sub) {
+      case "package": return "Select or Type an ACP package";
+      case "mcp": return "Enter mcp server settings as JSON";
+      case "prompt": return "Type your message";
+      default: return "";
     }
   }
 
   function handleConfirmInput() {
     const value = state.input.trim();
-    const mode = checkAcpStatus("connected") ? "prompt" : "package";
 
-    switch (typeof state.mode === "number" ? "mcp" : state.mode) {
+    switch (state.mode.sub) {
       case "package":
         try {
           const agent = JSON.parse(value);
@@ -274,8 +299,8 @@ export function AcpComponent() {
             return;
           }
 
-          if (Setting.acp.mcpServers[state.mode]) {
-            Setting.acp.mcpServers[state.mode].server = server;
+          if (state.mode.mcp && Setting.acp.mcpServers[state.mode.mcp] ) {
+            Setting.acp.mcpServers[state.mode.mcp].server = server;
           } else {
             Setting.acp.mcpServers.push({ enabled: true, server });
           }
@@ -296,7 +321,7 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, input: "", files: [], mode }));
+    setState(state => ({ ...state, input: "", files: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }
 
   function handleCancelPrompt() {
@@ -307,10 +332,48 @@ export function AcpComponent() {
     Emit.send("acp:cancel-prompt", state.status.sessionId);
   }
 
+  function handleNormalKeyDown(e: KeyboardEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+
+    switch (e.key) {
+      case "i": return setState(state => ({ ...state, mode: { ...state.mode, main: "input" } }));
+      case "g": return scrollTo("top");
+      case "G": return scrollTo("bottom");
+      case "k": return scrollTo("up");
+      case "j": return scrollTo("down");
+      case "u": return e.ctrlKey && scrollTo("pageup");
+      case "d": return e.ctrlKey && scrollTo("pagedown");
+      case "q": return handleCancelPrompt();
+      case "Enter": return handleConfirmInput();
+    }
+  }
+
   function handleInputKeyDown(e: KeyboardEvent) {
-    if (e.key === "Enter" && e.shiftKey) {
+    if (e.key === "Escape") {
       e.preventDefault();
-      handleConfirmInput();
+      setState(state => ({ ...state, mode: { ...state.mode, main: "normal" } }));
+    }
+  }
+
+  function onFocused() {
+    setState(state => {
+      const main = (() => {
+        switch (document.activeElement) {
+          case command.current: return "normal";
+          case textarea.current: return "input";
+          default: return "blur";
+        }
+      })();
+      return state.mode.main === main ? state : { ...state, mode: { ...state.mode, main } };
+    });
+  }
+
+  function onCancel(e: MouseEvent) {
+    e.stopPropagation();
+
+    if (document.activeElement !== textarea.current && document.activeElement !== command.current) {
+      state.mode.main === "input" ? textarea.current?.focus() : command.current?.focus();
     }
   }
 
@@ -390,22 +453,18 @@ export function AcpComponent() {
   }
 
   return state.visible === false ? null : (
-    <FlexComponent color="default" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={styles.panel} onMouseUp={e => e.stopPropagation()}>
-      <FlexComponent grow={1} shrink={1} direction="column" spacing>
+    <FlexComponent color="default" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={styles.panel} onMouseDown={onCancel} onMouseUp={onCancel}>
+      <input style={styles.command} type="text" ref={command} onKeyDown={handleNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
+      <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
-          <FlexComponent direction="column" grow={1} shrink={1} overflow="auto" padding={[4]}>
+          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]}>
             <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
 
             <div ref={scroll} />
           </FlexComponent>
         ) : (
-          <FlexComponent horizontal="center" vertical="center" grow={1}>
+          <FlexComponent color="default" horizontal="center" vertical="center" grow={1}>
             <span style={{ opacity: 0.5 }}>No active session</span>
-          </FlexComponent>
-        )}
-        {state.status.sessionId && state.scroll && (
-          <FlexComponent position="absolute" inset={["auto", 8, 8, "auto"]} zIndex={1}>
-            <IconComponent color="lightblue-fg" font="" onClick={scrollToBottom} />
           </FlexComponent>
         )}
       </FlexComponent>
@@ -452,15 +511,15 @@ export function AcpComponent() {
         ) }
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
-          {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
+          {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
-            <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "package" }))} />}>
+            <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
               {Object.entries({ ...state.registry, custom: { available: true, agent: Setting.acp.customs } }).map(renderRegistryProvider)}
             </MenuComponent>
           )}
-          <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>
+          <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "mcp" } }))} />}>
             {Setting.acp.mcpServers.map((mcp, i) => (
-              <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: i }))} spacing>
+              <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: { main: "normal", sub: "mcp", mcp: i } }))} spacing>
                 <input type="checkbox" checked={mcp.enabled} onChange={e => handleEditMcp(e, "toggle", i)} />
                 {mcp.server.name}
                 <IconComponent color="gray" font="" float="right" onClick={e => handleEditMcp(e, "delete", i)} hover />
@@ -480,10 +539,12 @@ export function AcpComponent() {
           )}
         </FlexComponent>
         <textarea
+          ref={textarea}
           placeholder={getPlaceholder()}
           value={state.input}
           onChange={e => setState(state => ({ ...state, input: e.target.value }))}
           onKeyDown={handleInputKeyDown}
+          onFocus={() => Emit.share("envim:focused")}
           rows={8}
         />
         <FlexComponent overflow="visible" vertical="center" padding={[4, 0, 0]}>
@@ -499,8 +560,8 @@ export function AcpComponent() {
           {state.session?.configOptions?.map(renderConfigOption)}
           <div className="space" />
           {checkAcpStatus("processing") && <div className="animate loading inline" />}
-          <IconComponent font="" color="red-fg" onClick={handleCancelPrompt} style={getDisabledStyle(state.mode !== "prompt" || !checkAcpStatus("processing"))} />
-          <IconComponent font="󰒊" color="blue-fg" onClick={handleConfirmInput} style={getDisabledStyle(state.mode === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
+          <IconComponent font="" color="red-fg" onClick={handleCancelPrompt} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
+          <IconComponent font="󰒊" color="blue-fg" onClick={handleConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
         </FlexComponent>
       </FlexComponent>
     </FlexComponent>
