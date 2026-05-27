@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEv
 import { PlanEntry, SessionNotification, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
-import { IAcpRegistry, IAcpRegistryPackage, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Emit } from "../../utils/emit";
 import { Setting } from "../../utils/setting";
@@ -45,7 +45,7 @@ export function AcpComponent() {
     session: null,
     scroll: false,
     files: [],
-    registry: { npx: { available: false, packages: [] }, uvx: { available: false, packages: [] } },
+    registry: { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } },
   });
 
   const scroll = useRef<HTMLDivElement>(null);
@@ -167,23 +167,23 @@ export function AcpComponent() {
     setState(state => ({ ...state, scroll: false }));
   }
 
-  function handleSelectPackage(provider: string, pkg: IAcpRegistryPackage) {
+  function handleSelectPackage(provider: string, agent: IAcpRegistryAgent) {
     if (provider === "custom") {
-      setState(state => ({ ...state, mode: "package", input: JSON.stringify(pkg, null, 2) }));
+      setState(state => ({ ...state, mode: "package", input: JSON.stringify(agent, null, 2) }));
     } else {
-      handleStartAgent();
+      handleStartAgent(agent);
     }
   }
 
-  function handleDeleteCustomPackage(e: MouseEvent, pkg: IAcpRegistryPackage) {
+  function handleDeleteCustomPackage(e: MouseEvent, agent: IAcpRegistryAgent) {
     e.stopPropagation();
 
-    Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== pkg.name) };
+    Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
     Emit.send("envim:setting", Setting.get());
   }
 
-  function handleStartAgent() {
-    Emit.send("acp:start-agent");
+  function handleStartAgent(agent: IAcpRegistryAgent) {
+    Emit.send("acp:start-agent", agent);
   }
 
   function handleStopAgent() {
@@ -256,13 +256,13 @@ export function AcpComponent() {
     switch (typeof state.mode === "number" ? "mcp" : state.mode) {
       case "package":
         try {
-          const pkg = JSON.parse(value);
+          const agent = JSON.parse(value);
 
-          if (!pkg) return;
+          if (!agent) return;
 
-          Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== pkg?.name), pkg] };
+          Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== agent?.name), agent] };
           Emit.send("envim:setting", Setting.get());
-          handleStartAgent();
+          handleStartAgent(agent);
         } finally {
           return;
         }
@@ -349,12 +349,12 @@ export function AcpComponent() {
   }
 
   function renderRegistryProvider([kind, registry]: [string, IAcpRegistry[keyof IAcpRegistry]]) {
-    return !registry.available || registry.packages.length === 0 ? null : (
+    return !registry.available || registry.agent.length === 0 ? null : (
       <MenuComponent key={kind} side label={kind}>
-        {registry.packages.map((pkg, i) => (
-          <FlexComponent key={i} animate="hover" title={pkg.description} onClick={() => handleSelectPackage(kind, pkg)} spacing>
-            {pkg.name}
-            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => handleDeleteCustomPackage(e, pkg)} hover />}
+        {registry.agent.map((agent, i) => (
+          <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => handleSelectPackage(kind, agent)} spacing>
+            {agent.name}
+            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => handleDeleteCustomPackage(e, agent)} hover />}
           </FlexComponent>
         ))}
       </MenuComponent>
@@ -455,7 +455,7 @@ export function AcpComponent() {
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: "prompt" }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: "package" }))} />}>
-              {Object.entries({ ...state.registry, custom: { available: true, packages: Setting.acp.customs } }).map(renderRegistryProvider)}
+              {Object.entries({ ...state.registry, custom: { available: true, agent: Setting.acp.customs } }).map(renderRegistryProvider)}
             </MenuComponent>
           )}
           <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: -1 })) } />}>

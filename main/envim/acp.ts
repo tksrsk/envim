@@ -17,7 +17,7 @@ import {
   ndJsonStream
 } from "@agentclientprotocol/sdk";
 
-import { IAcpRegistry, IAcpRegistryPackage, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Emit } from "../emit";
 import { Setting } from "../setting";
@@ -34,12 +34,13 @@ export class Acp {
   private static tool: { [key: string]: ToolCallUpdate } = {};
   private static terminal: { [key: string]: { promise: Promise<WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: WaitForTerminalExitResponse) => void } } = {};
   private static permission: { [key: string]: (response: RequestPermissionResponse) => void } = {};
-  private static registry: IAcpRegistry = { npx: { available: false, packages: [] }, uvx: { available: false, packages: [] } };
+  private static registry: IAcpRegistry = { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } };
   private static registryLoaded = false;
 
   static async setup(init: boolean, workspace: string) {
     if (!Acp.initialized) {
       Acp.initialized = true;
+      Emit.on("acp:toggle", Acp.togglePanel);
       Emit.on("acp:start-agent", Acp.startAgent);
       Emit.on("acp:stop-agent", Acp.stopAgent);
       Emit.on("acp:create-session", Acp.createSession);
@@ -51,7 +52,6 @@ export class Acp {
       Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
-      Emit.on("acp:toggle", Acp.togglePanel);
       Emit.on("envim:cwd", Acp.setCwd);
     }
 
@@ -120,15 +120,14 @@ export class Acp {
       const response = await fetch(ACP_REGISTRY_URL);
 
       if (response.ok) {
-        const data = await response.json() as { agents?: Omit<IAcpRegistryPackage, "package">[] };
-        const packages = (data.agents || [])
+        const agents = ((await response.json() as { agents: IAcpRegistryAgent[] }).agents)
           .filter(agent => !!(agent.name && agent.distribution && (agent.distribution.npx || agent.distribution.uvx)))
           .sort((a, b) => a.name.localeCompare(b.name));
 
         Acp.registry = {
           npx: {
             available: await Emit.share("envim:api", "nvim_call_function", ["executable", ["npx"]]) === 1,
-            packages: packages.flatMap(agent => agent.distribution?.npx ? [{
+            agent: agents.flatMap(agent => agent.distribution?.npx ? [{
               ...agent,
               package: {
                 command: ["npx", "--yes", agent.distribution.npx.package, ...(agent.distribution.npx.args || [])],
@@ -138,7 +137,7 @@ export class Acp {
           },
           uvx: {
             available: await Emit.share("envim:api", "nvim_call_function", ["executable", ["uvx"]]) === 1,
-            packages: packages.flatMap(agent => agent.distribution?.uvx ? [{
+            agent: agents.flatMap(agent => agent.distribution?.uvx ? [{
               ...agent,
               package: {
                 command: ["uvx", agent.distribution.uvx.package, ...(agent.distribution.uvx.args || [])],
@@ -212,10 +211,10 @@ export class Acp {
 
 
 
-  static async startAgent() {
+  static async startAgent(agent: IAcpRegistryAgent) {
     Acp.setState({ status: "connecting" });
 
-    const result = await Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStart", [Setting.get().acp.package]]);
+    const result = await Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStart", [agent.package]]);
 
     if (result == "executed") {
       if (!Acp.connection) {

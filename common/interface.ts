@@ -15,7 +15,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { customs: IAcpRegistryPackage[]; mcpServers: { enabled: boolean; server: McpServer }[]; };
+  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: McpServer }[]; };
   presets: { [k: string]: ISetting };
 }
 
@@ -126,7 +126,7 @@ export interface IAcpStatus {
   sessionId?: string;
 }
 
-export interface IAcpRegistryPackage {
+export interface IAcpRegistryAgent {
   name: string;
   description?: string;
   package: { command: string[]; env?: { [key: string]: string } };
@@ -139,6 +139,6 @@ export interface IAcpRegistryPackage {
 export type IAcpRegistry = {
   [key in "npx" | "uvx"]: {
     available: boolean;
-    packages: IAcpRegistryPackage[];
+    agent: IAcpRegistryAgent[];
   };
 };
