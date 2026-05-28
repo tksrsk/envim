@@ -65,6 +65,10 @@ export function HistoryComponent(props: Props) {
     };
   }, [state.debug]);
 
+  useEffect(() => {
+    state.messages.length && bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [state.messages]);
+
   function onMode(message: IMessage) {
     setState(state => ({ ...state, mode: message.contents.length ? message : undefined }));
   }
@@ -78,12 +82,7 @@ export function HistoryComponent(props: Props) {
   }
 
   function onHistory(messages: IMessage[]) {
-    setState(state => {
-      setTimeout(() => bottom.current?.scrollIntoView({ behavior: "smooth" }));
-      messages = [ ...state.messages, ...messages ];
-
-      return { ...state, messages: messages.slice(-1000) };
-    });
+    setState(state => ({ ...state, messages: [ ...state.messages, ...messages ].slice(-1000) }));
   }
 
   useEffect(() => {

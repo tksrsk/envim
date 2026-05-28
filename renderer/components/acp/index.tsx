@@ -57,7 +57,6 @@ export function AcpComponent() {
   const scroll = useRef<HTMLDivElement>(null);
   const command = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const timer = useRef<number>(0);
   const color = { input: "default", normal: "green", blur: "default" }[state.mode.main];
 
   useEffect(() => {
@@ -78,19 +77,6 @@ export function AcpComponent() {
     };
   }, []);
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        clearTimeout(timer.current);
-        timer.current = +setTimeout(() => setState(state => ({ ...state, scroll: !entry.isIntersecting })), 200);
-      },
-      { threshold: 0.1 }
-    );
-
-    scroll.current && observer.observe(scroll.current);
-
-    return () => observer.disconnect();
-  }, [scroll.current]);
 
   useEffect(() => {
     state.messages.length && !state.scroll && scrollTo("bottom");
@@ -186,10 +172,15 @@ export function AcpComponent() {
       case "pagedown": return scroll.current.parentElement.scrollBy({ top: scroll.current.parentElement.clientHeight, behavior: "smooth" });
       case "pageup": return scroll.current.parentElement.scrollBy({ top: -scroll.current.parentElement.clientHeight, behavior: "smooth" });
       case "top": return scroll.current.parentElement.scrollTo({ top: 0, behavior: "smooth" });
-      case "bottom": return (scroll.current.scrollIntoView({ behavior: "smooth" }), setState(state => ({ ...state, scroll: false })));
+      case "bottom": return scroll.current.scrollIntoView({ behavior: "smooth" });
       case "up": return scroll.current.parentElement.scrollBy({ top: -50, behavior: "smooth" });
       case "down": return scroll.current.parentElement.scrollBy({ top: 50, behavior: "smooth" });
     }
+  }
+
+  function handleScrollContainer(e: React.UIEvent) {
+    const el = e.currentTarget;
+    setState(state => ({ ...state, scroll: el.scrollHeight - el.scrollTop - el.clientHeight > 5 }));
   }
 
   function handleSelectPackage(provider: string, agent: IAcpRegistryAgent) {
@@ -457,7 +448,7 @@ export function AcpComponent() {
       <input style={styles.command} type="text" ref={command} onKeyDown={handleNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
-          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]}>
+          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={handleScrollContainer}>
             <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
 
             <div ref={scroll} />

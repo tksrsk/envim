@@ -1,4 +1,4 @@
-import React, { PropsWithChildren, MouseEvent, DragEvent, WheelEvent } from "react";
+import React, { PropsWithChildren, MouseEvent, DragEvent, WheelEvent, UIEvent } from "react";
 
 interface Props {
   selectable?: boolean;
@@ -19,6 +19,7 @@ interface Props {
   onDragEnd?: (e: DragEvent) => void;
   onDrop?: (e: DragEvent) => void;
   onWheel?: (e: WheelEvent) => void;
+  onScroll?: (e: React.UIEvent) => void;
 
   direction?: "row" | "column" | "row-reverse" | "column-reverse";
   shadow?: boolean;
@@ -97,6 +98,7 @@ export function FlexComponent(props: PropsWithChildren<Props>)  {
       onDragEnd={props.onDragEnd}
       onDrop={props.onDrop}
       onWheel={props.onWheel}
+      onScroll={props.onScroll}
       style={getStyle()}
       draggable={!!(props.onDragStart && props.onDragEnd)}
     >
