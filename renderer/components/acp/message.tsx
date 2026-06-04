@@ -56,6 +56,16 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
 
   function renderDiffLines(path: string, oldText: string, newText: string) {
     const diff = diffLines(oldText, newText);
+    const [signs, lines, fence] = diff.reduce<[string[], string[], string]>(([signs, lines, fence], change) => {
+      const parts = change.value.split("\n").filter(line => line);
+      const sign = change.added ? "+" : change.removed ? "-" : " ";
+      const maxRun = Math.max(0, ...(change.value.match(/`+/g) || []).map(m => m.length));
+
+      signs.push(...parts.map(() => sign));
+      lines.push(...parts);
+
+      return [signs, lines, maxRun >= fence.length ? "`".repeat(maxRun + 1) : fence];
+    }, [[], [], "```"]);
 
     return (
       <>
@@ -64,18 +74,11 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
           <FlexComponent overflow="auto">
             <FlexComponent position="absolute" inset={[0]}>
               <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
-                {`\`\`\`diff\n${diff.map(change => {
-                  const arr = new Array<string>(change.value.split("\n").filter(line => line).length).fill(" ");
-
-                  if (change.added) arr.fill("+");
-                  if (change.removed) arr.fill("-");
-
-                  return arr.join("\n");
-                }).join("\n")}\n\`\`\``}
+                {`\`\`\`diff\n${signs.join("\n")}\n\`\`\``}
               </Markdown>
             </FlexComponent>
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
-              {`\`\`\`${path.split(".").pop()}\n${diff.map(change => change.value.split("\n").filter(line => line).join("\n")).join("\n")}\n\`\`\``}
+              {`${fence}${path.split(".").pop() || ""}\n${lines.join("\n")}\n${fence}`}
             </Markdown>
           </FlexComponent>
         </div>
