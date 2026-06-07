@@ -20,11 +20,12 @@ interface State {
   sessions: IAcpSession[];
   messages: SessionNotification[];
   input: string;
-  mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp", mcp?: number };
+  mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
   registry: IAcpRegistry;
+  search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -47,6 +48,7 @@ export function AcpComponent() {
     sessions: [],
     messages: [],
     input: JSON.stringify({name: "", package: { command: [] }}, null, 2),
+    search: { query: "", highlight: false, active: 0, ranges: [] },
     mode: { main: "input", sub: "package" },
     session: null,
     scroll: false,
@@ -57,7 +59,7 @@ export function AcpComponent() {
   const scroll = useRef<HTMLDivElement>(null);
   const command = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const color = { input: "default", normal: "green", blur: "default" }[state.mode.main];
+  const color = state.mode.main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   useEffect(() => {
     Emit.on("acp:toggle", onAgentToggle);
@@ -105,6 +107,50 @@ export function AcpComponent() {
 
     state.mode.main === "normal" ? command.current?.focus() : textarea.current?.focus();
   }, [state.mode.main]);
+
+  useEffect(() => {
+    const ranges: Range[] = [];
+
+    if (state.search.query && scroll.current?.parentElement) {
+      const regex = new RegExp(state.search.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      const walker = document.createTreeWalker(scroll.current.parentElement, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => getComputedStyle(node.parentElement as HTMLElement).userSelect === "none"
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT,
+      });
+      let node: Text | null;
+
+      while ((node = walker.nextNode() as Text | null)) {
+        for (const match of node.data.matchAll(regex)) {
+          const range = new Range();
+          range.setStart(node, match.index);
+          range.setEnd(node, match.index + match[0].length);
+          ranges.push(range);
+        }
+      }
+    }
+
+    setState(state => ({ ...state, search: { ...state.search, ranges } }));
+  }, [state.search.query]);
+
+  useEffect(() => {
+    CSS.highlights.delete("search-all");
+    CSS.highlights.delete("search-active");
+
+    const range = state.search.ranges[state.search.active];
+
+    if (!state.search.highlight || !range || !scroll.current?.parentElement) return;
+
+    CSS.highlights.set("search-all", new Highlight(...state.search.ranges));
+    CSS.highlights.set("search-active", new Highlight(range));
+
+    const active = range.getBoundingClientRect();
+    const base = scroll.current.parentElement.getBoundingClientRect();
+
+    if (active.top < base.top || active.bottom > base.bottom) {
+      scroll.current.parentElement.scrollBy({ top: active.top - base.top - base.height / 2 + active.height / 2, behavior: "smooth" });
+    }
+  }, [state.search]);
 
   function onAgentToggle(registry: IAcpRegistry) {
     setState(state => {
@@ -262,17 +308,18 @@ export function AcpComponent() {
       case "package": return "Select or Type an ACP package";
       case "mcp": return "Enter mcp server settings as JSON";
       case "prompt": return "Type your message";
+      case "search": return "Search messages...";
       default: return "";
     }
   }
 
   function handleConfirmInput() {
-    const value = state.input.trim();
+    const { input, search } = state;
 
     switch (state.mode.sub) {
       case "package":
         try {
-          const agent = JSON.parse(value);
+          const agent = JSON.parse(input);
 
           if (!agent) return;
 
@@ -284,7 +331,7 @@ export function AcpComponent() {
         }
       case "mcp":
         try {
-          const server = JSON.parse(value);
+          const server = JSON.parse(input);
 
           if (!zMcpServer.safeParse(server).success) {
             return;
@@ -307,12 +354,18 @@ export function AcpComponent() {
           return;
         }
 
-        Emit.send("acp:send-prompt", state.status.sessionId, value, state.files);
+        Emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files);
+
+        break;
+      case "search":
+        search.query = input;
+        search.highlight = true;
+        search.active = 0;
 
         break;
     }
 
-    setState(state => ({ ...state, input: "", files: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
+    setState(state => ({ ...state, search, input: "", files: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }
 
   function handleCancelPrompt() {
@@ -328,7 +381,7 @@ export function AcpComponent() {
     e.preventDefault();
 
     switch (e.key) {
-      case "i": return setState(state => ({ ...state, mode: { ...state.mode, main: "input" } }));
+      case "i": return setState(state => ({ ...state, mode: { main: "input", sub: state.mode.sub === "search" ? "prompt" : state.mode.sub } }));
       case "g": return scrollTo("top");
       case "G": return scrollTo("bottom");
       case "k": return scrollTo("up");
@@ -336,15 +389,34 @@ export function AcpComponent() {
       case "u": return e.ctrlKey && scrollTo("pageup");
       case "d": return e.ctrlKey && scrollTo("pagedown");
       case "q": return handleCancelPrompt();
+      case "n": return state.search.query && handleSearch(state.search.active + 1);
+      case "N": return state.search.query && handleSearch(state.search.active - 1);
+      case "/": return handleSearchInput();
       case "Enter": return handleConfirmInput();
+      case "Escape": return state.search.highlight && clearSearch();
     }
   }
 
   function handleInputKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
-      setState(state => ({ ...state, mode: { ...state.mode, main: "normal" } }));
+      setState(state => ({ ...state, input: state.mode.sub === "search" ? "" : state.input, mode: { ...state.mode, main: "normal" } }));
     }
+    if (e.key === "Enter" && state.mode.sub === "search") {
+      handleNormalKeyDown(e);
+    }
+  }
+
+  function handleSearchInput() {
+    state.session && setState(state => ({ ...state, input: "", mode: { main: "input", sub: "search" }, search: { query: "", active: 0, highlight: false, ranges: [] } }));
+  }
+
+  function handleSearch(active: number) {
+    state.search.ranges.length && setState(s => ({ ...s, search: { ...s.search, highlight: true, active: (active + s.search.ranges.length) % s.search.ranges.length } }));
+  }
+
+  function clearSearch() {
+    setState(s => ({ ...s, search: { ...s.search, highlight: false } }));
   }
 
   function onFocused() {
@@ -518,6 +590,7 @@ export function AcpComponent() {
             ))}
           </MenuComponent>
           <div className="space" />
+          {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={handleSearchInput} />}
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={handleCreateSession} />}>
               {state.sessions.filter(({ status }) => status === "show").map(session => (

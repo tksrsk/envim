@@ -77,3 +77,12 @@ details {
   border-width: 1px 0 0;
   border-style: solid;
 }
+
+::highlight(search-all) {
+  color: var(--color-bg);
+  background: var(--color-orange);
+}
+
+::highlight(search-active) {
+  background: var(--color-yellow);
+}
