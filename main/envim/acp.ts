@@ -317,8 +317,8 @@ export class Acp {
   }
 
   static deleteSession(sessionId: string) {
-    if (Acp.connection && Acp.capabilities?.sessionCapabilities?.close) {
-      Acp.connection.closeSession({ sessionId });
+    if (Acp.connection && Acp.capabilities?.sessionCapabilities?.delete) {
+      Acp.connection.deleteSession({ sessionId });
     }
 
     delete(Acp.sessions[sessionId]);
@@ -336,6 +336,10 @@ export class Acp {
 
     if (!session || !Acp.connection) {
       return;
+    }
+
+    if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
+      Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
     }
 
     if (
