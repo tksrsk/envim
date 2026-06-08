@@ -103,7 +103,7 @@ pre {
       .hljs-deletion {
         display: inline-block;
         width: 100%;
-        color: rgba(0, 0, 0, 0);
+        color: var(--color-red);
         background: var(--color-red-alpha);
       }
 
@@ -118,7 +118,7 @@ pre {
       .hljs-addition {
         display: inline-block;
         width: 100%;
-        color: rgba(0, 0, 0, 0);
+        color: var(--color-green);
         background: var(--color-green-alpha);
       }
 

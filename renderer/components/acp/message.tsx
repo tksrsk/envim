@@ -56,20 +56,25 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
 
   function renderDiffLines(path: string, oldText: string, newText: string) {
     const diff = diffLines(oldText, newText);
-    const [signs, lines, fence] = diff.reduce<[string[], string[], string]>(([signs, lines, fence], change) => {
+    const [signs, lines, fence, added, removed] = diff.reduce<[string[], string[], string, number, number]>(([signs, lines, fence, added, removed], change) => {
       const parts = change.value.split("\n").filter(line => line);
       const sign = change.added ? "+" : change.removed ? "-" : " ";
       const maxRun = Math.max(0, ...(change.value.match(/`+/g) || []).map(m => m.length));
 
       signs.push(...parts.map(() => sign));
       lines.push(...parts);
+      [ added, removed ] = [added + (change.added ? parts.length : 0), removed + (change.removed ? parts.length : 0)]
 
-      return [signs, lines, maxRun >= fence.length ? "`".repeat(maxRun + 1) : fence];
-    }, [[], [], "```"]);
+      return [signs, lines, maxRun >= fence.length ? "`".repeat(maxRun + 1) : fence, added, removed];
+    }, [[], [], "```", 0, 0]);
 
     return (
       <>
         {renderFile(path)}
+        <FlexComponent>
+          {added > 0 && <span className="color-green-fg" style={{padding: "0 2px"}}>+{added}</span>}
+          {removed > 0 && <span className="color-red-fg" style={{padding: "0 2px"}}>-{removed}</span>}
+        </FlexComponent>
         <div className="selectable">
           <FlexComponent overflow="auto">
             <FlexComponent position="absolute" inset={[0]}>
