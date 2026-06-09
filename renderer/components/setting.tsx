@@ -1,9 +1,9 @@
-import React, { useEffect, useState, FormEvent, ChangeEvent } from "react";
+import React from "react";
 
 import { ISetting } from "common/interface";
 
-import { Emit } from "../utils/emit";
-import { Setting } from "../utils/setting";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
 
 interface Props {
   width: number;
@@ -48,9 +48,9 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function SettingComponent (props: Props) {
-  const [state, setState] = useState<ISetting>({...Setting.get() });
+  const [state, setState] = React.useState<ISetting>({...Setting.get() });
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("envim:setting", onSetting);
     Emit.send("envim:init");
 
@@ -63,7 +63,7 @@ export function SettingComponent (props: Props) {
     setState(() => state);
   }
 
-  function onToggleType (e: ChangeEvent<HTMLInputElement>) {
+  function onToggleType (e: React.ChangeEvent<HTMLInputElement>) {
     setState(state => {
       const type = e.target.value as ISetting["type"];
       const path = state.path;
@@ -73,7 +73,7 @@ export function SettingComponent (props: Props) {
     });
   }
 
-  function onChangePath (e: ChangeEvent<HTMLInputElement>) {
+  function onChangePath (e: React.ChangeEvent<HTMLInputElement>) {
     setState(state => {
       const path = e.target.value;
       const type = state.type;
@@ -83,19 +83,19 @@ export function SettingComponent (props: Props) {
     });
   }
 
-  function onChangeFont (e: ChangeEvent<HTMLInputElement>) {
+  function onChangeFont (e: React.ChangeEvent<HTMLInputElement>) {
     setState(state => ({ ...state, font: { ...state.font, size: +e.target.value } }));
   }
 
-  function onChangeLspace (e: ChangeEvent<HTMLInputElement>) {
+  function onChangeLspace (e: React.ChangeEvent<HTMLInputElement>) {
     setState(state => ({ ...state, font: { ...state.font, lspace: +e.target.value } }));
   }
 
-  function onChangeOpacity (e: ChangeEvent<HTMLInputElement>) {
+  function onChangeOpacity (e: React.ChangeEvent<HTMLInputElement>) {
     setState(state => ({ ...state, opacity: +e.target.value }));
   }
 
-  function onToggleOption (e: ChangeEvent<HTMLInputElement>) {
+  function onToggleOption (e: React.ChangeEvent<HTMLInputElement>) {
     setState(({ options, ...state }) => {
       options[e.target.name] = e.target.checked;
 
@@ -114,7 +114,7 @@ export function SettingComponent (props: Props) {
     setState(({ searchengines, presets, ...state }) => ({ ...state, ...presets[key], searchengines, presets }));
   }
 
-  function onSubmit (e: FormEvent) {
+  function onSubmit (e: React.FormEvent) {
     const { type, path, font, opacity, options, bookmarks, searchengines, acp } = state;
 
     e.stopPropagation();

@@ -1,8 +1,8 @@
 import { ICell, IScroll } from "common/interface";
 
-import { Highlights } from "./highlight";
-import { Setting } from "./setting";
-import { between } from "./size";
+import { Highlights } from "renderer/utils/highlight";
+import { Setting } from "renderer/utils/setting";
+import { between } from "renderer/utils/size";
 
 export class Context2D {
   private bgcanvas: HTMLCanvasElement;

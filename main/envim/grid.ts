@@ -1,7 +1,7 @@
 import { IWindow, ICell, IScroll, IMode } from "common/interface";
 
-import { Emit } from "../emit";
-import { Highlights } from "./highlight";
+import { Emit } from "main/emit";
+import { Highlights } from "main/envim/highlight";
 
 class Grid {
   private info: IWindow;

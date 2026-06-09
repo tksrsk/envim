@@ -1,12 +1,12 @@
-import React, { useEffect, useState, useRef, RefObject, KeyboardEvent } from "react";
+import React from "react";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { keycode } from "../../utils/keycode";
-import { row2Y, col2X } from "../../utils/size";
+import { Emit } from "renderer/utils/emit";
+import { keycode } from "renderer/utils/keycode";
+import { row2Y, col2X } from "renderer/utils/size";
 
-import { FlexComponent } from "../flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface States {
   cursor: { x: number, y: number, width: number, zIndex: number, shape: "block" | "vertical" | "horizontal" };
@@ -28,10 +28,10 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function InputComponent () {
   const { busy, mode } = useEditor();
-  const [state, setState] = useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy, focus: true, focusable: true });
-  const input: RefObject<HTMLInputElement | null> = useRef<HTMLInputElement>(null);
+  const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy, focus: true, focusable: true });
+  const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("envim:focus", onFocus);
     Emit.on("envim:focusable", onFocusable);
     Emit.on("grid:cursor", onCursor);
@@ -69,11 +69,11 @@ export function InputComponent () {
     setState(state => ({ ...state, cursor: { ...state.cursor, ...cursor }}));
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, busy }));
   }, [busy]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (mode) {
       setState(state => ({ ...state, cursor: { ...state.cursor, shape: mode.cursor_shape }}));
       mode.short_name === "c" && input.current?.focus();
@@ -108,7 +108,7 @@ export function InputComponent () {
     focus && Emit.share("envim:focused");
   }
 
-  function onKeyDown (e: KeyboardEvent) {
+  function onKeyDown (e: React.KeyboardEvent) {
     if (e.nativeEvent.isComposing) return;
     const code = keycode(e);
 
@@ -118,7 +118,7 @@ export function InputComponent () {
     code && Emit.send("envim:input", code);
   }
 
-  function onKeyUp (e: KeyboardEvent) {
+  function onKeyUp (e: React.KeyboardEvent) {
     if (!e.nativeEvent.isComposing && input.current?.value) {
       Emit.send("envim:input", input.current.value);
       input.current.value = "";

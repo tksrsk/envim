@@ -1,7 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent } from "electron";
 import { EventEmitter } from "events";
 
-import { Bootstrap } from "./bootstrap";
+import { Bootstrap } from "main/bootstrap";
 
 export class Emit {
   private static emit = new EventEmitter;

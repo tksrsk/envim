@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 
-import { Emit } from "../utils/emit";
-import { Setting } from "../utils/setting";
-import { Highlights } from "../utils/highlight";
-import { Cache } from "../utils/cache";
-import { y2Row, x2Col, row2Y, col2X } from "../utils/size";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
+import { Highlights } from "renderer/utils/highlight";
+import { Cache } from "renderer/utils/cache";
+import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
-import { SettingComponent } from "./setting";
-import { EnvimComponent } from "./envim";
+import { SettingComponent } from "renderer/components/setting";
+import { EnvimComponent } from "renderer/components/envim";
 
 interface States {
   init: boolean;
@@ -16,7 +16,7 @@ interface States {
 }
 
 export function AppComponent() {
-  const [state, setState] = useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight } });
+  const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight } });
   const titlebar = navigator.windowControlsOverlay.getTitlebarAreaRect
     ? navigator.windowControlsOverlay.getTitlebarAreaRect()
     : { x: 0, y: 0, width: 0, height: 0, left: 0, right: 0 };
@@ -31,7 +31,7 @@ export function AppComponent() {
   };
   const footer = { width: state.window.width, height: state.window.height - header.height - main.height - row2Y(1) };
 
-  useEffect(() => {
+  React.useEffect(() => {
     document.fonts.load("10px Regular").then();
     document.fonts.load("10px Bold").then();
     document.fonts.load("10px Alt").then();

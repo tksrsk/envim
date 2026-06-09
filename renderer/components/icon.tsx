@@ -1,8 +1,8 @@
 import React from "react";
 
-import { Setting } from "../utils/setting";
+import { Setting } from "renderer/utils/setting";
 
-import { FlexComponent } from "./flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface Props {
   font: string;

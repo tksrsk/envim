@@ -6,11 +6,11 @@ import { UiAttachOptions } from "neovim/lib/api/Neovim";
 
 import { ISetting } from "common/interface";
 
-import { Emit } from "./emit";
-import { Connection } from "./connection";
-import { Setting } from "./setting";
-import { App } from "./envim/app";
-import { Grids } from "./envim/grid";
+import { Emit } from "main/emit";
+import { Connection } from "main/connection";
+import { Setting } from "main/setting";
+import { App } from "main/envim/app";
+import { Grids } from "main/envim/grid";
 
 export class Envim {
   private nvim = new NeovimClient;

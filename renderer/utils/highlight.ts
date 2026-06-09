@@ -1,6 +1,6 @@
 import { IHighlight } from "common/interface";
-import { Setting } from "./setting";
-import { Cache } from "./cache";
+import { Setting } from "renderer/utils/setting";
+import { Cache } from "renderer/utils/cache";
 
 interface IOptions {
   reverse?: boolean;

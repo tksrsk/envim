@@ -1,7 +1,7 @@
 import { clipboard } from "electron";
 import { Response } from "neovim/lib/host";
 
-import { Emit } from "../emit";
+import { Emit } from "main/emit";
 
 export class Clipboard {
   private static lines: string[];

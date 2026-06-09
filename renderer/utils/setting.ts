@@ -1,6 +1,6 @@
 import { ISetting } from "common/interface";
 
-import { Structure } from "./structure";
+import { Structure } from "renderer/utils/structure";
 
 const defaultSetting: ISetting = {
   type: "command",

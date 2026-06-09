@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 
 import { IMessage } from "common/interface";
 
-import { Highlights } from "../../utils/highlight";
-import { notificates } from "../../utils/icons";
+import { Highlights } from "renderer/utils/highlight";
+import { notificates } from "renderer/utils/icons";
 
-import { FlexComponent } from "../flex";
-import { IconComponent } from "../icon";
+import { FlexComponent } from "renderer/components/flex";
+import { IconComponent } from "renderer/components/icon";
 
 interface Props {
   message: IMessage;
@@ -28,7 +28,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function MessageComponent(props: Props) {
-  const [state, setState] = useState<States>({ open: props.open });
+  const [state, setState] = React.useState<States>({ open: props.open });
   const { font } = notificates.filter(icon => icon.kinds.indexOf(props.message.kind) >= 0)[0] || { font: "󱈸" };
   const defaultHl = props.message.contents[0].hl;
   const defaultStyle = Highlights.style(defaultHl);

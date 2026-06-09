@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 
 import { IMessage } from "common/interface";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
+import { Emit } from "renderer/utils/emit";
 
-import { FlexComponent } from "../flex";
-import { MessageComponent } from "./message";
+import { FlexComponent } from "renderer/components/flex";
+import { MessageComponent } from "renderer/components/envim/message";
 
 interface States {
   messages: IMessage[];
@@ -27,9 +27,9 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function NotificateComponent() {
   const { options } = useEditor();
-  const [state, setState] = useState<States>({ messages: [], enabled: options.ext_messages });
+  const [state, setState] = React.useState<States>({ messages: [], enabled: options.ext_messages });
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("messages:show", onShow);
 
     return () => {
@@ -61,7 +61,7 @@ export function NotificateComponent() {
     });
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     options.ext_messages === undefined || setState(state => ({ ...state, enabled: options.ext_messages }));
   }, [options.ext_messages]);
 

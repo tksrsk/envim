@@ -1,15 +1,15 @@
-import React, { useEffect, useState, useRef, RefObject } from "react";
+import React from "react";
 
 import { ISetting, IMessage } from "common/interface";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
+import { Emit } from "renderer/utils/emit";
 
-import { FlexComponent } from "../flex";
-import { MenuComponent } from "../menu";
-import { IconComponent } from "../icon";
-import { MessageComponent } from "./message";
+import { FlexComponent } from "renderer/components/flex";
+import { MenuComponent } from "renderer/components/menu";
+import { IconComponent } from "renderer/components/icon";
+import { MessageComponent } from "renderer/components/envim/message";
 
 interface Props {
   width: number;
@@ -39,11 +39,11 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function HistoryComponent(props: Props) {
   const { options } = useEditor();
-  const [ state, setState ] = useState<States>({ messages: [], theme: "dark", options, debug: "" });
-  const bottom: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
-  const timer: RefObject<number> = useRef<number>(0);
+  const [ state, setState ] = React.useState<States>({ messages: [], theme: "dark", options, debug: "" });
+  const bottom: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
+  const timer: React.RefObject<number> = React.useRef<number>(0);
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("messages:mode", onMode);
     Emit.on("messages:command", onCommand);
     Emit.on("messages:ruler", onRuler);
@@ -57,7 +57,7 @@ export function HistoryComponent(props: Props) {
     };
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     state.debug && Emit.on("debug", onDebug);
 
     return () => {
@@ -65,7 +65,7 @@ export function HistoryComponent(props: Props) {
     };
   }, [state.debug]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     state.messages.length && bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [state.messages]);
 
@@ -85,7 +85,7 @@ export function HistoryComponent(props: Props) {
     setState(state => ({ ...state, messages: [ ...state.messages, ...messages ].slice(-1000) }));
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, options }));
   }, [options]);
 

@@ -1,8 +1,8 @@
 import { app, dialog, clipboard, BrowserWindow, WebContents, Event, HandlerDetails, LoginAuthenticationResponseDetails, AuthInfo, ContextMenuParams, Input } from "electron";
 import { lookup } from "dns";
 
-import { Bootstrap } from "./bootstrap";
-import { Emit } from "./emit";
+import { Bootstrap } from "main/bootstrap";
+import { Emit } from "main/emit";
 
 export class Browser {
   private ignoreCertErrorHost: string[] = [];

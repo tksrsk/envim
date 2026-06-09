@@ -1,4 +1,4 @@
-import React, { PropsWithChildren, MouseEvent, DragEvent, WheelEvent, UIEvent } from "react";
+import React from "react";
 
 interface Props {
   selectable?: boolean;
@@ -8,17 +8,17 @@ interface Props {
   active?: boolean;
   title?: string;
 
-  onClick?: (e: MouseEvent) => void;
-  onMouseDown?: (e: MouseEvent) => void;
-  onMouseMove?: (e: MouseEvent) => void;
-  onMouseUp?: (e: MouseEvent) => void;
-  onMouseEnter?: (e: MouseEvent) => void;
-  onMouseLeave?: (e: MouseEvent) => void;
-  onDragStart?: (e: DragEvent) => void;
-  onDragOver?: (e: DragEvent) => void;
-  onDragEnd?: (e: DragEvent) => void;
-  onDrop?: (e: DragEvent) => void;
-  onWheel?: (e: WheelEvent) => void;
+  onClick?: (e: React.MouseEvent) => void;
+  onMouseDown?: (e: React.MouseEvent) => void;
+  onMouseMove?: (e: React.MouseEvent) => void;
+  onMouseUp?: (e: React.MouseEvent) => void;
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: (e: React.MouseEvent) => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onWheel?: (e: React.WheelEvent) => void;
   onScroll?: (e: React.UIEvent) => void;
 
   direction?: "row" | "column" | "row-reverse" | "column-reverse";
@@ -43,7 +43,7 @@ interface Props {
   style?: React.CSSProperties;
 }
 
-export function FlexComponent(props: PropsWithChildren<Props>)  {
+export function FlexComponent(props: React.PropsWithChildren<Props>)  {
   function getClassName() {
     const classes: string[] = [];
 

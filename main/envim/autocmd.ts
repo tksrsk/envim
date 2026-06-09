@@ -1,4 +1,4 @@
-import { Emit } from "../emit";
+import { Emit } from "main/emit";
 
 export class Autocmd {
   static setup() {

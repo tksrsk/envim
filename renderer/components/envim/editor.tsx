@@ -1,18 +1,18 @@
-import React, { useEffect, useState, useRef, RefObject, MouseEvent, DragEvent, WheelEvent } from "react";
+import React from "react";
 
 import { ICell, IScroll, IBuffer } from "common/interface";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { Setting } from "../../utils/setting";
-import { Canvas } from "../../utils/canvas";
-import { y2Row, x2Col } from "../../utils/size";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
+import { Canvas } from "renderer/utils/canvas";
+import { y2Row, x2Col } from "renderer/utils/size";
 
-import { FlexComponent } from "../flex";
-import { IconComponent } from "../icon";
-import { MenuComponent } from "../menu";
-import { WebviewComponent } from "../webview";
+import { FlexComponent } from "renderer/components/flex";
+import { IconComponent } from "renderer/components/icon";
+import { MenuComponent } from "renderer/components/menu";
+import { WebviewComponent } from "renderer/components/webview";
 
 interface Props {
   id: string;
@@ -47,15 +47,15 @@ interface States {
 
 export function EditorComponent(props: Props) {
   const { busy, options, mode, bufs, drag } = useEditor();
-  const [state, setState] = useState<States>({ bufs, nomouse: drag !== "" && drag !== props.id, dragging: false, hidden: false, scrolling: 0, preview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
-  const canvas: RefObject<HTMLCanvasElement | null> = useRef<HTMLCanvasElement>(null);
-  const timer: RefObject<number> = useRef(0);
-  const pointer: RefObject<{ row: number; col: number }> = useRef({ row: 0, col: 0 });
-  const dragging: RefObject<{ x: number; y: number }> = useRef({ x: 0, y: 0 });
-  const delta: RefObject<{ x: number; y: number }> = useRef({ x: 0, y: 0 });
+  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.id, dragging: false, hidden: false, scrolling: 0, preview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
+  const canvas: React.RefObject<HTMLCanvasElement | null> = React.useRef<HTMLCanvasElement>(null);
+  const timer: React.RefObject<number> = React.useRef(0);
+  const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
+  const dragging: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
+  const delta: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
   const { height, scale } = Setting.font;
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on(`clear:${props.id}`, onClear);
     Emit.on(`flush:${props.id}`, onFlush);
     Emit.on(`preview:${props.id}`, onPreview);
@@ -71,7 +71,7 @@ export function EditorComponent(props: Props) {
     };
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
 
     if (canvas.current && ctx) {
@@ -80,23 +80,23 @@ export function EditorComponent(props: Props) {
     }
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
       Canvas.update(props.id, props.type === "normal");
       Emit.send("envim:resized", props.gid);
   }, [props.style.width, props.style.height]);
 
-  useEffect(() => {
+  React.useEffect(() => {
       props.focus && Emit.share("envim:focusable", !state.preview.active);
   }, [props.focus, state.preview.active]);
 
-  function runCommand(e: MouseEvent, command: string) {
+  function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
     e.preventDefault();
 
     command && Emit.send("envim:api", "nvim_call_function", ["win_execute", [props.winid, command]]);
   }
 
-  function onMouseEvent(e: MouseEvent, action: string, button: string = "") {
+  function onMouseEvent(e: React.MouseEvent, action: string, button: string = "") {
     button = button || ["left", "middle", "right"][e.button] || "left";
 
     const [col, row] = [ x2Col(e.nativeEvent.offsetX), y2Row(e.nativeEvent.offsetY) ];
@@ -121,7 +121,7 @@ export function EditorComponent(props: Props) {
     skip || Emit.send("envim:mouse", gid, button, action, modiffier.join("-"), row, col);
   }
 
-  function onMouseDown(e: MouseEvent) {
+  function onMouseDown(e: React.MouseEvent) {
     clearTimeout(timer.current);
 
     timer.current = +setTimeout(() => {
@@ -131,13 +131,13 @@ export function EditorComponent(props: Props) {
     onMouseEvent(e, "press");
   }
 
-  function onMouseMove(e: MouseEvent) {
+  function onMouseMove(e: React.MouseEvent) {
     if (!(drag || options.mousemoveevent) || busy || mode?.short_name === "i") return;
 
     onMouseEvent(e, "drag", drag ? "" : "move");
   }
 
-  function onMouseUp(e: MouseEvent) {
+  function onMouseUp(e: React.MouseEvent) {
     clearTimeout(timer.current);
 
     if (drag) {
@@ -146,11 +146,11 @@ export function EditorComponent(props: Props) {
     onMouseEvent(e, "release");
   }
 
-  function onDragStart(e: DragEvent) {
+  function onDragStart(e: React.DragEvent) {
     dragging.current = { x: e.clientX, y: e.clientY };
   }
 
-  function onDragEnd(e: DragEvent) {
+  function onDragEnd(e: React.DragEvent) {
     const match = props.style.transform.match(/^translate\((\d+)px, (\d+)px\)$/);
 
     if (match) {
@@ -169,7 +169,7 @@ export function EditorComponent(props: Props) {
     }
   }
 
-  function onWheel(e: WheelEvent) {
+  function onWheel(e: React.WheelEvent) {
     delta.current.x = delta.current.x * e.deltaX >= 0 ? delta.current.x + e.deltaX : 0;
     delta.current.y = delta.current.y * e.deltaY >= 0 ? delta.current.y + e.deltaY : 0;
 
@@ -183,7 +183,7 @@ export function EditorComponent(props: Props) {
     }
   }
 
-  function onScroll(e: MouseEvent) {
+  function onScroll(e: React.MouseEvent) {
     const per = e.nativeEvent.offsetY / e.currentTarget.clientHeight;
     const line = Math.ceil(state.scroll.total * per);
 
@@ -202,14 +202,14 @@ export function EditorComponent(props: Props) {
     setState(state => ({ ...state, preview: { src, active } }));
   }
 
-  function openExtWindow(e: MouseEvent) {
+  function openExtWindow(e: React.MouseEvent) {
     const width = x2Col(props.style.width);
     const height = y2Row(props.style.height);
 
     runCommand(e, `call nvim_win_set_config(0, { "width": ${width}, "height": ${height}, "external": 1 })`);
   }
 
-  function dragExtWIndow(e: MouseEvent) {
+  function dragExtWIndow(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -217,7 +217,7 @@ export function EditorComponent(props: Props) {
     Emit.share("envim:drag", props.id);
   }
 
-  function toggleExtWindow(e: MouseEvent) {
+  function toggleExtWindow(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -240,13 +240,13 @@ export function EditorComponent(props: Props) {
     });
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     const nomouse = ["", props.id].indexOf(drag) < 0;
 
     setState(state => ({ ...state, nomouse, dragging: drag === "" ? false : state.dragging }));
   }, [drag === "" || drag === props.id]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, bufs }));
   }, [bufs]);
 
@@ -262,7 +262,7 @@ export function EditorComponent(props: Props) {
     );
   }
 
-  function renderIconMenu(label: string, menus: { font: string, onClick: (e: MouseEvent) => void }[][]) {
+  function renderIconMenu(label: string, menus: { font: string, onClick: (e: React.MouseEvent) => void }[][]) {
     return (
       <MenuComponent color="gray-fg" label={label} fit>
         { menus.map((menu, i) => (

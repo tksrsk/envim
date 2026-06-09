@@ -1,16 +1,16 @@
-import React, { useEffect, useState, MouseEvent, DragEvent } from "react";
+import React from "react";
 
 import { ISetting, ITab, IMode, IMenu } from "common/interface";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { Setting } from "../../utils/setting";
-import { icons } from "../../utils/icons";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
+import { icons } from "renderer/utils/icons";
 
-import { FlexComponent } from "../flex";
-import { IconComponent } from "../icon";
-import { MenuComponent } from "../menu";
+import { FlexComponent } from "renderer/components/flex";
+import { IconComponent } from "renderer/components/icon";
+import { MenuComponent } from "renderer/components/menu";
 
 interface Props {
   width: number;
@@ -39,9 +39,9 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function TablineComponent(props: Props) {
   const { options, mode, tabs, menus  } = useEditor();
-  const [state, setState] = useState<States>({ cwd: "", tabs, menus, bookmarks: [], connections: [], dragging: -1, enabled: options.ext_tabline });
+  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], connections: [], dragging: -1, enabled: options.ext_tabline });
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("envim:cwd", onCwd);
     Emit.on("envim:connections", onConnections);
 
@@ -87,7 +87,7 @@ export function TablineComponent(props: Props) {
     }
   }
 
-  function deleteBookmark(e: MouseEvent, path: string) {
+  function deleteBookmark(e: React.MouseEvent, path: string) {
     const bookmarks = state.bookmarks.filter(bookmark => bookmark.path !== path);
 
     e.stopPropagation();
@@ -97,26 +97,26 @@ export function TablineComponent(props: Props) {
     setState(state => ({ ...state, bookmarks }));
   }
 
-  function runCommand(e: MouseEvent, command: string) {
+  function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
     e.preventDefault();
 
     Emit.send("envim:command", command);
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, tabs }));
   }, [tabs]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, menus }));
   }, [menus]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, mode }));
   }, [mode]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     options.ext_tabline === undefined || setState(state => ({ ...state, enabled: options.ext_tabline }));
   }, [options.ext_tabline]);
 
@@ -127,7 +127,7 @@ export function TablineComponent(props: Props) {
       setState(state => ({ ...state, dragging: i }));
     }
 
-    function onDragOver(e: DragEvent) {
+    function onDragOver(e: React.DragEvent) {
       e.preventDefault();
     }
 
@@ -135,7 +135,7 @@ export function TablineComponent(props: Props) {
       setState(state => ({ ...state, dragging: -1 }));
     }
 
-    function onDrop(e: DragEvent) {
+    function onDrop(e: React.DragEvent) {
       const next = i - state.dragging;
 
       if (next) {

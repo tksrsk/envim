@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import "../styles/index.scss";
 
-import { AppComponent } from "./app";
+import { AppComponent } from "renderer/components/app";
 
 declare global {
   interface Window {

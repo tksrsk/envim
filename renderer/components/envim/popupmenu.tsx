@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useRef, RefObject } from "react";
+import React from "react";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { Setting } from "../../utils/setting";
-import { Highlights } from "../../utils/highlight";
-import { row2Y, col2X, x2Col } from "../../utils/size";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
+import { Highlights } from "renderer/utils/highlight";
+import { row2Y, col2X, x2Col } from "renderer/utils/size";
 
-import { FlexComponent } from "../flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface States {
   items: { word: string, kind: string, menu: string }[];
@@ -22,10 +22,10 @@ interface States {
 
 export function PopupmenuComponent() {
   const { options } = useEditor();
-  const [ state, setState ] = useState<States>({ items: [], selected: -1, clicked: false, row: 0, col: 0, height: 0, zIndex: 0, enabled: options.ext_popupmenu });
-  const scope: RefObject<HTMLDivElement | null> = useRef(null);
+  const [ state, setState ] = React.useState<States>({ items: [], selected: -1, clicked: false, row: 0, col: 0, height: 0, zIndex: 0, enabled: options.ext_popupmenu });
+  const scope: React.RefObject<HTMLDivElement | null> = React.useRef(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("popupmenu:show", onPopupmenu);
     Emit.on("popupmenu:select", onSelect);
     Emit.on("popupmenu:hide", offPopupmenu);
@@ -37,7 +37,7 @@ export function PopupmenuComponent() {
     };
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!scope.current?.clientWidth || state.items.length === 0) return;
 
     const width = x2Col(scope.current.clientWidth) + 2;
@@ -66,7 +66,7 @@ export function PopupmenuComponent() {
     Emit.share("envim:drag", "");
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     options.ext_popupmenu === undefined || setState(state => ({ ...state, enabled: options.ext_popupmenu }));
   }, [options.ext_popupmenu]);
 

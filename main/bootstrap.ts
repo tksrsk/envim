@@ -1,8 +1,8 @@
 import { app, BrowserWindow, Menu } from "electron";
 import { join } from "path";
 
-import { Emit } from "./emit";
-import { Browser } from "./browser";
+import { Emit } from "main/emit";
+import { Browser } from "main/browser";
 
 export class Bootstrap {
   static win?: BrowserWindow;

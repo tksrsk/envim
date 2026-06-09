@@ -1,24 +1,24 @@
-import React, { useEffect, useState, useRef, MouseEvent, ChangeEvent, KeyboardEvent } from "react";
-import { PlanEntry, SessionNotification, SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
+import React from "react";
+import * as SDK from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
 import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
-import { Emit } from "../../utils/emit";
-import { Setting } from "../../utils/setting";
-import { icons } from "../../utils/icons";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
+import { icons } from "renderer/utils/icons";
 
-import { FlexComponent } from "../flex";
-import { IconComponent } from "../icon";
-import { MenuComponent } from "../menu";
-import { CollapseComponent } from "../collapse";
-import { MessageComponent } from "./message";
+import { FlexComponent } from "renderer/components/flex";
+import { IconComponent } from "renderer/components/icon";
+import { MenuComponent } from "renderer/components/menu";
+import { CollapseComponent } from "renderer/components/collapse";
+import { MessageComponent } from "renderer/components/acp/message";
 
 interface State {
   visible: boolean;
   status: IAcpStatus;
   sessions: IAcpSession[];
-  messages: SessionNotification[];
+  messages: SDK.SessionNotification[];
   input: string;
   mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
@@ -42,7 +42,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function AcpComponent() {
-  const [state, setState] = useState<State>({
+  const [state, setState] = React.useState<State>({
     visible: false,
     status: { status: "disconnected" },
     sessions: [],
@@ -56,12 +56,12 @@ export function AcpComponent() {
     registry: { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } },
   });
 
-  const scroll = useRef<HTMLDivElement>(null);
-  const command = useRef<HTMLInputElement>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const scroll = React.useRef<HTMLDivElement>(null);
+  const command = React.useRef<HTMLInputElement>(null);
+  const textarea = React.useRef<HTMLTextAreaElement>(null);
   const color = state.mode.main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("acp:toggle", onAgentToggle);
     Emit.on("acp:status-changed", onStatusChanged);
     Emit.on("acp:session-update", onAcpSessionUpdate);
@@ -80,15 +80,15 @@ export function AcpComponent() {
   }, []);
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     state.messages.length && !state.scroll && scrollTo("bottom");
   }, [state.messages]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setState(state => ({ ...state, mode: { ...state.mode, sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }, [state.status.status]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const input = (() => {
       switch (state.mode.sub) {
         case "package": return JSON.stringify({name: "", package: { command: [] }}, null, 2);
@@ -102,13 +102,13 @@ export function AcpComponent() {
     setState(state => ({ ...state, input }));
   }, [state.mode.sub, state.mode.mcp]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (state.mode.main === "blur") return;
 
     state.mode.main === "normal" ? command.current?.focus() : textarea.current?.focus();
   }, [state.mode.main]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const ranges: Range[] = [];
 
     if (state.search.query && scroll.current?.parentElement) {
@@ -133,7 +133,7 @@ export function AcpComponent() {
     setState(state => ({ ...state, search: { ...state.search, ranges } }));
   }, [state.search.query]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     CSS.highlights.delete("search-all");
     CSS.highlights.delete("search-active");
 
@@ -163,7 +163,7 @@ export function AcpComponent() {
     setState(state => ({ ...state, status }));
   }
 
-  function onMessageAdded(message: SessionNotification) {
+  function onMessageAdded(message: SDK.SessionNotification) {
     setState(state => ({
       ...state,
       messages: filterMessages(state.messages, message)
@@ -189,7 +189,7 @@ export function AcpComponent() {
     }));
   }
 
-  function filterMessages(messages: SessionNotification[], curr: SessionNotification): SessionNotification[] {
+  function filterMessages(messages: SDK.SessionNotification[], curr: SDK.SessionNotification): SDK.SessionNotification[] {
     const prev = messages.pop();
 
     if (
@@ -237,7 +237,7 @@ export function AcpComponent() {
     }
   }
 
-  function handleDeleteCustomPackage(e: MouseEvent, agent: IAcpRegistryAgent) {
+  function handleDeleteCustomPackage(e: React.MouseEvent, agent: IAcpRegistryAgent) {
     e.stopPropagation();
 
     Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
@@ -287,7 +287,7 @@ export function AcpComponent() {
     }));
   }
 
-  function handleEditMcp(e: MouseEvent | ChangeEvent, action: "toggle" | "delete", index: number) {
+  function handleEditMcp(e: React.MouseEvent | React.ChangeEvent, action: "toggle" | "delete", index: number) {
     e.stopPropagation();
 
     switch (action) {
@@ -376,7 +376,7 @@ export function AcpComponent() {
     Emit.send("acp:cancel-prompt", state.status.sessionId);
   }
 
-  function handleNormalKeyDown(e: KeyboardEvent) {
+  function handleNormalKeyDown(e: React.KeyboardEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -397,7 +397,7 @@ export function AcpComponent() {
     }
   }
 
-  function handleInputKeyDown(e: KeyboardEvent) {
+  function handleInputKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
       setState(state => ({ ...state, input: state.mode.sub === "search" ? "" : state.input, mode: { ...state.mode, main: "normal" } }));
@@ -432,7 +432,7 @@ export function AcpComponent() {
     });
   }
 
-  function onCancel(e: MouseEvent) {
+  function onCancel(e: React.MouseEvent) {
     e.stopPropagation();
 
     if (document.activeElement !== textarea.current && document.activeElement !== command.current) {
@@ -450,7 +450,7 @@ export function AcpComponent() {
     }
   }
 
-  function getPriorityColor (priority: PlanEntry["priority"]) {
+  function getPriorityColor (priority: SDK.PlanEntry["priority"]) {
     switch (priority) {
       case "high": return "red";
       case "medium": return "yellow";
@@ -487,7 +487,7 @@ export function AcpComponent() {
     );
   }
 
-  function renderConfigOption(config: SessionConfigOption) {
+  function renderConfigOption(config: SDK.SessionConfigOption) {
     switch (config.type) {
       case "boolean":
         return (
@@ -497,7 +497,7 @@ export function AcpComponent() {
           </FlexComponent>
         );
       case "select":
-        const renderConfigSelectOption = (option: SessionConfigSelectOption) => (
+        const renderConfigSelectOption = (option: SDK.SessionConfigSelectOption) => (
           <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
             {option.name}
           </FlexComponent>

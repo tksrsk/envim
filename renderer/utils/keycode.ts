@@ -1,6 +1,6 @@
-import { KeyboardEvent } from "react";
+import React from "react";
 
-const getKey = (key: string, e: KeyboardEvent, wrap: boolean) => {
+const getKey = (key: string, e: React.KeyboardEvent, wrap: boolean) => {
   const { ctrlKey, altKey, metaKey, shiftKey } = e;
   if (ctrlKey) return `<C-${key}>`;
   if (altKey) return `<A-${key}>`;
@@ -9,7 +9,7 @@ const getKey = (key: string, e: KeyboardEvent, wrap: boolean) => {
   return key;
 };
 
-export const keycode = (e: KeyboardEvent) => {
+export const keycode = (e: React.KeyboardEvent) => {
   const { keyCode, key, ctrlKey } = e;
 
   switch (key) {

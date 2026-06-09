@@ -10,7 +10,7 @@
     "baseUrl": ".",
     "paths": {
       "common/*": ["common/*"],
-      "@renderer/*": ["renderer/*"]
+      "renderer/*": ["renderer/*"]
     }
   }
 }

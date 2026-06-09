@@ -1,6 +1,6 @@
-import React, { PropsWithChildren } from "react";
+import React from "react";
 
-import { FlexComponent } from "./flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface Props {
   label: string;
@@ -19,7 +19,7 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
 };
 
-export function CollapseComponent(props: PropsWithChildren<Props>) {
+export function CollapseComponent(props: React.PropsWithChildren<Props>) {
   return (
     <details style={props.style} open={props.open}>
       <summary className="clickable">

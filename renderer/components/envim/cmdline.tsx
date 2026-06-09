@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 
-import { useEditor } from "../../context/editor";
+import { useEditor } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { Highlights } from "../../utils/highlight";
-import { Setting } from "../../utils/setting";
+import { Emit } from "renderer/utils/emit";
+import { Highlights } from "renderer/utils/highlight";
+import { Setting } from "renderer/utils/setting";
 
-import { FlexComponent } from "../flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface States {
   cmdline: { hl: string, c: string }[];
@@ -26,9 +26,9 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function CmdlineComponent() {
   const { options } = useEditor();
-  const [state, setState] = useState<States>({ cmdline: [], contents: [], pos: 0, prompt: "", indent: 0, enabled: options.ext_cmdline });
+  const [state, setState] = React.useState<States>({ cmdline: [], contents: [], pos: 0, prompt: "", indent: 0, enabled: options.ext_cmdline });
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("cmdline:show", onCmdline);
     Emit.on("cmdline:cursor", onCursor);
     Emit.on("cmdline:special", onSpecial);
@@ -113,7 +113,7 @@ export function CmdlineComponent() {
     setState(state => ({ ...state, contents: [], cmdline: [] }));
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     options.ext_cmdline === undefined || setState(state => ({ ...state, enabled: options.ext_cmdline }));
   }, [options.ext_cmdline]);
 

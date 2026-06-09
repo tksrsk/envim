@@ -1,5 +1,5 @@
 import React from "react";
-import { ContentBlock, ToolCallContent, SessionNotification } from "@agentclientprotocol/sdk";
+import * as SDK from "@agentclientprotocol/sdk";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
@@ -7,12 +7,12 @@ import { diffLines } from "diff";
 
 import { IPermissionRequest } from "common/interface";
 
-import { Emit } from "../../utils/emit";
-import { icons } from "../../utils/icons";
+import { Emit } from "renderer/utils/emit";
+import { icons } from "renderer/utils/icons";
 
-import { FlexComponent } from "../flex";
-import { IconComponent } from "../icon";
-import { CollapseComponent } from "../collapse";
+import { FlexComponent } from "renderer/components/flex";
+import { IconComponent } from "renderer/components/icon";
+import { CollapseComponent } from "renderer/components/collapse";
 
 const styles: { [k: string]: React.CSSProperties } = {
   permission: {
@@ -20,7 +20,7 @@ const styles: { [k: string]: React.CSSProperties } = {
   }
 };
 
-const MessageMemo = React.memo(({ message }: { message: SessionNotification }) => {
+const MessageMemo = React.memo(({ message }: { message: SDK.SessionNotification }) => {
   function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
@@ -91,7 +91,7 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
     );
   }
 
-  function renderToolCallContent(content: ToolCallContent) {
+  function renderToolCallContent(content: SDK.ToolCallContent) {
     switch (content.type) {
       case "content":
         return renderContent(content.content);
@@ -103,7 +103,7 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
     }
   }
 
-  function renderContent(content: ContentBlock) {
+  function renderContent(content: SDK.ContentBlock) {
     switch (content.type) {
       case "text":
         return <div className="selectable"><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{content.text}</Markdown></div>;
@@ -179,7 +179,7 @@ const MessageMemo = React.memo(({ message }: { message: SessionNotification }) =
   return null;
 });
 
-export const MessageComponent = React.memo(({ messages, sessionId }: { messages: SessionNotification[]; sessionId: string; }) => (
+export const MessageComponent = React.memo(({ messages, sessionId }: { messages: SDK.SessionNotification[]; sessionId: string; }) => (
   <>
     {messages.map((message, i) => message.sessionId !== sessionId ? null : (
       <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" padding={[4, 2]}>

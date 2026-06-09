@@ -1,5 +1,5 @@
-import { Bootstrap } from "./bootstrap";
-import { Envim } from "./envim";
+import { Bootstrap } from "main/bootstrap";
+import { Envim } from "main/envim";
 
 new Bootstrap;
 new Envim;

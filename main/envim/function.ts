@@ -1,4 +1,4 @@
-import { Emit } from "../emit";
+import { Emit } from "main/emit";
 
 export class Function {
   static setup() {

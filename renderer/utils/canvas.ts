@@ -1,7 +1,7 @@
 import { ICell, IScroll } from "common/interface";
 
-import { Context2D } from "./context2d";
-import { Cache } from "./cache";
+import { Context2D } from "renderer/utils/context2d";
+import { Cache } from "renderer/utils/cache";
 
 const TYPE = "renderer";
 

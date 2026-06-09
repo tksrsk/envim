@@ -1,24 +1,24 @@
-import React, { useEffect, useState, useRef, RefObject } from "react";
+import React from "react";
 
 import { ISetting, IWindow, IHighlight } from "common/interface";
 
-import { EditorProvider } from "../../context/editor";
+import { EditorProvider } from "renderer/context/editor";
 
-import { Emit } from "../../utils/emit";
-import { Highlights } from "../../utils/highlight";
-import { Setting } from "../../utils/setting";
-import { y2Row, x2Col, row2Y, col2X } from "../../utils/size";
+import { Emit } from "renderer/utils/emit";
+import { Highlights } from "renderer/utils/highlight";
+import { Setting } from "renderer/utils/setting";
+import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
-import { FlexComponent } from "../flex";
+import { FlexComponent } from "renderer/components/flex";
 
-import { TablineComponent } from "./tabline";
-import { EditorComponent } from "./editor";
-import { HistoryComponent } from "./history";
-import { CmdlineComponent } from "./cmdline";
-import { PopupmenuComponent } from "./popupmenu";
-import { NotificateComponent } from "./notificate";
-import { AcpComponent } from "../acp";
-import { InputComponent } from "./input";
+import { TablineComponent } from "renderer/components/envim/tabline";
+import { EditorComponent } from "renderer/components/envim/editor";
+import { HistoryComponent } from "renderer/components/envim/history";
+import { CmdlineComponent } from "renderer/components/envim/cmdline";
+import { PopupmenuComponent } from "renderer/components/envim/popupmenu";
+import { NotificateComponent } from "renderer/components/envim/notificate";
+import { AcpComponent } from "renderer/components/acp";
+import { InputComponent } from "renderer/components/envim/input";
 
 interface Props {
   header: { width: number; height: number; paddingLeft: number };
@@ -56,11 +56,11 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function EnvimComponent(props: Props) {
-  const [state, setState] = useState<States>({ init: true, pause: false, grids: {} });
+  const [state, setState] = React.useState<States>({ init: true, pause: false, grids: {} });
   const { size, height } = Setting.font;
-  const timer: RefObject<number> = useRef<number>(0);
+  const timer: React.RefObject<number> = React.useRef<number>(0);
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("app:switch", onSwitch);
     Emit.on("highlight:set", onHighlight);
     Emit.on("win:pos", onWin);
@@ -76,13 +76,13 @@ export function EnvimComponent(props: Props) {
     };
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     state.init
       ? Emit.send("envim:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options)
       : setState(state => ({ ...state, init: true }));
   }, [state.init]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.send("envim:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
   }, [props.main.width, props.main.height]);
 

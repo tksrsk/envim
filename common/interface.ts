@@ -1,11 +1,4 @@
-import {
-  McpServer,
-  SessionConfigOption,
-  PermissionOption,
-  AvailableCommand,
-  PlanEntry,
-  UsageUpdate
-} from "@agentclientprotocol/sdk";
+import * as SDK from "@agentclientprotocol/sdk";
 
 export interface ISetting {
   type: "command" | "address" | "docker" | "ssh";
@@ -15,7 +8,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: McpServer }[]; };
+  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: SDK.McpServer }[]; };
   presets: { [k: string]: ISetting };
 }
 
@@ -106,7 +99,7 @@ export interface IMenu {
 
 export interface IPermissionRequest {
   requestId: string;
-  options: PermissionOption[];
+  options: SDK.PermissionOption[];
 }
 
 export interface IAcpSession {
@@ -115,10 +108,10 @@ export interface IAcpSession {
   workspace: string;
   loaded: boolean;
   status: "show" | "hide";
-  commands: AvailableCommand[];
-  configOptions: SessionConfigOption[];
-  usage?: UsageUpdate;
-  plan: PlanEntry[];
+  commands: SDK.AvailableCommand[];
+  configOptions: SDK.SessionConfigOption[];
+  usage?: SDK.UsageUpdate;
+  plan: SDK.PlanEntry[];
 }
 
 export interface IAcpStatus {

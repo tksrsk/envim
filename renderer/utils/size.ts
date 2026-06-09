@@ -1,4 +1,4 @@
-import { Setting } from "./setting";
+import { Setting } from "renderer/utils/setting";
 
 export const y2Row = (y: number) => {
   const fname = y < 0 ? "ceil" : "floor";

@@ -4,13 +4,13 @@ import { Tabpage, Buffer, Window } from "neovim/lib/api";
 
 import { ITab, IBuffer, IMode, IMenu } from "common/interface";
 
-import { Emit } from "../emit";
-import { Function } from "./function";
-import { Acp } from "./acp";
-import { Autocmd } from "./autocmd";
-import { Clipboard } from "./clipboard";
-import { Grids } from "./grid";
-import { Highlights } from "./highlight";
+import { Emit } from "main/emit";
+import { Function } from "main/envim/function";
+import { Acp } from "main/envim/acp";
+import { Autocmd } from "main/envim/autocmd";
+import { Clipboard } from "main/envim/clipboard";
+import { Grids } from "main/envim/grid";
+import { Highlights } from "main/envim/highlight";
 
 export class App {
   private modes: IMode[] = [];

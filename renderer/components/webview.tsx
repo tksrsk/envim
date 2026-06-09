@@ -1,14 +1,14 @@
 import { WebviewTag, PageFaviconUpdatedEvent } from "electron";
-import React, { useEffect, useState, useRef, RefObject, MouseEvent, FormEvent, ChangeEvent, KeyboardEvent } from "react";
+import React from "react";
 
 import { ISetting } from "common/interface";
 
-import { Emit } from "../utils/emit";
-import { Setting } from "../utils/setting";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
 
-import { FlexComponent } from "./flex";
-import { MenuComponent } from "./menu";
-import { IconComponent } from "./icon";
+import { FlexComponent } from "renderer/components/flex";
+import { MenuComponent } from "renderer/components/menu";
+import { IconComponent } from "renderer/components/icon";
 
 interface Props {
   src: string;
@@ -46,19 +46,19 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function WebviewComponent(props: Props) {
-  const [state, setState] = useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100 });
-  const container: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
-  const webview: RefObject<WebviewTag | null> = useRef<WebviewTag>(null);
-  const input: RefObject<HTMLInputElement | null> = useRef<HTMLInputElement>(null);
-  const search: RefObject<HTMLInputElement | null> = useRef<HTMLInputElement>(null);
-  const command: RefObject<HTMLInputElement | null> = useRef<HTMLInputElement>(null);
+  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100 });
+  const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
+  const webview: React.RefObject<WebviewTag | null> = React.useRef<WebviewTag>(null);
+  const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
+  const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
+  const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const icon = state.searchengines.some(({ uri }) => uri === state.input)
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
   const preview = props.src.search(/^file:\/\/.*[\/\\]Envim[\/\\]tmp.\w+$/) === 0;
   const color = { command: "green", input: "default", search: "default", browser: "blue", blur: "default" }[state.mode];
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("envim:focused", onFocused);
     Emit.on("webview:action", onAction);
     Emit.on("webview:searchengines", onSearchengines);
@@ -70,7 +70,7 @@ export function WebviewComponent(props: Props) {
     };
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (container.current) {
       const webview = document.createElement("webview") as WebviewTag;
 
@@ -92,7 +92,7 @@ export function WebviewComponent(props: Props) {
     }
   }, [container.current]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     props.active && runAction("mode-command");
   }, [props.active]);
 
@@ -127,7 +127,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onCancel (e: MouseEvent) {
+  function onCancel (e: React.MouseEvent) {
     e.stopPropagation();
 
     e.type !== "mousemove" && state.mode === "blur" && runAction("mode-command");
@@ -159,7 +159,7 @@ export function WebviewComponent(props: Props) {
     });
   }
 
-  function onKeyDown (e: KeyboardEvent) {
+  function onKeyDown (e: React.KeyboardEvent) {
     const modkey = e.ctrlKey || e.metaKey;
 
     e.stopPropagation();
@@ -201,7 +201,7 @@ export function WebviewComponent(props: Props) {
     setState(state => ({ ...state, searchengines: Setting.searchengines }));
   }
 
-  function onChange (e: ChangeEvent<HTMLInputElement>) {
+  function onChange (e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
 
     switch (state.mode) {
@@ -210,7 +210,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onSubmit (e: FormEvent) {
+  function onSubmit (e: React.FormEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -292,7 +292,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function selectEngine(e: MouseEvent, name: string) {
+  function selectEngine(e: React.MouseEvent, name: string) {
     const selected = state.searchengines.find(engine => engine.name === name);
 
     if (webview.current && selected && selected.uri.indexOf("${query}") < 0) {

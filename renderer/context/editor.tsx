@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React from "react";
 
 import { ISetting, ITab, IBuffer, IMode, IMenu } from "common/interface";
 
-import { Emit } from "../utils/emit";
-import { Setting } from "../utils/setting";
+import { Emit } from "renderer/utils/emit";
+import { Setting } from "renderer/utils/setting";
 
 interface EditorContextType {
   busy: boolean;
@@ -16,7 +16,7 @@ interface EditorContextType {
   menus: IMenu[];
 }
 
-const EditorContext = createContext<EditorContextType>({
+const EditorContext = React.createContext<EditorContextType>({
   busy: false,
   connections: [],
   options: Setting.options,
@@ -26,10 +26,10 @@ const EditorContext = createContext<EditorContextType>({
   drag: "",
 });
 
-export const useEditor = () => useContext(EditorContext);
+export const useEditor = () => React.useContext(EditorContext);
 
 export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<EditorContextType>({
+  const [state, setState] = React.useState<EditorContextType>({
     busy: false,
     connections: [],
     options: Setting.options,
@@ -39,7 +39,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     drag: "",
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     Emit.on("app:busy", onBusy);
     Emit.on("option:set", onOption);
     Emit.on("mode:change", onMode);

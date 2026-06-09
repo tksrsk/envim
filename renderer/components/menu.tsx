@@ -1,6 +1,6 @@
-import React, { useState, useRef, PropsWithChildren, RefObject } from "react";
+import React from "react";
 
-import { FlexComponent } from "./flex";
+import { FlexComponent } from "renderer/components/flex";
 
 interface Props {
   side?: boolean;
@@ -33,10 +33,10 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
 };
 
-export function MenuComponent(props: PropsWithChildren<Props>) {
-  const [state, setState] = useState<States>({ inset: [] });
-  const timer: RefObject<number> = useRef<number>(0);
-  const div: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
+export function MenuComponent(props: React.PropsWithChildren<Props>) {
+  const [state, setState] = React.useState<States>({ inset: [] });
+  const timer: React.RefObject<number> = React.useRef<number>(0);
+  const div: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
 
   function onClick() { }
 

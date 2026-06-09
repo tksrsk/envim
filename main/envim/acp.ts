@@ -1,26 +1,10 @@
 import { randomBytes } from "crypto";
-import {
-  AgentCapabilities,
-  Client,
-  ClientSideConnection,
-  ContentBlock,
-  ToolCallUpdate,
-  SessionNotification,
-  ReadTextFileRequest, ReadTextFileResponse,
-  WriteTextFileRequest, WriteTextFileResponse,
-  CreateTerminalRequest, CreateTerminalResponse,
-  TerminalOutputRequest, TerminalOutputResponse,
-  WaitForTerminalExitRequest, WaitForTerminalExitResponse,
-  KillTerminalRequest, KillTerminalResponse,
-  ReleaseTerminalRequest, ReleaseTerminalResponse,
-  RequestPermissionRequest, RequestPermissionResponse,
-  ndJsonStream
-} from "@agentclientprotocol/sdk";
+import * as SDK from "@agentclientprotocol/sdk";
 
 import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
 
-import { Emit } from "../emit";
-import { Setting } from "../setting";
+import { Emit } from "main/emit";
+import { Setting } from "main/setting";
 
 const ACP_REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
@@ -28,12 +12,12 @@ export class Acp {
   private static initialized = false;
   private static state: IAcpStatus = { status: "disconnected" };
   private static workspace: { current: { name: string; cwd: string }; state: { [k: string]: { cwd: string; status: IAcpStatus } }; } = { current: { name: "default", cwd: "" }, state: {} };
-  private static connection: ClientSideConnection | null = null;
-  private static capabilities?: AgentCapabilities;
+  private static connection: SDK.ClientSideConnection | null = null;
+  private static capabilities?: SDK.AgentCapabilities;
   private static sessions: { [key: string]: IAcpSession } = {};
-  private static tool: { [key: string]: ToolCallUpdate } = {};
-  private static terminal: { [key: string]: { promise: Promise<WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: WaitForTerminalExitResponse) => void } } = {};
-  private static permission: { [key: string]: (response: RequestPermissionResponse) => void } = {};
+  private static tool: { [key: string]: SDK.ToolCallUpdate } = {};
+  private static terminal: { [key: string]: { promise: Promise<SDK.WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: SDK.WaitForTerminalExitResponse) => void } } = {};
+  private static permission: { [key: string]: (response: SDK.RequestPermissionResponse) => void } = {};
   private static registry: IAcpRegistry = { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } };
   private static registryLoaded = false;
 
@@ -157,7 +141,7 @@ export class Acp {
     Emit.send("acp:toggle", await Acp.loadRegistry());
   }
 
-  private static handleSessionUpdate(params: SessionNotification): void {
+  private static handleSessionUpdate(params: SDK.SessionNotification): void {
     if (!params.sessionId || params.sessionId !== Acp.state.sessionId) return;
 
     if (
@@ -174,7 +158,7 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  private static processToolUpdate(sessionId: string, toolCall: ToolCallUpdate) {
+  private static processToolUpdate(sessionId: string, toolCall: SDK.ToolCallUpdate) {
     toolCall._meta = toolCall._meta || {};
 
     Object.keys(Acp.tool[toolCall.toolCallId] || {}).forEach(k => toolCall[k] = toolCall[k] || Acp.tool[toolCall.toolCallId][k]);
@@ -199,7 +183,7 @@ export class Acp {
     }
   }
 
-  private static handleToolCallUpdate(params: SessionNotification): boolean {
+  private static handleToolCallUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "tool_call" && params.update.sessionUpdate !== "tool_call_update") {
       return false;
     }
@@ -218,7 +202,7 @@ export class Acp {
 
     if (result == "executed") {
       if (!Acp.connection) {
-        Acp.connection = new ClientSideConnection(
+        Acp.connection = new SDK.ClientSideConnection(
           () => Acp.createClient(),
           Acp.createStream()
         );
@@ -366,7 +350,7 @@ export class Acp {
     }
   }
 
-  static addMessage(notification: SessionNotification) {
+  static addMessage(notification: SDK.SessionNotification) {
     Emit.send("acp:message-added", notification);
   }
 
@@ -376,9 +360,9 @@ export class Acp {
         return;
       }
 
-      const prompt: ContentBlock[] = [
+      const prompt: SDK.ContentBlock[] = [
         { type: "text", text },
-        ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as ContentBlock)),
+        ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as SDK.ContentBlock)),
       ];
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
@@ -426,7 +410,7 @@ export class Acp {
     Emit.update("acp:session-update", false, Acp.state.sessionId, Object.values(Acp.sessions));
   }
 
-  private static handlePlanUpdate(params: SessionNotification): boolean {
+  private static handlePlanUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "plan") {
       return false;
     }
@@ -441,7 +425,7 @@ export class Acp {
     return true;
   }
 
-  private static handleAvailableCommandsUpdate(params: SessionNotification): boolean {
+  private static handleAvailableCommandsUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "available_commands_update") {
       return false;
     }
@@ -456,7 +440,7 @@ export class Acp {
     return true;
   }
 
-  private static handleConfigOptionUpdate(params: SessionNotification): boolean {
+  private static handleConfigOptionUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "config_option_update") {
       return false;
     }
@@ -471,7 +455,7 @@ export class Acp {
     return true;
   }
 
-  private static handleSessionInfoUpdate(params: SessionNotification): boolean {
+  private static handleSessionInfoUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "session_info_update") {
       return false;
     }
@@ -486,7 +470,7 @@ export class Acp {
     return true;
   }
 
-  private static handleUsageUpdate(params: SessionNotification): boolean {
+  private static handleUsageUpdate(params: SDK.SessionNotification): boolean {
     if (params.update.sessionUpdate !== "usage_update") {
       return false;
     }
@@ -501,19 +485,19 @@ export class Acp {
     return true;
   }
 
-  private static async handleReadTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> {
+  private static async handleReadTextFile(params: SDK.ReadTextFileRequest): Promise<SDK.ReadTextFileResponse> {
     const lines = await Emit.share("envim:api", "nvim_call_function", ["readfile", [params.path]]);
 
     return { content: Array.isArray(lines) ? lines.join("\n") : "" };
   }
 
-  private static async handleWriteTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
+  private static async handleWriteTextFile(params: SDK.WriteTextFileRequest): Promise<SDK.WriteTextFileResponse> {
     await Emit.share("envim:api", "nvim_call_function", ["writefile", [params.content.split("\n"), params.path]]);
 
     return {};
   }
 
-  private static async handleCreateTerminal(params: CreateTerminalRequest): Promise<CreateTerminalResponse> {
+  private static async handleCreateTerminal(params: SDK.CreateTerminalRequest): Promise<SDK.CreateTerminalResponse> {
     const terminalId = `term__${Date.now()}`;
     const command = [params.command, ...(params.args || [])];
     const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
@@ -523,7 +507,7 @@ export class Acp {
 
     if (pid) {
       Acp.terminal[terminalId] = {
-        promise: new Promise<WaitForTerminalExitResponse>((resolve) => Acp.terminal[terminalId].resolve = resolve),
+        promise: new Promise<SDK.WaitForTerminalExitResponse>((resolve) => Acp.terminal[terminalId].resolve = resolve),
         output: "",
         truncated: false,
         pid,
@@ -533,7 +517,7 @@ export class Acp {
     return { terminalId };
   }
 
-  private static async handleTerminalOutput(params: TerminalOutputRequest): Promise<TerminalOutputResponse> {
+  private static async handleTerminalOutput(params: SDK.TerminalOutputRequest): Promise<SDK.TerminalOutputResponse> {
     const terminal = Acp.terminal[params.terminalId]!;
 
     return {
@@ -543,11 +527,11 @@ export class Acp {
     };
   }
 
-  private static async handleWaitForTerminalExit(params: WaitForTerminalExitRequest): Promise<WaitForTerminalExitResponse> {
+  private static async handleWaitForTerminalExit(params: SDK.WaitForTerminalExitRequest): Promise<SDK.WaitForTerminalExitResponse> {
     return Acp.terminal[params.terminalId].promise;
   }
 
-  private static async handleKillTerminal(params: KillTerminalRequest): Promise<KillTerminalResponse> {
+  private static async handleKillTerminal(params: SDK.KillTerminalRequest): Promise<SDK.KillTerminalResponse> {
     const { pid } = Acp.terminal[params.terminalId];
 
     Emit.share("envim:api", "nvim_call_function", ["jobstop", [pid]]);
@@ -555,7 +539,7 @@ export class Acp {
     return {};
   }
 
-  private static async handleReleaseTerminal(params: ReleaseTerminalRequest): Promise<ReleaseTerminalResponse> {
+  private static async handleReleaseTerminal(params: SDK.ReleaseTerminalRequest): Promise<SDK.ReleaseTerminalResponse> {
     const { pid } = Acp.terminal[params.terminalId];
 
     await Emit.share("envim:api", "nvim_call_function", ["jobstop", [pid]]);
@@ -596,10 +580,10 @@ export class Acp {
     Emit.on("acp:stdout", onAgentResponse);
     Emit.on("acp:exited", Acp.cleanup);
 
-    return ndJsonStream(webWritable, webReadable);
+    return SDK.ndJsonStream(webWritable, webReadable);
   }
 
-  private static async handleRequestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+  private static async handleRequestPermission(params: SDK.RequestPermissionRequest): Promise<SDK.RequestPermissionResponse> {
     const requestId = `perm_${randomBytes(16).toString("hex")}`;
 
     params.toolCall._meta = params.toolCall._meta || {};
@@ -630,7 +614,7 @@ export class Acp {
     }
   }
 
-  private static createClient(): Client {
+  private static createClient(): SDK.Client {
     return {
       readTextFile: async params => await Acp.handleReadTextFile(params),
       writeTextFile: async params => await Acp.handleWriteTextFile(params),
