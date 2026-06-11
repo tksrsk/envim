@@ -164,10 +164,10 @@ export function WebviewComponent(props: Props) {
     });
   }
 
-  function setPointer(x: number, y: number) {
+  function setPointer(x: number | "max", y: number | "max") {
     if (!webview.current || !container.current) return;
-    x = Math.min(Math.max(x, 0), container.current.offsetWidth - state.pointer.style.width);
-    y = Math.min(Math.max(y, 0), container.current.offsetHeight - state.pointer.style.height);
+    x = Math.min(Math.max(x === "max" ? container.current.offsetWidth : x, 0), container.current.offsetWidth - state.pointer.style.width);
+    y = Math.min(Math.max(y === "max" ? container.current.offsetHeight : y, 0), container.current.offsetHeight - state.pointer.style.height);
 
     webview.current.sendInputEvent({ type: "mouseMove", x, y });
     setState(state => ({ ...state, pointer: { style: { ...state.pointer.style, transform: `translate(${x}px, ${y}px)` }, x, y } }));
@@ -211,13 +211,13 @@ export function WebviewComponent(props: Props) {
       case "l": return setPointer(state.pointer.x + col2X(e.repeat ? 6 : 1), state.pointer.y);
       case "H": return setPointer(state.pointer.x, 0);
       case "M": return setPointer(state.pointer.x, Math.floor((container.current?.offsetHeight ?? 0) / 2));
-      case "L": return setPointer(state.pointer.x, container.current?.offsetHeight ?? 0);
+      case "L": return setPointer(state.pointer.x, "max");
       case "0": return setPointer(0, state.pointer.y);
-      case "$": return setPointer(container.current?.offsetWidth ?? 0, state.pointer.y);
+      case "$": return setPointer("max", state.pointer.y);
       case "N": return runAction(state.search ? "search-backward" : "search-stop");
       case "n": return runAction(state.search ? "search-forward" : "search-stop");
-      case "g": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" });
-      case "G": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" });
+      case "g": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" }), setPointer(state.pointer.x, 0));
+      case "G": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" }), setPointer(state.pointer.x, "max"));
       case "Y": return Emit.send(`capture:${webview.current.getWebContentsId()}`);
       case "-": return runAction("zoom-out");
       case "+": return runAction("zoom-in");
