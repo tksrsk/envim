@@ -5,6 +5,7 @@ import { ISetting } from "common/interface";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
+import { col2X, row2Y } from "renderer/utils/size";
 
 import { FlexComponent } from "renderer/components/flex";
 import { MenuComponent } from "renderer/components/menu";
@@ -25,6 +26,7 @@ interface States {
   mode: "command" | "input" | "search" | "browser" | "blur";
   searchengines: ISetting["searchengines"];
   zoom: number;
+  pointer: { style: { transform: string; width: number; height: number; }, x: number; y: number };
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -43,10 +45,13 @@ const styles: { [k: string]: React.CSSProperties } = {
   title: {
     maxWidth: 200,
   },
+  pointer: {
+    backdropFilter: "invert(1)",
+  }
 };
 
 export function WebviewComponent(props: Props) {
-  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100 });
+  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { style: { transform: "", width: col2X(1), height: row2Y(1) }, x: 0, y: 0 } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<WebviewTag | null> = React.useRef<WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
@@ -159,6 +164,23 @@ export function WebviewComponent(props: Props) {
     });
   }
 
+  function setPointer(x: number, y: number) {
+    if (!webview.current || !container.current) return;
+    x = Math.min(Math.max(x, 0), container.current.offsetWidth - state.pointer.style.width);
+    y = Math.min(Math.max(y, 0), container.current.offsetHeight - state.pointer.style.height);
+
+    webview.current.sendInputEvent({ type: "mouseMove", x, y });
+    setState(state => ({ ...state, pointer: { style: { ...state.pointer.style, transform: `translate(${x}px, ${y}px)` }, x, y } }));
+  }
+
+  function clickPointer() {
+    if (!webview.current) return;
+
+    webview.current.sendInputEvent({ type: "mouseDown", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
+    webview.current.sendInputEvent({ type: "mouseUp", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
+    Emit.once("envim:focused", () => runAction("mode-command"));
+  }
+
   function onKeyDown (e: React.KeyboardEvent) {
     const modkey = e.ctrlKey || e.metaKey;
 
@@ -169,7 +191,12 @@ export function WebviewComponent(props: Props) {
 
     switch (modkey && e.key) {
       case "r": return runAction("reload");
-      case "i": return runAction("devtool");
+      case "o": return runAction("navigate-backward");
+      case "i": return runAction("navigate-forward");
+      case "h": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: 100, deltaY: 0 });
+      case "j": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: 0, deltaY: -100 });
+      case "k": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: 0, deltaY: 100 });
+      case "l": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: -100, deltaY: 0 });
       case "u": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageUp" });
       case "d": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageDown" });
       case "s": return Emit.send("envim:command", "new envim://browser");
@@ -178,10 +205,15 @@ export function WebviewComponent(props: Props) {
     }
 
     switch (e.key) {
-      case "h": return runAction("navigate-backward");
-      case "j": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Down" });
-      case "k": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Up" });
-      case "l": return runAction("navigate-forward");
+      case "h": return setPointer(state.pointer.x - col2X(e.repeat ? 6 : 1), state.pointer.y);
+      case "j": return setPointer(state.pointer.x, state.pointer.y + row2Y(e.repeat ? 3 : 1));
+      case "k": return setPointer(state.pointer.x, state.pointer.y - row2Y(e.repeat ? 3 : 1));
+      case "l": return setPointer(state.pointer.x + col2X(e.repeat ? 6 : 1), state.pointer.y);
+      case "H": return setPointer(state.pointer.x, 0);
+      case "M": return setPointer(state.pointer.x, Math.floor((container.current?.offsetHeight ?? 0) / 2));
+      case "L": return setPointer(state.pointer.x, container.current?.offsetHeight ?? 0);
+      case "0": return setPointer(0, state.pointer.y);
+      case "$": return setPointer(container.current?.offsetWidth ?? 0, state.pointer.y);
       case "N": return runAction(state.search ? "search-backward" : "search-stop");
       case "n": return runAction(state.search ? "search-forward" : "search-stop");
       case "g": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" });
@@ -193,7 +225,7 @@ export function WebviewComponent(props: Props) {
       case ":": return runAction("mode-input");
       case "/": return runAction("mode-search");
       case "Escape": return (runAction(state.loading ? "cancel-load" : "mode-command"), runAction("search-stop"));
-      case "Enter": return runAction(state.search ? "search-start" : "search-stop");
+      case "Enter": return clickPointer();
     }
   }
 
@@ -394,6 +426,7 @@ export function WebviewComponent(props: Props) {
       </FlexComponent>
       <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
         <div className="space" ref={container} />
+        { state.mode === "command" && <FlexComponent animate="fade-in" position="absolute" inset={[0, "auto", "auto", 0]} style={{...styles.pointer, ...state.pointer.style}} shadow nomouse /> }
       </FlexComponent>
     </FlexComponent>
   );
