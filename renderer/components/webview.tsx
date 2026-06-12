@@ -158,6 +158,7 @@ export function WebviewComponent(props: Props) {
         }
       })();
 
+      webview.current && Emit.send(`webview:mode:${webview.current.getWebContentsId()}`, mode);
       state.mode !== mode && ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
 
       return { ...state, mode };
@@ -187,7 +188,7 @@ export function WebviewComponent(props: Props) {
     e.stopPropagation();
     e.preventDefault();
 
-    if (!webview.current) return;
+    if (!webview.current || e.nativeEvent.isComposing) return;
 
     switch (modkey && e.key) {
       case "r": return runAction("reload");
@@ -214,17 +215,19 @@ export function WebviewComponent(props: Props) {
       case "L": return setPointer(state.pointer.x, "max");
       case "0": return setPointer(0, state.pointer.y);
       case "$": return setPointer("max", state.pointer.y);
+      case "b": return setPointer(state.pointer.x - col2X(30), state.pointer.y);
+      case "w": return setPointer(state.pointer.x + col2X(30), state.pointer.y);
       case "N": return runAction(state.search ? "search-backward" : "search-stop");
       case "n": return runAction(state.search ? "search-forward" : "search-stop");
       case "g": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" }), setPointer(state.pointer.x, 0));
       case "G": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" }), setPointer(state.pointer.x, "max"));
-      case "Y": return Emit.send(`capture:${webview.current.getWebContentsId()}`);
+      case "Y": return Emit.send(`webview:capture:${webview.current.getWebContentsId()}`);
       case "-": return runAction("zoom-out");
       case "+": return runAction("zoom-in");
       case "i": return runAction("mode-browser");
       case ":": return runAction("mode-input");
       case "/": return runAction("mode-search");
-      case "Escape": return (runAction(state.loading ? "cancel-load" : "mode-command"), runAction("search-stop"));
+      case "Escape": return (runAction("send-escape"), runAction(state.loading ? "cancel-load" : "search-stop"));
       case "Enter": return clickPointer();
     }
   }
@@ -305,12 +308,13 @@ export function WebviewComponent(props: Props) {
         case "reload": return webview.current.reloadIgnoringCache();
         case "zoom-out": return setZoom(state.zoom - 10);
         case "zoom-in": return setZoom(state.zoom + 10);
-        case "devtool": return Emit.send(`devtool:${webview.current.getWebContentsId()}`);
+        case "devtool": return Emit.send(`webview:devtool:${webview.current.getWebContentsId()}`);
         case "mode-browser": return webview.current.focus();
         case "mode-input": return input.current?.focus();
         case "mode-search": return search.current?.focus();
         case "mode-command": return command.current?.focus();
         case "cancel-load": return webview.current.stop();
+        case "send-escape": state.mode === "command" && webview.current.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
       }
     }
   }

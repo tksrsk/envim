@@ -7,6 +7,7 @@ import { Emit } from "main/emit";
 export class Browser {
   private ignoreCertErrorHost: string[] = [];
   private devtoolWindow?: BrowserWindow;
+  private currentMode = "blur";
 
   constructor(private webContents: WebContents) {
     webContents.setWindowOpenHandler(this.onOpenWindow);
@@ -17,9 +18,9 @@ export class Browser {
     webContents.on("context-menu", this.onContextMenu);
     webContents.on("before-input-event", this.onInput);
     webContents.on("destroyed", this.onDestroy);
-    Emit.on(`capture:${webContents.id}`, this.onCapture);
-    Emit.on(`devtool:${webContents.id}`, this.onDevtool);
-    Emit.on(`devtool:${webContents.id}`, this.onDevtool);
+    Emit.on(`webview:capture:${webContents.id}`, this.onCapture);
+    Emit.on(`webview:devtool:${webContents.id}`, this.onDevtool);
+    Emit.on(`webview:mode:${webContents.id}`, this.onMode);
   }
 
   private confirm = (message: string) => {
@@ -94,9 +95,14 @@ export class Browser {
     }
   }
 
-  private onInput = (_: Event, input: Input) => {
+  private onInput = (e: Event, input: Input) => {
     switch (input.key) {
-      case "Escape": return Emit.send("webview:action", this.webContents.id, "mode-command");
+      case "Escape":
+        if (this.currentMode === "browser") {
+          e.preventDefault();
+          Emit.send("webview:action", this.webContents.id, "mode-command");
+        }
+        break;
     }
   }
 
@@ -107,6 +113,10 @@ export class Browser {
       this.webContents.setDevToolsWebContents(this.devtoolWindow.webContents);
       this.webContents.openDevTools({ mode: "detach" });
     }
+  }
+
+  private onMode = (mode: string) => {
+    this.currentMode = mode;
   }
 
   private onDestroy = () => {
