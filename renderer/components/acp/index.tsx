@@ -2,7 +2,7 @@ import React from "react";
 import * as SDK from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
-import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IMcpApp } from "common/interface";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
@@ -13,12 +13,16 @@ import { IconComponent } from "renderer/components/icon";
 import { MenuComponent } from "renderer/components/menu";
 import { CollapseComponent } from "renderer/components/collapse";
 import { MessageComponent } from "renderer/components/acp/message";
+import { McpAppsComponent } from "renderer/components/acp/app";
+
+type IMcpAppEntry = IMcpApp & { id: string; sessionId: string };
 
 interface State {
   visible: boolean;
   status: IAcpStatus;
   sessions: IAcpSession[];
   messages: SDK.SessionNotification[];
+  apps: IMcpAppEntry[];
   input: string;
   mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
@@ -51,6 +55,7 @@ export function AcpComponent() {
     status: { status: "disconnected" },
     sessions: [],
     messages: [],
+    apps: [],
     input: JSON.stringify({name: "", package: { command: [] }}, null, 2),
     search: { query: "", highlight: false, active: 0, ranges: [] },
     mode: { main: "input", sub: "package" },
@@ -71,6 +76,7 @@ export function AcpComponent() {
     Emit.on("acp:status-changed", onStatusChanged);
     Emit.on("acp:session-update", onAcpSessionUpdate);
     Emit.on("acp:message-added", onMessageAdded);
+    Emit.on("acp:mcp-app", onMcpApp);
     Emit.on("acp:file-add", onFileAdd);
     Emit.on("envim:focused", onFocused);
 
@@ -79,6 +85,7 @@ export function AcpComponent() {
       Emit.off("acp:status-changed", onStatusChanged);
       Emit.off("acp:session-update", onAcpSessionUpdate);
       Emit.off("acp:message-added", onMessageAdded);
+      Emit.off("acp:mcp-app", onMcpApp);
       Emit.off("acp:file-add", onFileAdd);
       Emit.off("envim:focused", onFocused);
     };
@@ -86,8 +93,8 @@ export function AcpComponent() {
 
 
   React.useEffect(() => {
-    state.messages.length && !state.scroll && scrollTo("bottom");
-  }, [state.messages]);
+    (state.messages.length || state.apps.length) && !state.scroll && scrollTo("bottom");
+  }, [state.messages, state.apps]);
 
   React.useEffect(() => {
     setState(state => ({ ...state, mode: { ...state.mode, sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
@@ -175,6 +182,16 @@ export function AcpComponent() {
     }));
   }
 
+  function onMcpApp(app: IMcpApp) {
+    setState(state => {
+      const sessionId = state.status.sessionId;
+
+      if (!sessionId) return state;
+
+      return { ...state, apps: [...state.apps, { ...app, id: `${state.apps.length}_${app.uri}`, sessionId }] };
+    });
+  }
+
   function onAcpSessionUpdate(sessionId: string, sessions: IAcpSession[]) {
     setState(state => {
       const session = sessions.find(s => s.id === sessionId) || null;
@@ -182,8 +199,11 @@ export function AcpComponent() {
       const messages = deletedSessionIds.length > 0
         ? state.messages.filter(message => !deletedSessionIds.includes(message.sessionId))
         : state.messages;
+      const apps = deletedSessionIds.length > 0
+        ? state.apps.filter(app => !deletedSessionIds.includes(app.sessionId))
+        : state.apps;
 
-      return { ...state, sessions, session, messages };
+      return { ...state, sessions, session, messages, apps };
     });
   }
 
@@ -548,6 +568,7 @@ export function AcpComponent() {
         {state.status.sessionId ? (
           <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={handleScrollContainer}>
             <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
+            <McpAppsComponent apps={state.apps} sessionId={state.status.sessionId} />
 
             <div ref={scroll} />
           </FlexComponent>

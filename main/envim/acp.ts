@@ -4,7 +4,7 @@ import * as SDK from "@agentclientprotocol/sdk";
 import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Emit } from "main/emit";
-import { Setting } from "main/setting";
+import { Mcp } from "main/envim/mcp";
 
 const ACP_REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
@@ -256,7 +256,7 @@ export class Acp {
     }
   }
 
-  static createSession() {
+  static async createSession() {
     if (!Acp.connection) {
       return;
     }
@@ -265,7 +265,7 @@ export class Acp {
 
     return Acp.connection.newSession({
       cwd: Acp.workspace.current.cwd,
-      mcpServers: (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server),
+      mcpServers: await Mcp.getMcpServers(),
     }).then(response => {
       const session: IAcpSession = {
         id: response.sessionId,
@@ -296,6 +296,7 @@ export class Acp {
     Acp.permission = {};
     Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current.name));
 
+    Mcp.stop();
     Acp.setState({ status: "disconnected" });
     Acp.notifySessionUpdate();
   }
@@ -315,7 +316,7 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static setActiveSession(sessionId: string) {
+  static async setActiveSession(sessionId: string) {
     const session = Acp.sessions[sessionId];
 
     if (!session || !Acp.connection) {
@@ -330,7 +331,7 @@ export class Acp {
       (session.loaded && Acp.capabilities?.sessionCapabilities?.resume) ||
       (!session.loaded && Acp.capabilities?.loadSession)
     ) {
-      const mcpServers = (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server);
+      const mcpServers = await Mcp.getMcpServers();
       const method = session.loaded ? "resumeSession" : "loadSession";
 
       Acp.setState({ ...Acp.state, status: "processing", sessionId });

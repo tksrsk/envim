@@ -102,6 +102,15 @@ export interface IPermissionRequest {
   options: SDK.PermissionOption[];
 }
 
+export interface IMcpApp {
+  server: string;
+  tool: string;
+  uri: string;
+  mimeType: string;
+  html: string;
+  structuredContent?: unknown;
+}
+
 export interface IAcpSession {
   id: string;
   name: string;
