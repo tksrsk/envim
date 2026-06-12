@@ -1,4 +1,4 @@
-import { app, dialog, clipboard, BrowserWindow, WebContents, Event, HandlerDetails, LoginAuthenticationResponseDetails, AuthInfo, ContextMenuParams, Input } from "electron";
+import { app, dialog, clipboard, BrowserWindow, WebContents, Event, HandlerDetails, LoginAuthenticationResponseDetails, AuthInfo, ContextMenuParams, Input, Rectangle } from "electron";
 import { lookup } from "dns";
 
 import { Bootstrap } from "main/bootstrap";
@@ -123,7 +123,7 @@ export class Browser {
     this.devtoolWindow?.destroy();
   }
 
-  private onCapture = async () => {
-    clipboard.writeImage(await this.webContents.capturePage());
+  private onCapture = async (rect?: Rectangle) => {
+    clipboard.writeImage(await this.webContents.capturePage(rect));
   }
 }

@@ -1,4 +1,4 @@
-import { WebviewTag, PageFaviconUpdatedEvent } from "electron";
+import { WebviewTag, PageFaviconUpdatedEvent, Rectangle } from "electron";
 import React from "react";
 
 import { ISetting } from "common/interface";
@@ -23,10 +23,11 @@ interface States {
   title: string;
   loading: boolean;
   favicon?: string;
-  mode: "command" | "input" | "search" | "browser" | "blur";
+  mode: "command" | "visual" | "input" | "search" | "browser" | "blur";
   searchengines: ISetting["searchengines"];
   zoom: number;
-  pointer: { style: { transform: string; width: number; height: number; }, x: number; y: number };
+  pointer: Rectangle;
+  selection?: { anchor: { x: number; y: number; }; rect: Rectangle; line: boolean };
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -45,13 +46,10 @@ const styles: { [k: string]: React.CSSProperties } = {
   title: {
     maxWidth: 200,
   },
-  pointer: {
-    backdropFilter: "invert(1)",
-  }
 };
 
 export function WebviewComponent(props: Props) {
-  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { style: { transform: "", width: col2X(1), height: row2Y(1) }, x: 0, y: 0 } });
+  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<WebviewTag | null> = React.useRef<WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
@@ -61,7 +59,7 @@ export function WebviewComponent(props: Props) {
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
   const preview = props.src.search(/^file:\/\/.*[\/\\]Envim[\/\\]tmp.\w+$/) === 0;
-  const color = { command: "green", input: "default", search: "default", browser: "blue", blur: "default" }[state.mode];
+  const color = { command: "green", visual: "purple", browser: "blue" }[state.mode] || "default";
 
   React.useEffect(() => {
     Emit.on("envim:focused", onFocused);
@@ -167,11 +165,46 @@ export function WebviewComponent(props: Props) {
 
   function setPointer(x: number | "max", y: number | "max") {
     if (!webview.current || !container.current) return;
-    x = Math.min(Math.max(x === "max" ? container.current.offsetWidth : x, 0), container.current.offsetWidth - state.pointer.style.width);
-    y = Math.min(Math.max(y === "max" ? container.current.offsetHeight : y, 0), container.current.offsetHeight - state.pointer.style.height);
+    x = Math.min(Math.max(x === "max" ? container.current.offsetWidth : x, 0), container.current.offsetWidth - state.pointer.width);
+    y = Math.min(Math.max(y === "max" ? container.current.offsetHeight : y, 0), container.current.offsetHeight - state.pointer.height);
+
+    const pointer = { ...state.pointer, x, y };
+    const selection = (() => {
+      if (!state.selection) return;
+      const x = state.selection.line ? 0 : Math.min(state.selection.anchor.x, pointer.x);
+      const y = Math.min(state.selection.anchor.y, pointer.y);
+      const width = state.selection.line ? container.current.offsetWidth : Math.abs(state.selection.anchor.x - pointer.x) + pointer.width;
+      const height = Math.abs(state.selection.anchor.y - pointer.y) + pointer.height;
+
+      return { ...state.selection, rect: { x, y, width, height } };
+    })();
 
     webview.current.sendInputEvent({ type: "mouseMove", x, y });
-    setState(state => ({ ...state, pointer: { style: { ...state.pointer.style, transform: `translate(${x}px, ${y}px)` }, x, y } }));
+    setState(state => ({ ...state, pointer, selection }));
+  }
+
+  function switchVisualMode(mode: "command" | "visual" | "visual-line", capture?: "full" | "selected") {
+    const line = mode === "visual-line";
+
+    if (!webview.current || !container.current) return;
+    if (state.selection?.line === line) mode = "command";
+    if (mode === "visual-line") mode = "visual";
+    if (capture && state.selection) Emit.send(`webview:capture:${webview.current.getWebContentsId()}`, { selected: state.selection.rect }[capture]);
+
+    const rect = line ? { ...state.pointer, x: 0, width: container.current.offsetWidth } : state.pointer;
+    const anchor = { ...state.pointer }
+
+    setState(state => ({ ...state, mode, selection: mode === "command" ? undefined : { anchor, line, rect } }));
+  }
+
+  function renderRect() {
+    const rect = { command: state.pointer, visual: state.selection?.rect }[state.mode];
+
+    if (!rect) return null;
+
+    const style = { backdropFilter: "invert(1)", transform: `translate(${rect.x}px, ${rect.y}px)`, width: rect.width, height: rect.height };
+
+    return <FlexComponent animate="fade-in" position="absolute" inset={[0, "auto", "auto", 0]} style={style} shadow nomouse />;
   }
 
   function clickPointer() {
@@ -215,19 +248,22 @@ export function WebviewComponent(props: Props) {
       case "L": return setPointer(state.pointer.x, "max");
       case "0": return setPointer(0, state.pointer.y);
       case "$": return setPointer("max", state.pointer.y);
-      case "b": return setPointer(state.pointer.x - col2X(30), state.pointer.y);
-      case "w": return setPointer(state.pointer.x + col2X(30), state.pointer.y);
+      case "b": return setPointer(state.pointer.x - col2X(15), state.pointer.y);
+      case "w": return setPointer(state.pointer.x + col2X(15), state.pointer.y);
       case "N": return runAction(state.search ? "search-backward" : "search-stop");
       case "n": return runAction(state.search ? "search-forward" : "search-stop");
       case "g": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "Home" }), setPointer(state.pointer.x, 0));
       case "G": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" }), setPointer(state.pointer.x, "max"));
-      case "Y": return Emit.send(`webview:capture:${webview.current.getWebContentsId()}`);
+      case "v": return switchVisualMode("visual");
+      case "V": return switchVisualMode("visual-line");
+      case "y": return state.mode === "visual" && switchVisualMode("command", "selected");
+      case "Y": return state.mode === "command" && switchVisualMode("command", "full");
       case "-": return runAction("zoom-out");
       case "+": return runAction("zoom-in");
       case "i": return runAction("mode-browser");
       case ":": return runAction("mode-input");
       case "/": return runAction("mode-search");
-      case "Escape": return (runAction("send-escape"), runAction(state.loading ? "cancel-load" : "search-stop"));
+      case "Escape": return (switchVisualMode("command"), runAction("send-escape"), runAction(state.loading ? "cancel-load" : "search-stop"));
       case "Enter": return clickPointer();
     }
   }
@@ -277,7 +313,7 @@ export function WebviewComponent(props: Props) {
 
       setState(state => {
         state.input === "" && webview.current?.clearHistory();
-        !["blur", "command"].includes(state.mode) && state.loading !== loading && runAction("mode-command");
+        !["blur", "command", "visual"].includes(state.mode) && state.loading !== loading && runAction("mode-command");
 
         return { ...state, input: state.mode === "input" ? state.input : input, title, loading };
       });
@@ -430,7 +466,7 @@ export function WebviewComponent(props: Props) {
       </FlexComponent>
       <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
         <div className="space" ref={container} />
-        { state.mode === "command" && <FlexComponent animate="fade-in" position="absolute" inset={[0, "auto", "auto", 0]} style={{...styles.pointer, ...state.pointer.style}} shadow nomouse /> }
+        { renderRect() }
       </FlexComponent>
     </FlexComponent>
   );
