@@ -354,7 +354,7 @@ export class Acp {
     Emit.send("acp:message-added", notification);
   }
 
-  static sendPrompt(sessionId: string, text: string, files: string[] = []) {
+  static sendPrompt(sessionId: string, text: string, files: string[] = [], images: SDK.ImageContent[] = []) {
     const callback = (sessionId: string) => {
       if (!Acp.connection || !Acp.sessions[sessionId]) {
         return;
@@ -363,6 +363,7 @@ export class Acp {
       const prompt: SDK.ContentBlock[] = [
         { type: "text", text },
         ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as SDK.ContentBlock)),
+        ...(Acp.capabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" } as SDK.ContentBlock)) : [] ),
       ];
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));

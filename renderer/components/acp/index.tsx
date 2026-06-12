@@ -24,6 +24,7 @@ interface State {
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
+  images: SDK.ImageContent[];
   registry: IAcpRegistry;
   search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
@@ -39,6 +40,9 @@ const styles: { [k: string]: React.CSSProperties } = {
     width: 400,
     fontSize: "9px",
   },
+  image: {
+    width: "90%",
+  },
 };
 
 export function AcpComponent() {
@@ -53,6 +57,7 @@ export function AcpComponent() {
     session: null,
     scroll: false,
     files: [],
+    images: [],
     registry: { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } },
   });
 
@@ -281,10 +286,31 @@ export function AcpComponent() {
   }
 
   function handleRemoveFile(file: string) {
-    setState(state => ({
-      ...state,
-      files: state.files.filter(f => f !== file)
-    }));
+    setState(state => ({ ...state, files: state.files.filter(f => f !== file) }));
+  }
+
+  function handleRemoveImage(index: number) {
+    setState(state => ({ ...state, images: state.images.filter((_, i) => i !== index) }));
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(e.clipboardData.items)
+      .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+      .flatMap(item => item.getAsFile() || []);
+
+    if (state.mode.sub !== "prompt" || !files.length) return;
+
+    e.preventDefault();
+
+    Promise.all(files.map(file => new Promise<SDK.ImageContent>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve({
+        data: String(reader.result).replace(/^data:[^,]+,/, ""),
+        mimeType: file.type,
+      });
+      reader.readAsDataURL(file);
+    }))).then(images => images.length && setState(state => ({ ...state, images: [...state.images, ...images] })));
   }
 
   function handleEditMcp(e: React.MouseEvent | React.ChangeEvent, action: "toggle" | "delete", index: number) {
@@ -354,7 +380,7 @@ export function AcpComponent() {
           return;
         }
 
-        Emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files);
+        Emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files, state.images);
 
         break;
       case "search":
@@ -365,7 +391,7 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, search, input: "", files: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
+    setState(state => ({ ...state, search, input: "", files: [], images: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }
 
   function handleCancelPrompt() {
@@ -557,12 +583,7 @@ export function AcpComponent() {
           </CollapseComponent>
         )}
         {state.files.length > 0 && (
-          <CollapseComponent
-            label=" Files"
-            badge={`${state.files.length}`}
-            style={{marginBottom: 4}}
-            open
-          >
+          <CollapseComponent label=" Files" badge={`${state.files.length}`} style={{marginBottom: 4}} open>
               {state.files.map(file => (
                 <FlexComponent key={file}>
                   {renderFile(file)}
@@ -572,6 +593,16 @@ export function AcpComponent() {
               ))}
           </CollapseComponent>
         ) }
+        {state.images.length > 0 && ( <CollapseComponent label=" Images" badge={`${state.images.length}`} style={{marginBottom: 4}} open>
+            {state.images.map((image, index) => (
+              <FlexComponent key={index} vertical="center" padding={[2]}>
+                <img src={`data:${image.mimeType};base64,${image.data}`} style={styles.image} />
+                <div className="space" />
+                <IconComponent font="" color="gray-fg" onClick={() => handleRemoveImage(index)} />
+              </FlexComponent>
+            ))}
+          </CollapseComponent>
+        )}
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
@@ -608,6 +639,7 @@ export function AcpComponent() {
           value={state.input}
           onChange={e => setState(state => ({ ...state, input: e.target.value }))}
           onKeyDown={handleInputKeyDown}
+          onPaste={handlePaste}
           onFocus={() => Emit.share("envim:focused")}
           rows={8}
         />
