@@ -69,6 +69,7 @@ export function AcpComponent() {
   const scroll = React.useRef<HTMLDivElement>(null);
   const command = React.useRef<HTMLInputElement>(null);
   const textarea = React.useRef<HTMLTextAreaElement>(null);
+  const mcpAppId = React.useRef(0);
   const color = state.mode.main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
@@ -76,7 +77,7 @@ export function AcpComponent() {
     Emit.on("acp:status-changed", onStatusChanged);
     Emit.on("acp:session-update", onAcpSessionUpdate);
     Emit.on("acp:message-added", onMessageAdded);
-    Emit.on("acp:mcp-app", onMcpApp);
+    Emit.on("mcp-apps:render", onMcpApp);
     Emit.on("acp:file-add", onFileAdd);
     Emit.on("envim:focused", onFocused);
 
@@ -85,7 +86,7 @@ export function AcpComponent() {
       Emit.off("acp:status-changed", onStatusChanged);
       Emit.off("acp:session-update", onAcpSessionUpdate);
       Emit.off("acp:message-added", onMessageAdded);
-      Emit.off("acp:mcp-app", onMcpApp);
+      Emit.off("mcp-apps:render", onMcpApp);
       Emit.off("acp:file-add", onFileAdd);
       Emit.off("envim:focused", onFocused);
     };
@@ -188,7 +189,15 @@ export function AcpComponent() {
 
       if (!sessionId) return state;
 
-      return { ...state, apps: [...state.apps, { ...app, id: `${state.apps.length}_${app.uri}`, sessionId }] };
+      const existing = state.apps.find(entry =>
+        entry.sessionId === sessionId && entry.server === app.server && entry.resource.uri === app.resource.uri
+      );
+      const entry = { ...app, id: ++mcpAppId.current + "_" + app.resource.uri, sessionId };
+      const apps = existing
+        ? state.apps.map(stored => stored.id === existing.id ? entry : stored)
+        : [...state.apps, entry];
+
+      return { ...state, apps };
     });
   }
 
