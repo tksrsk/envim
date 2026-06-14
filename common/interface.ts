@@ -1,4 +1,5 @@
 import * as SDK from "@agentclientprotocol/sdk";
+import type { CallToolRequest, CallToolResult, TextResourceContents } from "@modelcontextprotocol/sdk/types.js";
 
 export interface ISetting {
   type: "command" | "address" | "docker" | "ssh";
@@ -100,6 +101,15 @@ export interface IMenu {
 export interface IPermissionRequest {
   requestId: string;
   options: SDK.PermissionOption[];
+}
+
+export interface IMcpApp {
+  upstreamId: string;
+  server: string;
+  tool: string;
+  request: CallToolRequest["params"];
+  resource: TextResourceContents;
+  result: CallToolResult;
 }
 
 export interface IAcpSession {

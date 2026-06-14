@@ -4,7 +4,7 @@ import * as SDK from "@agentclientprotocol/sdk";
 import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Emit } from "main/emit";
-import { Setting } from "main/setting";
+import { Mcp } from "main/mcp";
 
 const ACP_REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
@@ -256,16 +256,20 @@ export class Acp {
     }
   }
 
-  static createSession() {
+  static async createSession() {
     if (!Acp.connection) {
       return;
     }
 
     Acp.setState({ ...Acp.state, status: "processing" });
 
+    if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
+      await Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
+    }
+
     return Acp.connection.newSession({
       cwd: Acp.workspace.current.cwd,
-      mcpServers: (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server),
+      mcpServers: await Mcp.servers(),
     }).then(response => {
       const session: IAcpSession = {
         id: response.sessionId,
@@ -315,7 +319,7 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static setActiveSession(sessionId: string) {
+  static async setActiveSession(sessionId: string) {
     const session = Acp.sessions[sessionId];
 
     if (!session || !Acp.connection) {
@@ -323,14 +327,14 @@ export class Acp {
     }
 
     if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
-      Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
+      await Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
     }
 
     if (
       (session.loaded && Acp.capabilities?.sessionCapabilities?.resume) ||
       (!session.loaded && Acp.capabilities?.loadSession)
     ) {
-      const mcpServers = (Setting.get().acp.mcpServers || []).filter(mcp => mcp.enabled).map(({ server }) => server);
+      const mcpServers = await Mcp.servers();
       const method = session.loaded ? "resumeSession" : "loadSession";
 
       Acp.setState({ ...Acp.state, status: "processing", sessionId });
