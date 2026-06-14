@@ -11,7 +11,7 @@ import { Autocmd } from "main/envim/autocmd";
 import { Clipboard } from "main/envim/clipboard";
 import { Grids } from "main/envim/grid";
 import { Highlights } from "main/envim/highlight";
-import { McpTunnel } from "main/envim/mcp-tunnel";
+import { McpGateway } from "main/mcp/gateway";
 
 export class App {
   private modes: IMode[] = [];
@@ -24,7 +24,7 @@ export class App {
     Grids.init(init, workspace);
     Function.setup();
     Acp.setup(init, workspace);
-    McpTunnel.setup();
+    McpGateway.setup();
     Autocmd.setup();
     Clipboard.setup();
     nvim.on("request", this.onRequest);
@@ -54,10 +54,9 @@ export class App {
       case "envim_acp_file_add": return Emit.send("acp:file-add", args[0]);
       case "envim_acp_terminal_output": return Emit.share("acp:terminal-output", args[0]);
       case "envim_acp_terminal_exit": return Emit.share("acp:terminal-exit", args[0]);
-      case "envim_mcp_tunnel_open": return McpTunnel.handleOpen(args[0]);
-      case "envim_mcp_tunnel_data": return McpTunnel.handleData(args[0], args[1]);
-      case "envim_mcp_tunnel_close": return McpTunnel.handleClose(args[0]);
-      case "envim_mcp_tunnel_error": return McpTunnel.handleError(args[0], args[1]);
+      case "envim_mcp_open": return McpGateway.onOpen(args[0]);
+      case "envim_mcp_data": return McpGateway.onData(args[0], args[1]);
+      case "envim_mcp_close": return McpGateway.onClose(args[0]);
     }
   }
 

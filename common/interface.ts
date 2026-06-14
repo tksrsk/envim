@@ -104,6 +104,7 @@ export interface IPermissionRequest {
 }
 
 export interface IMcpApp {
+  upstreamId: string;
   server: string;
   tool: string;
   request: CallToolRequest["params"];

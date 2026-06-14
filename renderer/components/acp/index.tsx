@@ -190,7 +190,7 @@ export function AcpComponent() {
       if (!sessionId) return state;
 
       const existing = state.apps.find(entry =>
-        entry.sessionId === sessionId && entry.server === app.server && entry.resource.uri === app.resource.uri
+        entry.sessionId === sessionId && entry.upstreamId === app.upstreamId && entry.resource.uri === app.resource.uri
       );
       const entry = { ...app, id: ++mcpAppId.current + "_" + app.resource.uri, sessionId };
       const apps = existing

@@ -80,20 +80,20 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
       { hostContext: getHostContext(iframe.current!) }
     );
     activeBridge.current = nextBridge;
-    nextBridge.oncalltool = params => Emit.send<CallToolResult>("mcp-apps:call-tool", app.server, params);
-    nextBridge.onlistresources = params => Emit.send<ListResourcesResult>("mcp-apps:list-resources", app.server, params);
-    nextBridge.onlistresourcetemplates = params => Emit.send<ListResourceTemplatesResult>("mcp-apps:list-resource-templates", app.server, params);
-    nextBridge.onreadresource = params => Emit.send<ReadResourceResult>("mcp-apps:read-resource", app.server, params);
+    nextBridge.oncalltool = params => Emit.send<CallToolResult>("mcp-apps:call-tool", app.upstreamId, params);
+    nextBridge.onlistresources = params => Emit.send<ListResourcesResult>("mcp-apps:list-resources", app.upstreamId, params);
+    nextBridge.onlistresourcetemplates = params => Emit.send<ListResourceTemplatesResult>("mcp-apps:list-resource-templates", app.upstreamId, params);
+    nextBridge.onreadresource = params => Emit.send<ReadResourceResult>("mcp-apps:read-resource", app.upstreamId, params);
     nextBridge.oninitialized = () => activeBridge.current === nextBridge && setBridge(nextBridge);
 
     nextBridge.connect(new PostMessageTransport(contentWindow, contentWindow))
       .then(() => nextBridge.sendSandboxResourceReady({ html: app.resource.text }))
       .catch(error => console.error("Failed to connect MCP App bridge", error));
-  }, [app.resource.text, app.server]);
+  }, [app.resource.text, app.upstreamId]);
 
   React.useEffect(() => {
-    const onToolsChanged = (server: string) => server === app.server && activeBridge.current?.sendToolListChanged();
-    const onResourcesChanged = (server: string) => server === app.server && activeBridge.current?.sendResourceListChanged();
+    const onToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
+    const onResourcesChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendResourceListChanged();
 
     Emit.on("mcp-apps:tools-changed", onToolsChanged);
     Emit.on("mcp-apps:resources-changed", onResourcesChanged);
@@ -107,7 +107,7 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
       setBridge(current => current === closingBridge ? null : current);
       closingBridge?.close().catch(() => {});
     };
-  }, [app.server]);
+  }, [app.upstreamId]);
 
   React.useEffect(() => {
     if (!bridge || !iframe.current) return;
