@@ -1,7 +1,4 @@
-import {
-  CallToolRequest, CallToolResult, ListResourceTemplatesRequest, ListResourcesRequest, ReadResourceRequest,
-  TextResourceContents, Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
 import { Emit } from "main/emit";
 import { IMcpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
@@ -21,26 +18,26 @@ export class McpAppService {
     }
 
     this.initialized = true;
-    Emit.on("mcp-apps:call-tool", (upstreamId: string, params: CallToolRequest["params"]) =>
+    Emit.on("mcp-apps:call-tool", (upstreamId: string, params: McpTypes.CallToolRequest["params"]) =>
       this.registry.get(upstreamId).client.callTool(params)
     );
-    Emit.on("mcp-apps:list-resources", (upstreamId: string, params: ListResourcesRequest["params"]) =>
+    Emit.on("mcp-apps:list-resources", (upstreamId: string, params: McpTypes.ListResourcesRequest["params"]) =>
       this.registry.get(upstreamId).client.listResources(params)
     );
     Emit.on(
       "mcp-apps:list-resource-templates",
-      (upstreamId: string, params: ListResourceTemplatesRequest["params"]) =>
+      (upstreamId: string, params: McpTypes.ListResourceTemplatesRequest["params"]) =>
         this.registry.get(upstreamId).client.listResourceTemplates(params)
     );
-    Emit.on("mcp-apps:read-resource", (upstreamId: string, params: ReadResourceRequest["params"]) =>
+    Emit.on("mcp-apps:read-resource", (upstreamId: string, params: McpTypes.ReadResourceRequest["params"]) =>
       this.registry.get(upstreamId).client.readResource(params)
     );
   }
 
   async onToolResult(
     upstreamId: string,
-    request: CallToolRequest["params"],
-    result: CallToolResult,
+    request: McpTypes.CallToolRequest["params"],
+    result: McpTypes.CallToolResult,
   ): Promise<void> {
     const upstream = this.registry.get(upstreamId);
     let toolUiUris = this.toolUiUris.get(upstreamId);
@@ -77,7 +74,7 @@ export class McpAppService {
     }
   }
 
-  private static toolUiUrisFor(tools: Tool[]): { [toolName: string]: string } {
+  private static toolUiUrisFor(tools: McpTypes.Tool[]): { [toolName: string]: string } {
     const uris: { [toolName: string]: string } = {};
 
     for (const tool of tools) {
@@ -92,7 +89,7 @@ export class McpAppService {
     return uris;
   }
 
-  private static async readAppResource(upstream: IMcpUpstream, uri: string): Promise<TextResourceContents | null> {
+  private static async readAppResource(upstream: IMcpUpstream, uri: string): Promise<McpTypes.TextResourceContents | null> {
     if (!uri.startsWith(UI_URI_PREFIX)) {
       return null;
     }

@@ -1,4 +1,4 @@
-import { app, dialog, nativeTheme } from "electron";
+import * as Electron from "electron";
 import { join } from "path";
 import { readFile, writeFile } from "fs/promises";
 import { NeovimClient } from "neovim";
@@ -37,7 +37,7 @@ export class Envim {
     Emit.on("envim:preview:toggle", this.togglePreview);
     process.on("uncaughtException", this.onError);
     process.on("unhandledRejection", this.onError);
-    nativeTheme.on("updated", this.handleTheme);
+    Electron.nativeTheme.on("updated", this.handleTheme);
   }
 
   private onInit = () => {
@@ -52,7 +52,7 @@ export class Envim {
       const message = `Connection error occurred : "[${type}]:${path}".\nDelete preset?`;
 
       if (!setting?.presets[`[${type}]:${path}`]) return false;
-      if (dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0) {
+      if (Electron.dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0) {
         Setting.remove(type, path);
         this.onInit();
       }
@@ -153,19 +153,19 @@ export class Envim {
 
   private onError = (e: Error | any) => {
     if (e instanceof Error) {
-      dialog.showErrorBox("Error", `${e.message}\n${e.stack || ""}`);
+      Electron.dialog.showErrorBox("Error", `${e.message}\n${e.stack || ""}`);
     } else if (e instanceof String) {
-      dialog.showErrorBox("Error", e.toString());
+      Electron.dialog.showErrorBox("Error", e.toString());
     }
     this.onDisconnect("");
   }
 
   private onTheme = (theme?: "dark" | "light") => {
     if (!theme) {
-      theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+      theme = Electron.nativeTheme.shouldUseDarkColors ? "dark" : "light";
     }
 
-    nativeTheme.themeSource = theme;
+    Electron.nativeTheme.themeSource = theme;
     Emit.update("app:theme", false, theme);
 
     return theme;
@@ -177,7 +177,7 @@ export class Envim {
   }
 
   private onPreview = (content: any, ext: string) => {
-    const path = join(app.getPath("userData"), `tmp.${ext}`);
+    const path = join(Electron.app.getPath("userData"), `tmp.${ext}`);
     const src = `file://${path}`;
 
     writeFile(path, Buffer.from(content)).then(() => this.onBrowser(src, "vnew"));

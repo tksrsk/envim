@@ -1,4 +1,4 @@
-import { app } from "electron";
+import * as Electron from "electron";
 import { join } from "path";
 import { existsSync, readFileSync, writeFile } from "fs";
 
@@ -7,7 +7,7 @@ import { ISetting } from "common/interface";
 export class Setting {
   private static item: ISetting;
   private static init: boolean = false;
-  private static path: string = join(app.getPath("appData"), "envim.json");
+  private static path: string = join(Electron.app.getPath("appData"), "envim.json");
 
   static set(item: ISetting) {
     const { presets } = Setting.item || { presets: {} };

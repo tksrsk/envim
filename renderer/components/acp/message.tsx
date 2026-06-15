@@ -1,5 +1,5 @@
 import React from "react";
-import * as SDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
@@ -20,7 +20,7 @@ const styles: { [k: string]: React.CSSProperties } = {
   }
 };
 
-const MessageMemo = React.memo(({ message }: { message: SDK.SessionNotification }) => {
+const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotification }) => {
   function renderFile(file: string) {
     const icon = icons.find(icon => file.match(icon.match))!;
 
@@ -91,7 +91,7 @@ const MessageMemo = React.memo(({ message }: { message: SDK.SessionNotification 
     );
   }
 
-  function renderToolCallContent(content: SDK.ToolCallContent) {
+  function renderToolCallContent(content: AcpSDK.ToolCallContent) {
     switch (content.type) {
       case "content":
         return renderContent(content.content);
@@ -103,7 +103,7 @@ const MessageMemo = React.memo(({ message }: { message: SDK.SessionNotification 
     }
   }
 
-  function renderContent(content: SDK.ContentBlock) {
+  function renderContent(content: AcpSDK.ContentBlock) {
     switch (content.type) {
       case "text":
         return <div className="selectable"><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{content.text}</Markdown></div>;
@@ -179,7 +179,7 @@ const MessageMemo = React.memo(({ message }: { message: SDK.SessionNotification 
   return null;
 });
 
-export const MessageComponent = React.memo(({ messages, sessionId }: { messages: SDK.SessionNotification[]; sessionId: string; }) => (
+export const MessageComponent = React.memo(({ messages, sessionId }: { messages: AcpSDK.SessionNotification[]; sessionId: string; }) => (
   <>
     {messages.map((message, i) => message.sessionId !== sessionId ? null : (
       <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" padding={[4, 2]}>

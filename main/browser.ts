@@ -1,4 +1,4 @@
-import { app, dialog, clipboard, BrowserWindow, WebContents, Event, HandlerDetails, LoginAuthenticationResponseDetails, AuthInfo, ContextMenuParams, Input, Rectangle } from "electron";
+import * as Electron from "electron";
 import { lookup } from "dns";
 
 import { Bootstrap } from "main/bootstrap";
@@ -6,10 +6,10 @@ import { Emit } from "main/emit";
 
 export class Browser {
   private ignoreCertErrorHost: string[] = [];
-  private devtoolWindow?: BrowserWindow;
+  private devtoolWindow?: Electron.BrowserWindow;
   private currentMode = "blur";
 
-  constructor(private webContents: WebContents) {
+  constructor(private webContents: Electron.WebContents) {
     webContents.setWindowOpenHandler(this.onOpenWindow);
     webContents.on("devtools-open-url", this.onOpenUrl);
     webContents.on("login", this.onLogin);
@@ -24,14 +24,14 @@ export class Browser {
   }
 
   private confirm = (message: string) => {
-    return dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0;
+    return Electron.dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0;
   }
 
-  private onOpenWindow = (details: HandlerDetails) => {
+  private onOpenWindow = (details: Electron.HandlerDetails) => {
     const action: "allow" | "deny" = !details.url.match(/^https?\/\//) || details.postBody ? "allow" : "deny";
 
     action === "deny" && Emit.share("envim:browser", details.url);
-    action === "allow" && app.once("browser-window-created", (_, browserWindow) => (
+    action === "allow" && Electron.app.once("browser-window-created", (_, browserWindow) => (
       browserWindow.webContents.on("did-navigate", () => {
         const url = browserWindow.webContents.getURL();
 
@@ -47,12 +47,12 @@ export class Browser {
     return { action, overrideBrowserWindowOptions: { show: false } };
   }
 
-  private onOpenUrl = (_: Event, url: string) => {
+  private onOpenUrl = (_: Electron.Event, url: string) => {
     Bootstrap.win?.focus();
     Emit.share("envim:browser", url);
   }
 
-  private onLogin = async (e: Event, _: LoginAuthenticationResponseDetails, __: AuthInfo, callback: Function) => {
+  private onLogin = async (e: Electron.Event, _: Electron.LoginAuthenticationResponseDetails, __: Electron.AuthInfo, callback: Function) => {
     e.preventDefault();
 
     const user = await Emit.share("envim:readline", "User");
@@ -61,7 +61,7 @@ export class Browser {
     user && callback(user, password);
   }
 
-  private onCertError = async (e: Event, url: string, __: string, ___: Object, callback: Function) => {
+  private onCertError = async (e: Electron.Event, url: string, __: string, ___: Object, callback: Function) => {
     const { hostname } = new URL(url);
 
     if (this.ignoreCertErrorHost.indexOf(hostname) < 0) {
@@ -81,11 +81,11 @@ export class Browser {
     }
   }
 
-  private onUnload = (e: Event) => {
+  private onUnload = (e: Electron.Event) => {
     this.confirm("Leave this page?") && e.preventDefault();
   }
 
-  private onContextMenu = (_: Event, params: ContextMenuParams) => {
+  private onContextMenu = (_: Electron.Event, params: Electron.ContextMenuParams) => {
     const contents = params.selectionText || params.srcURL;
 
     if (params.srcURL === this.webContents.getURL()) {
@@ -95,7 +95,7 @@ export class Browser {
     }
   }
 
-  private onInput = (e: Event, input: Input) => {
+  private onInput = (e: Electron.Event, input: Electron.Input) => {
     switch (input.key) {
       case "Escape":
         if (this.currentMode === "browser") {
@@ -108,7 +108,7 @@ export class Browser {
 
   private onDevtool = () => {
     if (!this.devtoolWindow || this.devtoolWindow.isDestroyed()) {
-      this.devtoolWindow = new BrowserWindow();
+      this.devtoolWindow = new Electron.BrowserWindow();
       this.devtoolWindow.setMenu(null);
       this.webContents.setDevToolsWebContents(this.devtoolWindow.webContents);
       this.webContents.openDevTools({ mode: "detach" });
@@ -123,7 +123,7 @@ export class Browser {
     this.devtoolWindow?.destroy();
   }
 
-  private onCapture = async (rect?: Rectangle) => {
-    clipboard.writeImage(await this.webContents.capturePage(rect));
+  private onCapture = async (rect?: Electron.Rectangle) => {
+    Electron.clipboard.writeImage(await this.webContents.capturePage(rect));
   }
 }

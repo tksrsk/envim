@@ -1,5 +1,5 @@
 import React from "react";
-import * as SDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk";
 import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
 import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IMcpApp } from "common/interface";
@@ -21,14 +21,14 @@ interface State {
   visible: boolean;
   status: IAcpStatus;
   sessions: IAcpSession[];
-  messages: SDK.SessionNotification[];
+  messages: AcpSDK.SessionNotification[];
   apps: IMcpAppEntry[];
   input: string;
   mode: { main: "normal" | "input" | "blur", sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
-  images: SDK.ImageContent[];
+  images: AcpSDK.ImageContent[];
   registry: IAcpRegistry;
   search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
@@ -176,7 +176,7 @@ export function AcpComponent() {
     setState(state => ({ ...state, status }));
   }
 
-  function onMessageAdded(message: SDK.SessionNotification) {
+  function onMessageAdded(message: AcpSDK.SessionNotification) {
     setState(state => ({
       ...state,
       messages: filterMessages(state.messages, message)
@@ -223,7 +223,7 @@ export function AcpComponent() {
     }));
   }
 
-  function filterMessages(messages: SDK.SessionNotification[], curr: SDK.SessionNotification): SDK.SessionNotification[] {
+  function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
     const prev = messages.pop();
 
     if (
@@ -331,7 +331,7 @@ export function AcpComponent() {
 
     e.preventDefault();
 
-    Promise.all(files.map(file => new Promise<SDK.ImageContent>((resolve, reject) => {
+    Promise.all(files.map(file => new Promise<AcpSDK.ImageContent>((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
       reader.onload = () => resolve({
@@ -505,7 +505,7 @@ export function AcpComponent() {
     }
   }
 
-  function getPriorityColor (priority: SDK.PlanEntry["priority"]) {
+  function getPriorityColor (priority: AcpSDK.PlanEntry["priority"]) {
     switch (priority) {
       case "high": return "red";
       case "medium": return "yellow";
@@ -542,7 +542,7 @@ export function AcpComponent() {
     );
   }
 
-  function renderConfigOption(config: SDK.SessionConfigOption) {
+  function renderConfigOption(config: AcpSDK.SessionConfigOption) {
     switch (config.type) {
       case "boolean":
         return (
@@ -552,7 +552,7 @@ export function AcpComponent() {
           </FlexComponent>
         );
       case "select":
-        const renderConfigSelectOption = (option: SDK.SessionConfigSelectOption) => (
+        const renderConfigSelectOption = (option: AcpSDK.SessionConfigSelectOption) => (
           <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
             {option.name}
           </FlexComponent>

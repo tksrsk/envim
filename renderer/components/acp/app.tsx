@@ -1,5 +1,4 @@
-import { AppBridge, PostMessageTransport, McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge";
-import { CallToolResult, ListResourcesResult, ListResourceTemplatesResult, ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import * as McpAppBridge from "@modelcontextprotocol/ext-apps/app-bridge";
 import React from "react";
 
 import { IMcpApp } from "common/interface";
@@ -34,7 +33,7 @@ const SANDBOX_PROXY_HTML = `<!doctype html>
   </body>
 </html>`;
 
-function getHostContext(element: HTMLElement): McpUiHostContext {
+function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
   const computed = getComputedStyle(element);
 
   return {
@@ -63,8 +62,8 @@ function getHostContext(element: HTMLElement): McpUiHostContext {
 const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
   const iframe = React.useRef<HTMLIFrameElement>(null);
   const sendQueue = React.useRef<Promise<void>>(Promise.resolve());
-  const activeBridge = React.useRef<AppBridge | null>(null);
-  const [bridge, setBridge] = React.useState<AppBridge | null>(null);
+  const activeBridge = React.useRef<McpAppBridge.AppBridge | null>(null);
+  const [bridge, setBridge] = React.useState<McpAppBridge.AppBridge | null>(null);
 
   const onLoad = React.useCallback(() => {
     const contentWindow = iframe.current?.contentWindow;
@@ -73,20 +72,20 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
 
     activeBridge.current?.close().catch(() => {});
 
-    const nextBridge = new AppBridge(
+    const nextBridge = new McpAppBridge.AppBridge(
       null,
       { name: "Envim", version: "1.0.0" },
       { serverResources: { listChanged: true }, serverTools: { listChanged: true } },
       { hostContext: getHostContext(iframe.current!) }
     );
     activeBridge.current = nextBridge;
-    nextBridge.oncalltool = params => Emit.send<CallToolResult>("mcp-apps:call-tool", app.upstreamId, params);
-    nextBridge.onlistresources = params => Emit.send<ListResourcesResult>("mcp-apps:list-resources", app.upstreamId, params);
-    nextBridge.onlistresourcetemplates = params => Emit.send<ListResourceTemplatesResult>("mcp-apps:list-resource-templates", app.upstreamId, params);
-    nextBridge.onreadresource = params => Emit.send<ReadResourceResult>("mcp-apps:read-resource", app.upstreamId, params);
+    nextBridge.oncalltool = params => Emit.send("mcp-apps:call-tool", app.upstreamId, params);
+    nextBridge.onlistresources = params => Emit.send("mcp-apps:list-resources", app.upstreamId, params);
+    nextBridge.onlistresourcetemplates = params => Emit.send("mcp-apps:list-resource-templates", app.upstreamId, params);
+    nextBridge.onreadresource = params => Emit.send("mcp-apps:read-resource", app.upstreamId, params);
     nextBridge.oninitialized = () => activeBridge.current === nextBridge && setBridge(nextBridge);
 
-    nextBridge.connect(new PostMessageTransport(contentWindow, contentWindow))
+    nextBridge.connect(new McpAppBridge.PostMessageTransport(contentWindow, contentWindow))
       .then(() => nextBridge.sendSandboxResourceReady({ html: app.resource.text }))
       .catch(error => console.error("Failed to connect MCP App bridge", error));
   }, [app.resource.text, app.upstreamId]);

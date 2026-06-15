@@ -1,22 +1,22 @@
-import { app, BrowserWindow, Menu } from "electron";
+import * as Electron from "electron";
 import { join } from "path";
 
 import { Emit } from "main/emit";
 import { Browser } from "main/browser";
 
 export class Bootstrap {
-  static win?: BrowserWindow;
+  static win?: Electron.BrowserWindow;
 
   constructor() {
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
+    Electron.Menu.setApplicationMenu(
+      Electron.Menu.buildFromTemplate([
         { role: "editMenu", visible: true }
       ])
     );
-    app.commandLine.appendSwitch("remote-debugging-port", "8315");
-    app.on("ready", this.onReady);
-    app.on("activate", this.onActivate);
-    app.on("window-all-closed", this.onQuit);
+    Electron.app.commandLine.appendSwitch("remote-debugging-port", "8315");
+    Electron.app.on("ready", this.onReady);
+    Electron.app.on("activate", this.onActivate);
+    Electron.app.on("window-all-closed", this.onQuit);
   }
 
   private onReady = () => {
@@ -29,13 +29,13 @@ export class Bootstrap {
 
   private onQuit = () => {
     delete(Bootstrap.win);
-    app.quit();
+    Electron.app.quit();
   }
 
   private create() {
     if (Bootstrap.win) return;
 
-    Bootstrap.win = new BrowserWindow({
+    Bootstrap.win = new Electron.BrowserWindow({
       transparent: true,
       resizable: true,
       hasShadow: false,

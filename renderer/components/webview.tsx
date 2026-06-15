@@ -1,4 +1,4 @@
-import { WebviewTag, PageFaviconUpdatedEvent, Rectangle } from "electron";
+import * as Electron from "electron";
 import React from "react";
 
 import { ISetting } from "common/interface";
@@ -26,8 +26,8 @@ interface States {
   mode: "command" | "visual" | "input" | "search" | "browser" | "blur";
   searchengines: ISetting["searchengines"];
   zoom: number;
-  pointer: Rectangle;
-  selection?: { anchor: { x: number; y: number; }; rect: Rectangle; line: boolean };
+  pointer: Electron.Rectangle;
+  selection?: { anchor: { x: number; y: number; }; rect: Electron.Rectangle; line: boolean };
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -51,7 +51,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 export function WebviewComponent(props: Props) {
   const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
-  const webview: React.RefObject<WebviewTag | null> = React.useRef<WebviewTag>(null);
+  const webview: React.RefObject<Electron.WebviewTag | null> = React.useRef<Electron.WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
@@ -75,7 +75,7 @@ export function WebviewComponent(props: Props) {
 
   React.useEffect(() => {
     if (container.current) {
-      const webview = document.createElement("webview") as WebviewTag;
+      const webview = document.createElement("webview") as Electron.WebviewTag;
 
       container.current.appendChild(webview);
       webview.setAttribute("allowpopups", "on");
@@ -101,7 +101,7 @@ export function WebviewComponent(props: Props) {
 
   function onReady () {
     if (container.current) {
-      webview.current = container.current.querySelector("webview") as WebviewTag;
+      webview.current = container.current.querySelector("webview") as Electron.WebviewTag;
       webview.current.removeEventListener("dom-ready", onReady);
       webview.current.addEventListener("did-start-loading", onLoad);
       webview.current.addEventListener("did-stop-loading", onLoad);
@@ -320,7 +320,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onFavicon (e: PageFaviconUpdatedEvent) {
+  function onFavicon (e: Electron.PageFaviconUpdatedEvent) {
     if (webview.current) {
       setState(state => ({ ...state, favicon: e.favicons[0] }));
     }

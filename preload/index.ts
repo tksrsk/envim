@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+import * as Electron from "electron";
 import { EventEmitter } from "events";
 
 const emit = new EventEmitter;
@@ -14,7 +14,7 @@ const initialize = () => {
 
 const on = (event: string, callback: (...args: any[]) => void) => {
   emit.on(event, callback);
-  ipcRenderer.on(event, (_: IpcRendererEvent, ...args: any[]) => {
+  Electron.ipcRenderer.on(event, (_: Electron.IpcRendererEvent, ...args: any[]) => {
     share(event, ...args);
     share("debug", "receive", event, ...args);
   });
@@ -27,7 +27,7 @@ const share = (event: string, ...args: any[]) => {
 const invoke = async (event: string, ...args: any[]) => {
   try {
     share("debug", "send", event, ...args);
-    return await ipcRenderer.invoke(event, ...args);
+    return await Electron.ipcRenderer.invoke(event, ...args);
   } catch (e: any) {
     if (e instanceof Error) {
       const reg = /^Error invoking remote method '[^']+': /;
@@ -55,4 +55,4 @@ const send = async (event: string, ...args: any[]) => {
   }
 };
 
-contextBridge.exposeInMainWorld("envimIPC", { initialize, on, send });
+Electron.contextBridge.exposeInMainWorld("envimIPC", { initialize, on, send });

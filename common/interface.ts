@@ -1,5 +1,5 @@
-import * as SDK from "@agentclientprotocol/sdk";
-import type { CallToolRequest, CallToolResult, TextResourceContents } from "@modelcontextprotocol/sdk/types.js";
+import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
 export interface ISetting {
   type: "command" | "address" | "docker" | "ssh";
@@ -9,7 +9,7 @@ export interface ISetting {
   options: { [k: string]: boolean; };
   bookmarks: { name: string, path: string; selected: boolean; }[];
   searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: SDK.McpServer }[]; };
+  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: AcpSDK.McpServer }[]; };
   presets: { [k: string]: ISetting };
 }
 
@@ -100,16 +100,16 @@ export interface IMenu {
 
 export interface IPermissionRequest {
   requestId: string;
-  options: SDK.PermissionOption[];
+  options: AcpSDK.PermissionOption[];
 }
 
 export interface IMcpApp {
   upstreamId: string;
   server: string;
   tool: string;
-  request: CallToolRequest["params"];
-  resource: TextResourceContents;
-  result: CallToolResult;
+  request: McpTypes.CallToolRequest["params"];
+  resource: McpTypes.TextResourceContents;
+  result: McpTypes.CallToolResult;
 }
 
 export interface IAcpSession {
@@ -118,10 +118,10 @@ export interface IAcpSession {
   workspace: string;
   loaded: boolean;
   status: "show" | "hide";
-  commands: SDK.AvailableCommand[];
-  configOptions: SDK.SessionConfigOption[];
-  usage?: SDK.UsageUpdate;
-  plan: SDK.PlanEntry[];
+  commands: AcpSDK.AvailableCommand[];
+  configOptions: AcpSDK.SessionConfigOption[];
+  usage?: AcpSDK.UsageUpdate;
+  plan: AcpSDK.PlanEntry[];
 }
 
 export interface IAcpStatus {

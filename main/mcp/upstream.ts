@@ -1,13 +1,10 @@
 import { createHash } from "crypto";
 
-import * as SDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import {
-  ResourceListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
 export interface IMcpUpstream {
   id: string;
@@ -20,7 +17,7 @@ interface IMcpUpstreamRegistryOptions {
   onResourcesChanged: (upstreamId: string) => void;
 }
 
-type HttpMcpServer = Extract<SDK.McpServer, { type: "http" | "sse" }>;
+type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
 
 const MCP_APP_MIME = "text/html;profile=mcp-app";
 
@@ -29,7 +26,7 @@ export class McpUpstreamRegistry {
 
   constructor(private options: IMcpUpstreamRegistryOptions) {}
 
-  async sync(servers: SDK.McpServer[]): Promise<Map<string, IMcpUpstream>> {
+  async sync(servers: AcpSDK.McpServer[]): Promise<Map<string, IMcpUpstream>> {
     const next = new Map<string, IMcpUpstream>();
 
     for (const server of servers) {
@@ -72,7 +69,7 @@ export class McpUpstreamRegistry {
     return upstream;
   }
 
-  static idFor(server: SDK.McpServer): string {
+  static idFor(server: AcpSDK.McpServer): string {
     if (!McpUpstreamRegistry.isHttpServer(server)) {
       throw new Error("MCP upstream registry only accepts HTTP and SSE servers");
     }
@@ -92,8 +89,8 @@ export class McpUpstreamRegistry {
 
     try {
       await client.connect(McpUpstreamRegistry.createTransport(server));
-      client.setNotificationHandler(ToolListChangedNotificationSchema, () => this.options.onToolsChanged(id));
-      client.setNotificationHandler(ResourceListChangedNotificationSchema, () => this.options.onResourcesChanged(id));
+      client.setNotificationHandler(McpTypes.ToolListChangedNotificationSchema, () => this.options.onToolsChanged(id));
+      client.setNotificationHandler(McpTypes.ResourceListChangedNotificationSchema, () => this.options.onResourcesChanged(id));
 
       return { id, name: server.name, client };
     } catch {
@@ -111,7 +108,7 @@ export class McpUpstreamRegistry {
       : new SSEClientTransport(new URL(server.url), { requestInit });
   }
 
-  private static isHttpServer(server: SDK.McpServer): server is HttpMcpServer {
+  private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {
     return "type" in server && (server.type === "http" || server.type === "sse");
   }
 

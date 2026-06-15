@@ -1,4 +1,4 @@
-import * as SDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk";
 
 import { McpAppService } from "main/mcp/app";
 import { McpGateway } from "main/mcp/gateway";
@@ -11,13 +11,13 @@ interface IMcpServices {
   registry: McpUpstreamRegistry;
 }
 
-type HttpMcpServer = Extract<SDK.McpServer, { type: "http" | "sse" }>;
+type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
 
 export class Mcp {
   private static services: IMcpServices | null = null;
   private static syncPromise: Promise<void> = Promise.resolve();
 
-  static servers(): Promise<SDK.McpServer[]> {
+  static servers(): Promise<AcpSDK.McpServer[]> {
     const operation = Mcp.syncPromise.then(() => Mcp.syncServers());
 
     Mcp.syncPromise = operation.then(() => undefined, () => undefined);
@@ -25,7 +25,7 @@ export class Mcp {
     return operation;
   }
 
-  private static async syncServers(): Promise<SDK.McpServer[]> {
+  private static async syncServers(): Promise<AcpSDK.McpServer[]> {
     const servers = (Setting.get()?.acp?.mcpServers || [])
       .filter(mcp => mcp.enabled)
       .map(mcp => mcp.server);
@@ -92,7 +92,7 @@ export class Mcp {
     return Mcp.services;
   }
 
-  private static isHttpServer(server: SDK.McpServer): server is HttpMcpServer {
+  private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {
     return "type" in server && (server.type === "http" || server.type === "sse");
   }
 }

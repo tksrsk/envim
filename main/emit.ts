@@ -1,4 +1,4 @@
-import { ipcMain, IpcMainInvokeEvent } from "electron";
+import * as Electron from "electron";
 import { EventEmitter } from "events";
 
 import { Bootstrap } from "main/bootstrap";
@@ -15,7 +15,7 @@ export class Emit {
 
   static on(event: string, callback: (...args: any[]) => unknown) {
     if (!Emit.events[event]) {
-      ipcMain.handle(event, (_: IpcMainInvokeEvent, ...args: any[]) => Emit.share(event, ...args));
+      Electron.ipcMain.handle(event, (_: Electron.IpcMainInvokeEvent, ...args: any[]) => Emit.share(event, ...args));
       Emit.emit.on(event, (...args) => Emit.share(event, ...args));
       Emit.events[event] = [];
     }
