@@ -105,13 +105,13 @@ export function AcpComponent() {
     const input = (() => {
       switch (state.mode.sub) {
         case "package": return JSON.stringify({name: "", package: { command: [] }}, null, 2);
-        case "mcp": return JSON.stringify(state.mode.mcp ? Setting.acp.mcpServers[state.mode.mcp].server : {}, null, 2);
+        case "mcp": return JSON.stringify(typeof state.mode.mcp === "number" ? Setting.acp.mcpServers[state.mode.mcp].server : {}, null, 2);
         case "prompt": return "";
         default: return "";
       }
     })();
 
-    state.mode.mcp && Emit.send("envim:setting", Setting.get());
+    typeof state.mode.mcp === "number" && Emit.send("envim:setting", Setting.get());
     setState(state => ({ ...state, input }));
   }, [state.mode.sub, state.mode.mcp]);
 
@@ -392,7 +392,7 @@ export function AcpComponent() {
             return;
           }
 
-          if (state.mode.mcp && Setting.acp.mcpServers[state.mode.mcp] ) {
+          if (typeof state.mode.mcp === "number" && Setting.acp.mcpServers[state.mode.mcp]) {
             Setting.acp.mcpServers[state.mode.mcp].server = server;
           } else {
             Setting.acp.mcpServers.push({ enabled: true, server });
