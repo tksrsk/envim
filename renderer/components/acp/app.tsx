@@ -59,7 +59,7 @@ function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
   };
 }
 
-const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
+const McpAppFrame = React.memo(({ app, sessionId }: { app: IMcpApp; sessionId: string }) => {
   const iframe = React.useRef<HTMLIFrameElement>(null);
   const sendQueue = React.useRef<Promise<void>>(Promise.resolve());
   const activeBridge = React.useRef<McpAppBridge.AppBridge | null>(null);
@@ -75,7 +75,7 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
     const nextBridge = new McpAppBridge.AppBridge(
       null,
       { name: "Envim", version: "1.0.0" },
-      { serverResources: { listChanged: true }, serverTools: { listChanged: true } },
+      { serverResources: { listChanged: true }, serverTools: { listChanged: true }, message: {} },
       { hostContext: getHostContext(iframe.current!) }
     );
     activeBridge.current = nextBridge;
@@ -83,12 +83,19 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
     nextBridge.onlistresources = params => Emit.send("mcp-apps:list-resources", app.upstreamId, params);
     nextBridge.onlistresourcetemplates = params => Emit.send("mcp-apps:list-resource-templates", app.upstreamId, params);
     nextBridge.onreadresource = params => Emit.send("mcp-apps:read-resource", app.upstreamId, params);
+    nextBridge.onmessage = async (params: McpAppBridge.McpUiMessageRequest["params"]) => {
+      const text = params.content.filter(c  => c.type === "text").map(c => c.text).join("\n");
+
+      text && Emit.send("acp:send-prompt", sessionId, text, [], []);
+
+      return {};
+    };
     nextBridge.oninitialized = () => activeBridge.current === nextBridge && setBridge(nextBridge);
 
     nextBridge.connect(new McpAppBridge.PostMessageTransport(contentWindow, contentWindow))
       .then(() => nextBridge.sendSandboxResourceReady({ html: app.resource.text }))
       .catch(error => console.error("Failed to connect MCP App bridge", error));
-  }, [app.resource.text, app.upstreamId]);
+  }, [app.resource.text, app.upstreamId, sessionId]);
 
   React.useEffect(() => {
     const onToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
@@ -137,12 +144,13 @@ const McpAppFrame = React.memo(({ app }: { app: IMcpApp }) => {
 
 interface Props {
   app: IMcpApp;
+  sessionId: string;
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
 }
 
-export const McpAppComponent = React.memo(({ app, open, onOpen, onClose }: Props) => {
+export const McpAppComponent = React.memo(({ app, sessionId, open, onOpen, onClose }: Props) => {
   const dialog = React.useRef<HTMLDialogElement>(null);
 
   React.useEffect(() => {
@@ -154,7 +162,7 @@ export const McpAppComponent = React.memo(({ app, open, onOpen, onClose }: Props
       <IconComponent color="gray-fg" font="" text={`${app.server} / ${app.tool}`} onClick={onOpen} />
       <dialog className="color-default" ref={dialog} onClose={onClose}>
         <FlexComponent position="absolute" inset={[8, 8, "auto", "auto"]}><IconComponent color="gray-fg" font="" onClick={onClose} /></FlexComponent>
-        <McpAppFrame app={app} />
+        <McpAppFrame app={app} sessionId={sessionId} />
       </dialog>
     </FlexComponent>
   );
@@ -176,7 +184,7 @@ export const McpAppsComponent = React.memo(({ apps, sessionId }: { apps: (IMcpAp
     <>
       {apps.map(app => app.sessionId !== sessionId ? null : (
         <FlexComponent key={app.id} animate="fade-in" direction="column" padding={[4, 2]}>
-          <McpAppComponent app={app} open={activeId === app.id} onOpen={() => setActiveId(app.id)} onClose={() => setActiveId(active => active === app.id ? null : active)} />
+          <McpAppComponent app={app} sessionId={sessionId} open={activeId === app.id} onOpen={() => setActiveId(app.id)} onClose={() => setActiveId(active => active === app.id ? null : active)} />
         </FlexComponent>
       ))}
     </>
