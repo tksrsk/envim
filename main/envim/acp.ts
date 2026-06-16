@@ -67,7 +67,7 @@ export class Acp {
       ? { sessionId, configId, type: "boolean" as const, value }
       : { sessionId, configId, value };
 
-    Acp.connection.setSessionConfigOption(params).then(response => {
+    Acp.callAgent(Acp.connection.setSessionConfigOption(params)).then(response => {
       const session = Acp.sessions[sessionId];
       if (session) {
         session.configOptions = response.configOptions;
@@ -193,7 +193,15 @@ export class Acp {
     return true;
   }
 
+  private static callAgent<T>(promise: Promise<T>): Promise<T> {
+    Acp.setState({ ...Acp.state, error: undefined });
 
+    promise.catch(err => {
+      Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
+    });
+
+    return promise;
+  }
 
   static async startAgent(agent: IAcpRegistryAgent) {
     Acp.setState({ status: "connecting" });
@@ -208,7 +216,7 @@ export class Acp {
         );
       }
 
-      Acp.connection.initialize({
+      Acp.callAgent(Acp.connection.initialize({
         protocolVersion: 1,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
@@ -219,7 +227,7 @@ export class Acp {
           title: "Envim Editor",
           version: "1.0.0"
         }
-      }).then(response => {
+      })).then(response => {
         Acp.capabilities = response.agentCapabilities;
         Acp.listSession();
       });
@@ -234,7 +242,7 @@ export class Acp {
     }
 
     if (Acp.capabilities?.sessionCapabilities?.list) {
-      Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd }).then(response => {
+      Acp.callAgent(Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd })).then(response => {
         response.sessions.forEach(session => {
           if (!Acp.sessions[session.sessionId]) {
             Acp.sessions[session.sessionId] = {
@@ -267,10 +275,10 @@ export class Acp {
       await Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
     }
 
-    return Acp.connection.newSession({
+    return Acp.callAgent(Acp.connection.newSession({
       cwd: Acp.workspace.current.cwd,
       mcpServers: await Mcp.servers(),
-    }).then(response => {
+    })).then(response => {
       const session: IAcpSession = {
         id: response.sessionId,
         name: `Session ${new Date().toLocaleTimeString()}`,
@@ -306,7 +314,7 @@ export class Acp {
 
   static deleteSession(sessionId: string) {
     if (Acp.connection && Acp.capabilities?.sessionCapabilities?.delete) {
-      Acp.connection.deleteSession({ sessionId });
+      Acp.callAgent(Acp.connection.deleteSession({ sessionId }));
     }
 
     delete(Acp.sessions[sessionId]);
@@ -338,11 +346,10 @@ export class Acp {
       const method = session.loaded ? "resumeSession" : "loadSession";
 
       Acp.setState({ ...Acp.state, status: "processing", sessionId });
-      Acp.connection[method]({
+      Acp.callAgent(Acp.connection[method]({
         sessionId, cwd: Acp.workspace.current.cwd, mcpServers
-      }).then(response => {
+      })).then(response => {
         session.configOptions = response.configOptions || [];
-      }).finally(() => {
         Acp.setState({ ...Acp.state, status: "connected" });
         Acp.notifySessionUpdate();
       });
@@ -372,17 +379,10 @@ export class Acp {
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
       Acp.setState({ ...Acp.state, status: "processing" });
-      Acp.connection.prompt({
-        sessionId,
-        prompt
-      }).catch((err: unknown) => {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Failed to send message: ${errorMessage}` } } });
-      }).then(result => {
+      Acp.callAgent(Acp.connection.prompt({ sessionId, prompt })).then(result => {
         if (result && result.stopReason !== "end_turn") {
           Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
         }
-      }).finally(() => {
         Acp.tool = {};
         Acp.permission = {};
         Acp.setState({ ...Acp.state, status: "connected" });
@@ -405,8 +405,7 @@ export class Acp {
     }
 
     Acp.setState({ ...Acp.state, status: "processing" });
-    Acp.connection.cancel({ sessionId });
-    Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "❌ Request cancelled by user"  } } });
+    Acp.callAgent(Acp.connection.cancel({ sessionId }));
     Acp.setState({ ...Acp.state, status: "connected" });
   }
 

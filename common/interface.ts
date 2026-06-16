@@ -127,6 +127,7 @@ export interface IAcpSession {
 export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing";
   sessionId?: string;
+  error?: string;
 }
 
 export interface IAcpRegistryAgent {

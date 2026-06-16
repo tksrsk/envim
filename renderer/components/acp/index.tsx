@@ -589,6 +589,8 @@ export function AcpComponent() {
       </FlexComponent>
 
       <FlexComponent direction="column" overflow="visible" padding={[4]}>
+        {state.status.error && <FlexComponent color="red" padding={[4]} rounded={[4]}>{state.status.error}</FlexComponent>}
+        {state.status.error && <div className="divider color-gray" /> }
         {state.session?.usage &&
           <FlexComponent color="orange" padding={[4]} rounded={[4]}>
             <span>{state.session.usage.used.toLocaleString()} ({((state.session.usage.used / state.session.usage.size) * 100).toFixed(2)}%)</span>
