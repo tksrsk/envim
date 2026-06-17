@@ -231,6 +231,7 @@ export class Acp {
         if (!response) return;
 
         Acp.capabilities = response.agentCapabilities;
+        Acp.setState({ ...Acp.state, status: "connected" });
         Acp.listSession();
       });
     } else {
@@ -244,6 +245,7 @@ export class Acp {
     }
 
     if (Acp.capabilities?.sessionCapabilities?.list) {
+      Acp.setState({ ...Acp.state, status: "processing" });
       Acp.callAgent(Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd })).then(response => {
         if (!response) return;
 
