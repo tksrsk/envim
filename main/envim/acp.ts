@@ -380,9 +380,9 @@ export class Acp {
       }
 
       const prompt: AcpSDK.ContentBlock[] = [
-        { type: "text", text },
-        ...files.map(file => ({ type: "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file } as AcpSDK.ContentBlock)),
-        ...(Acp.capabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" } as AcpSDK.ContentBlock)) : [] ),
+        ...(text ? [{ type: "text" as "text", text }] : []),
+        ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
+        ...(Acp.capabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
       ];
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
