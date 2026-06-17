@@ -6,7 +6,8 @@ import { IMcpApp } from "common/interface";
 import { Emit } from "renderer/utils/emit";
 
 import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
+import { CollapseComponent } from "renderer/components/collapse";
+import { DialogComponent } from "renderer/components/dialog";
 
 const SANDBOX_PROXY_HTML = `<!doctype html>
 <html>
@@ -59,7 +60,7 @@ function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
   };
 }
 
-const McpAppFrame = React.memo(({ app, sessionId }: { app: IMcpApp; sessionId: string }) => {
+const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; sessionId: string; onClose: () => void }) => {
   const iframe = React.useRef<HTMLIFrameElement>(null);
   const sendQueue = React.useRef<Promise<void>>(Promise.resolve());
   const activeBridge = React.useRef<McpAppBridge.AppBridge | null>(null);
@@ -86,7 +87,10 @@ const McpAppFrame = React.memo(({ app, sessionId }: { app: IMcpApp; sessionId: s
     nextBridge.onmessage = async (params: McpAppBridge.McpUiMessageRequest["params"]) => {
       const text = params.content.filter(c  => c.type === "text").map(c => c.text).join("\n");
 
-      text && Emit.send("acp:send-prompt", sessionId, text, [], []);
+      if (text) {
+        Emit.send("acp:send-prompt", sessionId, text, [], []);
+        onClose();
+      }
 
       return {};
     };
@@ -95,7 +99,7 @@ const McpAppFrame = React.memo(({ app, sessionId }: { app: IMcpApp; sessionId: s
     nextBridge.connect(new McpAppBridge.PostMessageTransport(contentWindow, contentWindow))
       .then(() => nextBridge.sendSandboxResourceReady({ html: app.resource.text }))
       .catch(error => console.error("Failed to connect MCP App bridge", error));
-  }, [app.resource.text, app.upstreamId, sessionId]);
+  }, [app.resource.text, app.upstreamId, sessionId, onClose]);
 
   React.useEffect(() => {
     const onToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
@@ -142,51 +146,39 @@ const McpAppFrame = React.memo(({ app, sessionId }: { app: IMcpApp; sessionId: s
   return <iframe ref={iframe} onLoad={onLoad} sandbox="allow-scripts" srcDoc={SANDBOX_PROXY_HTML} />;
 });
 
-interface Props {
-  app: IMcpApp;
-  sessionId: string;
-  open: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-}
-
-export const McpAppComponent = React.memo(({ app, sessionId, open, onOpen, onClose }: Props) => {
-  const dialog = React.useRef<HTMLDialogElement>(null);
-
-  React.useEffect(() => {
-    open ? dialog.current?.showModal() : dialog.current?.close();
-  }, [open]);
-
-  return (
-    <FlexComponent color="default" border={[1]} rounded={[4]} margin={[2, 0]} padding={[4]} vertical="center">
-      <IconComponent color="gray-fg" font="" text={`${app.server} / ${app.tool}`} onClick={onOpen} />
-      <dialog className="color-default" ref={dialog} onClose={onClose}>
-        <FlexComponent position="absolute" inset={[8, 8, "auto", "auto"]}><IconComponent color="gray-fg" font="" onClick={onClose} /></FlexComponent>
-        <McpAppFrame app={app} sessionId={sessionId} />
-      </dialog>
-    </FlexComponent>
-  );
-});
-
-export const McpAppsComponent = React.memo(({ apps, sessionId }: { apps: (IMcpApp & { id: string; sessionId: string })[]; sessionId: string; }) => {
-  const knownIds = React.useRef(new Set<string>());
+export function McpAppsComponent({ sessionId }: { sessionId: string }) {
+  const [apps, setApps] = React.useState<(IMcpApp & { id: string })[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const filtered = apps.filter(a => a.id.startsWith(sessionId));
+  const onClose = React.useCallback(() => setActiveId(null), []);
 
   React.useEffect(() => {
-    const added = apps.filter(app => !knownIds.current.has(app.id));
-    const latest = added.filter(app => app.sessionId === sessionId).at(-1);
+    Emit.on("mcp-apps:render", onRender);
 
-    apps.forEach(app => knownIds.current.add(app.id));
-    setActiveId(active => latest?.id || (apps.some(app => app.id === active && app.sessionId === sessionId) ? active : null));
-  }, [apps, sessionId]);
+    return () => {
+      Emit.off("mcp-apps:render", onRender);
+    };
+  }, [sessionId]);
 
-  return (
-    <>
-      {apps.map(app => app.sessionId !== sessionId ? null : (
-        <FlexComponent key={app.id} animate="fade-in" direction="column" padding={[4, 2]}>
-          <McpAppComponent app={app} sessionId={sessionId} open={activeId === app.id} onOpen={() => setActiveId(app.id)} onClose={() => setActiveId(active => active === app.id ? null : active)} />
-        </FlexComponent>
+  function onRender(app: IMcpApp) {
+    setApps(apps => {
+      const id = `${sessionId}_${app.upstreamId}_${app.resource.uri}`
+      setActiveId(id);
+
+      return [...apps.filter(app => app.id !== id), { ...app, id }];
+    });
+  };
+
+  return filtered.length === 0 ? null : (
+    <CollapseComponent label="󱘍 Apps" badge={`${filtered.length}`} style={{marginBottom: 4}} open>
+      {filtered.map(app => (
+        <React.Fragment key={app.id}>
+          <FlexComponent color="purple-fg" onClick={() => setActiveId(app.id)}>{`${app.server} / ${app.tool}`}</FlexComponent>
+          <DialogComponent open={activeId === app.id} onClose={onClose}>
+            <McpAppFrame app={app} sessionId={sessionId} onClose={onClose} />
+          </DialogComponent>
+        </React.Fragment>
       ))}
-    </>
+    </CollapseComponent>
   );
-});
+}
