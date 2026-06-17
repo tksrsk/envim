@@ -465,9 +465,7 @@ export function AcpComponent() {
   function onCancel(e: React.MouseEvent) {
     e.stopPropagation();
 
-    if (document.activeElement !== textarea.current && document.activeElement !== command.current) {
-      state.mode.main === "input" ? textarea.current?.focus() : command.current?.focus();
-    }
+    e.type !== "mousemove" && state.mode.main === "blur" && command.current?.focus();
   }
 
   function getStatusIcon(status?: string | null) {
@@ -546,7 +544,7 @@ export function AcpComponent() {
   }
 
   return (
-    <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseUp={onCancel}>
+    <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
       <input style={styles.command} type="text" ref={command} onKeyDown={handleNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
