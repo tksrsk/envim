@@ -68,6 +68,8 @@ export class Acp {
       : { sessionId, configId, value };
 
     Acp.callAgent(Acp.connection.setSessionConfigOption(params)).then(response => {
+      if (!response) return;
+
       const session = Acp.sessions[sessionId];
       if (session) {
         session.configOptions = response.configOptions;
@@ -193,14 +195,12 @@ export class Acp {
     return true;
   }
 
-  private static callAgent<T>(promise: Promise<T>): Promise<T> {
+  private static callAgent<T>(promise: Promise<T>): Promise<T | void> {
     Acp.setState({ ...Acp.state, error: undefined });
 
-    promise.catch(err => {
+    return promise.catch(err => {
       Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
     });
-
-    return promise;
   }
 
   static async startAgent(agent: IAcpRegistryAgent) {
@@ -228,6 +228,8 @@ export class Acp {
           version: "1.0.0"
         }
       })).then(response => {
+        if (!response) return;
+
         Acp.capabilities = response.agentCapabilities;
         Acp.listSession();
       });
@@ -243,6 +245,8 @@ export class Acp {
 
     if (Acp.capabilities?.sessionCapabilities?.list) {
       Acp.callAgent(Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd })).then(response => {
+        if (!response) return;
+
         response.sessions.forEach(session => {
           if (!Acp.sessions[session.sessionId]) {
             Acp.sessions[session.sessionId] = {
@@ -279,6 +283,8 @@ export class Acp {
       cwd: Acp.workspace.current.cwd,
       mcpServers: await Mcp.servers(),
     })).then(response => {
+      if (!response) return;
+
       const session: IAcpSession = {
         id: response.sessionId,
         name: `Session ${new Date().toLocaleTimeString()}`,
@@ -349,6 +355,8 @@ export class Acp {
       Acp.callAgent(Acp.connection[method]({
         sessionId, cwd: Acp.workspace.current.cwd, mcpServers
       })).then(response => {
+        if (!response) return;
+
         session.configOptions = response.configOptions || [];
         Acp.setState({ ...Acp.state, status: "connected" });
         Acp.notifySessionUpdate();
@@ -380,6 +388,8 @@ export class Acp {
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
       Acp.setState({ ...Acp.state, status: "processing" });
       Acp.callAgent(Acp.connection.prompt({ sessionId, prompt })).then(result => {
+        if (!result) return;
+
         if (result && result.stopReason !== "end_turn") {
           Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
         }

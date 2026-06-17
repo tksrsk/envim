@@ -589,7 +589,12 @@ export function AcpComponent() {
       </FlexComponent>
 
       <FlexComponent direction="column" overflow="visible" padding={[4]}>
-        {state.status.error && <FlexComponent color="red" padding={[4]} rounded={[4]}>{state.status.error}</FlexComponent>}
+        {state.status.error &&
+          <FlexComponent color="red" padding={[4]} rounded={[4]}>
+            <IconComponent font="" />
+            {state.status.error}
+          </FlexComponent>
+        }
         {state.status.error && <div className="divider color-gray" /> }
         {state.session?.usage &&
           <FlexComponent color="orange" padding={[4]} rounded={[4]}>
