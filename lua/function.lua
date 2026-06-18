@@ -55,4 +55,8 @@ vim.cmd([[
   function! EnvimInput(prompt, ...)
     return v:lua.envim_input(a:prompt, get(a:, 1, v:false), get(a:, 2, v:false))
   endfunction
+
+  function! EnvimReadBlob(path)
+    return blob2list(readblob(a:path))
+  endfunction
 ]])

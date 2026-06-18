@@ -58,7 +58,6 @@ export function WebviewComponent(props: Props) {
   const icon = state.searchengines.some(({ uri }) => uri === state.input)
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
-  const preview = props.src.search(/^file:\/\/.*[\/\\]Envim[\/\\]tmp.\w+$/) === 0;
   const color = { command: "green", visual: "purple", browser: "blue" }[state.mode] || "default";
 
   React.useEffect(() => {
@@ -434,14 +433,14 @@ export function WebviewComponent(props: Props) {
 
   return (
     <FlexComponent animate="fade-in" direction="column" position="absolute" color="default" overflow="visible" inset={[0]} style={props.style} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
-      <input style={styles.command} type="text" ref={command} onChange={onChange} onFocus={onFocus} onKeyDown={preview ? undefined : onKeyDown} tabIndex={-1} />
+      <input style={styles.command} type="text" ref={command} onChange={onChange} onFocus={onFocus} onKeyDown={onKeyDown} tabIndex={-1} />
       <FlexComponent color="gray-fg" vertical="center" horizontal="center">
         { state.loading
           ? <><div className="animate loading inline"></div><FlexComponent margin={[0, 4]} style={styles.title}>{ state.title }</FlexComponent></>
           : <IconComponent font={state.favicon || ""} text={state.title} style={styles.title} />
         }
       </FlexComponent>
-      <FlexComponent vertical="center" overflow="visible" nomouse={preview}>
+      <FlexComponent vertical="center" overflow="visible" >
         <IconComponent font="" onClick={() => runAction("navigate-backward")} />
         <IconComponent font="" onClick={() => runAction("navigate-forward")} />
         <IconComponent font={ state.loading ? "" : "󰑓" } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
@@ -450,13 +449,13 @@ export function WebviewComponent(props: Props) {
         </MenuComponent>
         <FlexComponent grow={1} shrink={2} padding={[0, 8, 0, 0]}>
           <form style={styles.form} onSubmit={onSubmit}>
-            <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} onFocus={onFocus} disabled={preview} tabIndex={-1} />
+            <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} onFocus={onFocus} tabIndex={-1} />
           </form>
         </FlexComponent>
         <IconComponent font="" />
         <FlexComponent shrink={3}>
           <form style={styles.input} onSubmit={onSubmit}>
-            <input style={styles.input} type="text" ref={search} value={state.search} onChange={onChange} onFocus={onFocus} disabled={preview} tabIndex={-1} />
+            <input style={styles.input} type="text" ref={search} value={state.search} onChange={onChange} onFocus={onFocus} tabIndex={-1} />
           </form>
         </FlexComponent>
         <IconComponent font="" onClick={() => runAction("zoom-out")} />

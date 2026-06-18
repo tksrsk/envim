@@ -37,7 +37,7 @@ interface States {
   dragging: boolean;
   hidden: boolean;
   scrolling: number;
-  preview: { src: string; active: boolean; };
+  webview: { src: string; active: boolean; };
   scroll: {
     total: number;
     height: string;
@@ -47,7 +47,7 @@ interface States {
 
 export function EditorComponent(props: Props) {
   const { busy, options, mode, bufs, drag } = useEditor();
-  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.id, dragging: false, hidden: false, scrolling: 0, preview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
+  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.id, dragging: false, hidden: false, scrolling: 0, webview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
   const canvas: React.RefObject<HTMLCanvasElement | null> = React.useRef<HTMLCanvasElement>(null);
   const timer: React.RefObject<number> = React.useRef(0);
   const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
@@ -58,7 +58,7 @@ export function EditorComponent(props: Props) {
   React.useEffect(() => {
     Emit.on(`clear:${props.id}`, onClear);
     Emit.on(`flush:${props.id}`, onFlush);
-    Emit.on(`preview:${props.id}`, onPreview);
+    Emit.on(`webview:${props.id}`, onWebview);
     Emit.on(`viewport:${props.id}`, onViewport);
 
     return () => {
@@ -66,7 +66,7 @@ export function EditorComponent(props: Props) {
       Canvas.delete(props.id);
       Emit.off(`clear:${props.id}`, onClear);
       Emit.off(`flush:${props.id}`, onFlush);
-      Emit.off(`preview:${props.id}`, onPreview);
+      Emit.off(`webview:${props.id}`, onWebview);
       Emit.off(`viewport:${props.id}`, onViewport);
     };
   }, []);
@@ -86,8 +86,8 @@ export function EditorComponent(props: Props) {
   }, [props.style.width, props.style.height]);
 
   React.useEffect(() => {
-      props.focus && Emit.share("envim:focusable", !state.preview.active);
-  }, [props.focus, state.preview.active]);
+      props.focus && Emit.share("envim:focusable", !state.webview.active);
+  }, [props.focus, state.webview.active]);
 
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
@@ -198,8 +198,8 @@ export function EditorComponent(props: Props) {
     flush.forEach(({ cells, scroll }) => Canvas.push(props.id, cells, scroll));
   }
 
-  function onPreview(src: string, active: boolean) {
-    setState(state => ({ ...state, preview: { src, active } }));
+  function onWebview(src: string, active: boolean) {
+    setState(state => ({ ...state, webview: { src, active } }));
   }
 
   function openExtWindow(e: React.MouseEvent) {
@@ -275,7 +275,7 @@ export function EditorComponent(props: Props) {
   }
 
   function renderPreview() {
-    const { src, active } = state.preview;
+    const { src, active } = state.webview;
     return active && <WebviewComponent src={src} active={props.focus} style={!state.hidden ? {} : { display: "none" }} />;
   }
 
@@ -318,7 +318,7 @@ export function EditorComponent(props: Props) {
                 { font: "󰉡", onClick: e => runCommand(e, "wincmd =") },
               ],
             ]) }
-            { !state.preview.active && props.type === "normal" && <IconComponent color="gray-fg" font="" onClick={e => runCommand(e, "write")} /> }
+            { !state.webview.active && props.type === "normal" && <IconComponent color="gray-fg" font="" onClick={e => runCommand(e, "write")} /> }
             { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
             { props.type === "external" && !state.hidden && (
               <>

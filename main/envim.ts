@@ -1,6 +1,6 @@
 import * as Electron from "electron";
 import { join } from "path";
-import { readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { NeovimClient } from "neovim";
 import { UiAttachOptions } from "neovim/lib/api/Neovim";
 
@@ -33,8 +33,7 @@ export class Envim {
     Emit.on("envim:resized", this.onResized);
     Emit.on("envim:theme", this.onTheme);
     Emit.on("envim:browser", this.onBrowser);
-    Emit.on("envim:preview", this.onPreview);
-    Emit.on("envim:preview:toggle", this.togglePreview);
+    Emit.on("envim:webview", this.toggleWebview);
     process.on("uncaughtException", this.onError);
     process.on("unhandledRejection", this.onError);
     Electron.nativeTheme.on("updated", this.handleTheme);
@@ -176,19 +175,12 @@ export class Envim {
     this.onCommand(`${command} +let\\ w:envim_browser_src="${encodeURIComponent(src)}" envim://browser`);
   }
 
-  private onPreview = (content: any, ext: string) => {
-    const path = join(Electron.app.getPath("userData"), `tmp.${ext}`);
-    const src = `file://${path}`;
-
-    writeFile(path, Buffer.from(content)).then(() => this.onBrowser(src, "vnew"));
-  }
-
-  private togglePreview = (winid: number, active: boolean, src: string) => {
+  private toggleWebview = (winid: number, active: boolean, src: string) => {
     const timer = setInterval(() => {
       const { id } = Grids.findByWinId(winid)?.getInfo() || {};
 
       if (id) {
-        Emit.update(`preview:${id}`, false, decodeURIComponent(src), active);
+        Emit.update(`webview:${id}`, false, decodeURIComponent(src), active);
         clearInterval(timer);
       }
     }, 200);

@@ -46,8 +46,7 @@ export class App {
       case "envim_dirchanged": return Autocmd.dirchanged(args[0]);
       case "envim_setbackground": return Emit.share("envim:theme", args[0]);
       case "envim_openurl": return args.length && Emit.share("envim:browser", args[0], args[1] || "");
-      case "envim_preview": return args.length === 2 && Emit.share("envim:preview", args[0], args[1]);
-      case "envim_preview_toggle": return args.length === 3 && Emit.share("envim:preview:toggle", args[0], args[1], args[2]);
+      case "envim_webview": return args.length === 3 && Emit.share("envim:webview", args[0], args[1], args[2]);
       case "envim_acp_stdout": return Emit.share("acp:stdout", args[0]);
       case "envim_acp_exited": return Emit.share("acp:exited");
       case "envim_acp_error": return Emit.share("acp:error", args[0]);

@@ -1,5 +1,7 @@
 import * as Electron from "electron";
 import { join } from "path";
+import { existsSync } from "fs";
+import { lookup } from "mime-types";
 
 import { Emit } from "main/emit";
 import { Browser } from "main/browser";
@@ -34,6 +36,24 @@ export class Bootstrap {
 
   private create() {
     if (Bootstrap.win) return;
+
+    Electron.session.defaultSession.protocol.handle("file", async (request) => {
+      const filePath = decodeURIComponent(new URL(request.url).pathname);
+      const path = process.platform === "win32" ? filePath.replace(/^\//, "") : filePath;
+
+      if (existsSync(path)) {
+        return Electron.net.fetch(request.url, { bypassCustomProtocolHandlers: true });
+      }
+
+      try {
+        const list = await Emit.share("envim:api", "nvim_call_function", ["EnvimReadBlob", [path]]) as number[] | null;
+        if (list) {
+          return new Response(new Uint8Array(Buffer.from(list)), { headers: { "Content-Type": lookup(path) || "application/octet-stream" } });
+        }
+      } catch {}
+
+      return new Response(null, { status: 404 });
+    });
 
     Bootstrap.win = new Electron.BrowserWindow({
       transparent: true,

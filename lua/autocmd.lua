@@ -5,9 +5,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   pattern = { "http://*", "https://*" },
   callback = function()
     vim.schedule(function()
-      local path = vim.fn.expand("%:p")
-
-      envim_connect(0, { "envim_openurl", path, "vnew" })
+      envim_connect(0, { "envim_openurl", vim.fn.expand("%:p"), "vnew" })
     end)
   end,
 })
@@ -17,13 +15,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   pattern = { "*.ico", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.mp4", "*.webm", "*.pdf" },
   callback = function()
     vim.schedule(function()
-      local path = vim.fn.expand("%:p")
-      local ext = vim.fn.expand("%:e")
-      local content = vim.fn.readblob(path)
-
-      content = ext == "svg" and content or vim.fn.blob2list(content)
-
-      envim_connect(0, { "envim_preview", content, ext })
+      envim_connect(0, { "envim_openurl", "file://" .. vim.fn.expand("%:p"), "vnew" })
     end)
   end,
 })
@@ -38,7 +30,7 @@ vim.api.nvim_create_autocmd({ "WinNew", "BufWinEnter" }, {
     vim.bo.buftype = "nofile"
     vim.bo.bufhidden = "wipe"
     vim.bo.buflisted = false
-    vim.schedule(function() envim_connect(0, { "envim_preview_toggle", winid, true, vim.w.envim_browser_src or "" }) end)
+    vim.schedule(function() envim_connect(0, { "envim_webview", winid, true, vim.w.envim_browser_src or "" }) end)
   end,
 })
 
@@ -56,7 +48,7 @@ vim.api.nvim_create_autocmd({ "BufLeave" }, {
 
         if prev == curr then
           vim.w.envim_browser_src = nil
-          vim.schedule(function () envim_connect(0, { "envim_preview_toggle", curr, false, "" }) end)
+          vim.schedule(function () envim_connect(0, { "envim_webview", curr, false, "" }) end)
         end
       end,
     })
