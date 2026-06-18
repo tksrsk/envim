@@ -46,9 +46,9 @@ export class Bootstrap {
       }
 
       try {
-        const list = await Emit.share("envim:api", "nvim_call_function", ["EnvimReadBlob", [path]]) as number[] | null;
+        const list = await Emit.share("envim:api", "nvim_call_function", ["EnvimReadBlob", [filePath]]) as number[] | null;
         if (list) {
-          return new Response(new Uint8Array(Buffer.from(list)), { headers: { "Content-Type": lookup(path) || "application/octet-stream" } });
+          return new Response(new Uint8Array(Buffer.from(list)), { headers: { "Content-Type": lookup(filePath) || "application/octet-stream" } });
         }
       } catch {}
 
