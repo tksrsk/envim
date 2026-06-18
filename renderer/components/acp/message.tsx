@@ -1,6 +1,6 @@
 import React from "react";
 import * as AcpSDK from "@agentclientprotocol/sdk";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
 import { diffLines } from "diff";
@@ -25,6 +25,11 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     const icon = icons.find(icon => file.match(icon.match))!;
 
     return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} onClick={() => Emit.send("envim:command", `edit ${file}`)} />;
+  }
+
+  function urlTransform(url: string) {
+    if (/^(data:|file:\/\/)/.test(url)) return url;
+    return defaultUrlTransform(url);
   }
 
   function getStatusIcon(status?: string | null) {
@@ -78,11 +83,11 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
         <div className="selectable">
           <FlexComponent overflow="auto">
             <FlexComponent position="absolute" inset={[0]}>
-              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
+              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
                 {`\`\`\`diff\n${signs.join("\n")}\n\`\`\``}
               </Markdown>
             </FlexComponent>
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
               {`${fence}${path.split(".").pop() || ""}\n${lines.join("\n")}\n${fence}`}
             </Markdown>
           </FlexComponent>
@@ -106,7 +111,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   function renderContent(content: AcpSDK.ContentBlock) {
     switch (content.type) {
       case "text":
-        return <div className="selectable"><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{content.text}</Markdown></div>;
+        return <div className="selectable"><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{content.text}</Markdown></div>;
       case "image":
         return <img src={content.uri || `data:${content.mimeType};base64,${content.data}`} />;
       case "resource":
@@ -156,7 +161,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
           >
             {input && (
               <CollapseComponent label=" INPUT" style={{marginBottom: 4}}>
-                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]}>{input}</Markdown></div>
+                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{input}</Markdown></div>
               </CollapseComponent>
             )}
             {message.update.content?.map(renderToolCallContent)}
