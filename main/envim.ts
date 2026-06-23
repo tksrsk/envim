@@ -36,7 +36,7 @@ export class Envim {
     Emit.on("envim:webview", this.toggleWebview);
     process.on("uncaughtException", this.onError);
     process.on("unhandledRejection", this.onError);
-    Electron.nativeTheme.on("updated", this.handleTheme);
+    Electron.nativeTheme.on("updated", this.onNativeTheme);
   }
 
   private onInit = () => {
@@ -70,7 +70,7 @@ export class Envim {
       }
       Emit.send("app:switch", true);
 
-      this.handleTheme();
+      this.onNativeTheme();
     };
 
     Connection.connect(type, path, bookmark, connect, error);
@@ -186,7 +186,7 @@ export class Envim {
     }, 200);
   }
 
-  private handleTheme = () => {
+  private onNativeTheme = () => {
     const theme = this.onTheme();
 
     setTimeout(() => {

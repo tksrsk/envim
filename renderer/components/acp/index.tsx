@@ -233,53 +233,53 @@ export function AcpComponent() {
     }
   }
 
-  function handleScrollContainer(e: React.UIEvent) {
+  function onScrollContainer(e: React.UIEvent) {
     const el = e.currentTarget;
     setState(state => ({ ...state, scroll: el.scrollHeight - el.scrollTop - el.clientHeight > 5 }));
   }
 
-  function handleSelectPackage(provider: string, agent: IAcpRegistryAgent) {
+  function onSelectPackage(provider: string, agent: IAcpRegistryAgent) {
     if (provider === "custom") {
       setState(state => ({ ...state, mode: { main: "input", sub: "package" }, input: JSON.stringify(agent, null, 2) }));
     } else {
-      handleStartAgent(agent);
+      onStartAgent(agent);
     }
   }
 
-  function handleDeleteCustomPackage(e: React.MouseEvent, agent: IAcpRegistryAgent) {
+  function onDeleteCustomPackage(e: React.MouseEvent, agent: IAcpRegistryAgent) {
     e.stopPropagation();
 
     Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
     Emit.send("envim:setting", Setting.get());
   }
 
-  function handleStartAgent(agent: IAcpRegistryAgent) {
+  function onStartAgent(agent: IAcpRegistryAgent) {
     Emit.send("acp:start-agent", agent);
   }
 
-  function handleStopAgent() {
+  function onStopAgent() {
     Emit.send("acp:stop-agent");
   }
 
-  function handleCreateSession() {
+  function onCreateSession() {
     Emit.send("acp:create-session");
   }
 
-  function handleSwitchSession(sessionId: string) {
+  function onSwitchSession(sessionId: string) {
     if (checkAcpStatus("connected")) {
       Emit.send("acp:switch-session", sessionId);
     }
   }
 
-  function handleDeleteSession(sessionId: string) {
+  function onDeleteSession(sessionId: string) {
     Emit.send("acp:delete-session", sessionId);
   }
 
-  function handleSetSessionConfigOption(configId: string, value: string | boolean) {
+  function onSetSessionConfigOption(configId: string, value: string | boolean) {
     checkAcpStatus("processing") || Emit.send("acp:config-session", configId, value);
   }
 
-  function handleSelectCommand(selected: string) {
+  function onSelectCommand(selected: string) {
     setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
   }
 
@@ -289,15 +289,15 @@ export function AcpComponent() {
     return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} onClick={() => Emit.send("envim:command", `edit ${file}`)} />;
   }
 
-  function handleRemoveFile(file: string) {
+  function onRemoveFile(file: string) {
     setState(state => ({ ...state, files: state.files.filter(f => f !== file) }));
   }
 
-  function handleRemoveImage(index: number) {
+  function onRemoveImage(index: number) {
     setState(state => ({ ...state, images: state.images.filter((_, i) => i !== index) }));
   }
 
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(e.clipboardData.items)
       .filter(item => item.kind === "file" && item.type.startsWith("image/"))
       .flatMap(item => item.getAsFile() || []);
@@ -317,7 +317,7 @@ export function AcpComponent() {
     }))).then(images => images.length && setState(state => ({ ...state, images: [...state.images, ...images] })));
   }
 
-  function handleEditMcp(e: React.MouseEvent | React.ChangeEvent, action: "toggle" | "delete", index: number) {
+  function onEditMcp(e: React.MouseEvent | React.ChangeEvent, action: "toggle" | "delete", index: number) {
     e.stopPropagation();
 
     switch (action) {
@@ -343,7 +343,7 @@ export function AcpComponent() {
     }
   }
 
-  function handleConfirmInput() {
+  function onConfirmInput() {
     const { input, search } = state;
 
     switch (state.mode.sub) {
@@ -355,7 +355,7 @@ export function AcpComponent() {
 
           Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== agent?.name), agent] };
           Emit.send("envim:setting", Setting.get());
-          handleStartAgent(agent);
+          onStartAgent(agent);
         } finally {
           return;
         }
@@ -398,7 +398,7 @@ export function AcpComponent() {
     setState(state => ({ ...state, search, input: "", files: [], images: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }
 
-  function handleCancelPrompt() {
+  function onCancelPrompt() {
     if (!checkAcpStatus("processing")) {
       return;
     }
@@ -406,7 +406,7 @@ export function AcpComponent() {
     Emit.send("acp:cancel-prompt", state.status.sessionId);
   }
 
-  function handleNormalKeyDown(e: React.KeyboardEvent) {
+  function onNormalKeyDown(e: React.KeyboardEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -418,30 +418,30 @@ export function AcpComponent() {
       case "j": return scrollTo("down");
       case "u": return e.ctrlKey && scrollTo("pageup");
       case "d": return e.ctrlKey && scrollTo("pagedown");
-      case "q": return handleCancelPrompt();
-      case "n": return state.search.query && handleSearch(state.search.active + 1);
-      case "N": return state.search.query && handleSearch(state.search.active - 1);
-      case "/": return handleSearchInput();
-      case "Enter": return handleConfirmInput();
+      case "q": return onCancelPrompt();
+      case "n": return state.search.query && onSearch(state.search.active + 1);
+      case "N": return state.search.query && onSearch(state.search.active - 1);
+      case "/": return onSearchInput();
+      case "Enter": return onConfirmInput();
       case "Escape": return state.search.highlight && clearSearch();
     }
   }
 
-  function handleInputKeyDown(e: React.KeyboardEvent) {
+  function onInputKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
       setState(state => ({ ...state, input: state.mode.sub === "search" ? "" : state.input, mode: { ...state.mode, main: "normal" } }));
     }
     if (e.key === "Enter" && state.mode.sub === "search") {
-      handleNormalKeyDown(e);
+      onNormalKeyDown(e);
     }
   }
 
-  function handleSearchInput() {
+  function onSearchInput() {
     state.session && setState(state => ({ ...state, input: "", mode: { main: "input", sub: "search" }, search: { query: "", active: 0, highlight: false, ranges: [] } }));
   }
 
-  function handleSearch(active: number) {
+  function onSearch(active: number) {
     state.search.ranges.length && setState(s => ({ ...s, search: { ...s.search, highlight: true, active: (active + s.search.ranges.length) % s.search.ranges.length } }));
   }
 
@@ -506,9 +506,9 @@ export function AcpComponent() {
     return !registry.available || registry.agent.length === 0 ? null : (
       <MenuComponent key={kind} side label={kind}>
         {registry.agent.map((agent, i) => (
-          <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => handleSelectPackage(kind, agent)} spacing>
+          <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => onSelectPackage(kind, agent)} spacing>
             {agent.name}
-            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => handleDeleteCustomPackage(e, agent)} hover />}
+            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
           </FlexComponent>
         ))}
       </MenuComponent>
@@ -519,14 +519,14 @@ export function AcpComponent() {
     switch (config.type) {
       case "boolean":
         return (
-          <FlexComponent key={config.id} animate="hover" onClick={() => handleSetSessionConfigOption(config.id, !config.currentValue)} spacing>
+          <FlexComponent key={config.id} animate="hover" onClick={() => onSetSessionConfigOption(config.id, !config.currentValue)} spacing>
             <input type="checkbox" checked={config.currentValue} readOnly />
             {config.name}
           </FlexComponent>
         );
       case "select":
         const renderConfigSelectOption = (option: AcpSDK.SessionConfigSelectOption) => (
-          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => handleSetSessionConfigOption(config.id, option.value)} spacing>
+          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => onSetSessionConfigOption(config.id, option.value)} spacing>
             {option.name}
           </FlexComponent>
         );
@@ -545,10 +545,10 @@ export function AcpComponent() {
 
   return (
     <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
-      <input style={styles.command} type="text" ref={command} onKeyDown={handleNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
+      <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
-          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={handleScrollContainer}>
+          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
             <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
 
             <div ref={scroll} />
@@ -597,7 +597,7 @@ export function AcpComponent() {
                 <FlexComponent key={file}>
                   {renderFile(file)}
                   <div className="space" />
-                  <IconComponent font="" color="gray-fg" float="right" onClick={() => handleRemoveFile(file)} />
+                  <IconComponent font="" color="gray-fg" float="right" onClick={() => onRemoveFile(file)} />
                 </FlexComponent>
               ))}
           </CollapseComponent>
@@ -608,13 +608,13 @@ export function AcpComponent() {
               <FlexComponent key={index} vertical="center" padding={[2]}>
                 <img src={`data:${image.mimeType};base64,${image.data}`} style={styles.image} />
                 <div className="space" />
-                <IconComponent font="" color="gray-fg" onClick={() => handleRemoveImage(index)} />
+                <IconComponent font="" color="gray-fg" onClick={() => onRemoveImage(index)} />
               </FlexComponent>
             ))}
           </CollapseComponent>
         )}
         <FlexComponent overflow="visible">
-          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={handleStopAgent} />}
+          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onStopAgent} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
@@ -624,20 +624,20 @@ export function AcpComponent() {
           <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "mcp" } }))} />}>
             {Setting.acp.mcpServers.map((mcp, i) => (
               <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: { main: "normal", sub: "mcp", mcp: i } }))} spacing>
-                <input type="checkbox" checked={mcp.enabled} onChange={e => handleEditMcp(e, "toggle", i)} />
+                <input type="checkbox" checked={mcp.enabled} onChange={e => onEditMcp(e, "toggle", i)} />
                 {mcp.server.name}
-                <IconComponent color="gray" font="" float="right" onClick={e => handleEditMcp(e, "delete", i)} hover />
+                <IconComponent color="gray" font="" float="right" onClick={e => onEditMcp(e, "delete", i)} hover />
               </FlexComponent>
             ))}
           </MenuComponent>
           <div className="space" />
-          {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={handleSearchInput} />}
+          {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
           {(checkAcpStatus("connected")) && (
-            <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={handleCreateSession} />}>
+            <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onCreateSession} />}>
               {state.sessions.filter(({ status }) => status === "show").map(session => (
-                <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => handleSwitchSession(session.id)} spacing >
+                <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onSwitchSession(session.id)} spacing >
                   {session.name}
-                  <IconComponent color="gray" font="󰅖" float="right" onClick={() => handleDeleteSession(session.id) } hover />
+                  <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />
                 </FlexComponent>
               ))}
             </MenuComponent>
@@ -648,8 +648,8 @@ export function AcpComponent() {
           placeholder={getPlaceholder()}
           value={state.input}
           onChange={e => setState(state => ({ ...state, input: e.target.value }))}
-          onKeyDown={handleInputKeyDown}
-          onPaste={handlePaste}
+          onKeyDown={onInputKeyDown}
+          onPaste={onPaste}
           onFocus={() => Emit.share("envim:focused")}
           rows={8}
         />
@@ -657,7 +657,7 @@ export function AcpComponent() {
           {state.session && state.session.commands.length > 0 && (
             <MenuComponent label="" color="green-fg">
               {state.session.commands.map((command) => (
-                <FlexComponent key={command.name} onClick={() => handleSelectCommand(command.name)} title={command.description} spacing>
+                <FlexComponent key={command.name} onClick={() => onSelectCommand(command.name)} title={command.description} spacing>
                   /{command.name}
                 </FlexComponent>
               ))}
@@ -666,8 +666,8 @@ export function AcpComponent() {
           {state.session?.configOptions?.map(renderConfigOption)}
           <div className="space" />
           {checkAcpStatus("processing") && <div className="animate loading inline" />}
-          <IconComponent font="" color="red-fg" onClick={handleCancelPrompt} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
-          <IconComponent font="󰒊" color="blue-fg" onClick={handleConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
+          <IconComponent font="" color="red-fg" onClick={onCancelPrompt} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
+          <IconComponent font="󰒊" color="blue-fg" onClick={onConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
         </FlexComponent>
       </FlexComponent>
     </FlexComponent>
