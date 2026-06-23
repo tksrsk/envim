@@ -1,6 +1,5 @@
 import React from "react";
 import * as AcpSDK from "@agentclientprotocol/sdk";
-import { zMcpServer } from "@agentclientprotocol/sdk/dist/schema/zod.gen";
 
 import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
@@ -363,7 +362,7 @@ export function AcpComponent() {
         try {
           const server = JSON.parse(input);
 
-          if (!zMcpServer.safeParse(server).success) {
+          if (!server.name || !["http", "sse", "stdio", "acp"].includes(server.type)) {
             return;
           }
 

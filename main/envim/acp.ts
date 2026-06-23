@@ -12,7 +12,7 @@ export class Acp {
   private static initialized = false;
   private static state: IAcpStatus = { status: "disconnected" };
   private static workspace: { current: { name: string; cwd: string }; state: { [k: string]: { cwd: string; status: IAcpStatus } }; } = { current: { name: "default", cwd: "" }, state: {} };
-  private static connection: AcpSDK.ClientSideConnection | null = null;
+  private static connection: AcpSDK.ClientConnection | null = null;
   private static capabilities?: AcpSDK.AgentCapabilities;
   private static sessions: { [key: string]: IAcpSession } = {};
   private static tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
@@ -58,16 +58,14 @@ export class Acp {
   }
 
   private static onSetSessionConfigOption(configId: string, value: string | boolean) {
-    if (!Acp.connection || !Acp.state.sessionId) {
-      return;
-    }
+    if (!Acp.connection || !Acp.state.sessionId) return;
 
     const sessionId = Acp.state.sessionId;
     const params = typeof value === "boolean"
       ? { sessionId, configId, type: "boolean" as const, value }
       : { sessionId, configId, value };
 
-    Acp.callAgent(Acp.connection.setSessionConfigOption(params)).then(response => {
+    Acp.callAgent(AcpSDK.methods.agent.session.setConfigOption, params).then(response => {
       if (!response) return;
 
       const session = Acp.sessions[sessionId];
@@ -195,10 +193,15 @@ export class Acp {
     return true;
   }
 
-  private static callAgent<T>(promise: Promise<T>): Promise<T | void> {
+  private static callAgent<M extends AcpSDK.AgentRequestMethod>(
+    method: M,
+    params: AcpSDK.AgentRequestParamsByMethod[M],
+  ): Promise<AcpSDK.AgentRequestResponsesByMethod[M] | void> {
+    if (!Acp.connection) return Promise.resolve();
+
     Acp.setState({ ...Acp.state, error: undefined });
 
-    return promise.catch(err => {
+    return (Acp.connection.agent.request(method, params)).catch(err => {
       Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
     });
   }
@@ -210,13 +213,12 @@ export class Acp {
 
     if (result == "executed") {
       if (!Acp.connection) {
-        Acp.connection = new AcpSDK.ClientSideConnection(
-          () => Acp.createClient(),
-          Acp.createStream()
-        );
+        const stream = Acp.createStream();
+
+        Acp.connection = Acp.buildApp().connect(stream);
       }
 
-      Acp.callAgent(Acp.connection.initialize({
+      Acp.callAgent(AcpSDK.methods.agent.initialize, {
         protocolVersion: 1,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
@@ -227,7 +229,7 @@ export class Acp {
           title: "Envim Editor",
           version: "1.0.0"
         }
-      })).then(response => {
+      }).then(response => {
         if (!response) return;
 
         Acp.capabilities = response.agentCapabilities;
@@ -240,13 +242,11 @@ export class Acp {
   }
 
   static listSession() {
-    if (!Acp.connection) {
-      return;
-    }
+    if (!Acp.connection) return;
 
     if (Acp.capabilities?.sessionCapabilities?.list) {
       Acp.setState({ ...Acp.state, status: "processing" });
-      Acp.callAgent(Acp.connection.listSessions({ cwd: Acp.workspace.current.cwd })).then(response => {
+      Acp.callAgent(AcpSDK.methods.agent.session.list, { cwd: Acp.workspace.current.cwd }).then(response => {
         if (!response) return;
 
         response.sessions.forEach(session => {
@@ -271,20 +271,18 @@ export class Acp {
   }
 
   static async createSession() {
-    if (!Acp.connection) {
-      return;
-    }
+    if (!Acp.connection) return;
 
     Acp.setState({ ...Acp.state, status: "processing" });
 
     if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
-      await Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
+      await Acp.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: Acp.state.sessionId });
     }
 
-    return Acp.callAgent(Acp.connection.newSession({
+    return Acp.callAgent(AcpSDK.methods.agent.session.new, {
       cwd: Acp.workspace.current.cwd,
       mcpServers: await Mcp.servers(),
-    })).then(response => {
+    }).then(response => {
       if (!response) return;
 
       const session: IAcpSession = {
@@ -322,7 +320,7 @@ export class Acp {
 
   static deleteSession(sessionId: string) {
     if (Acp.connection && Acp.capabilities?.sessionCapabilities?.delete) {
-      Acp.callAgent(Acp.connection.deleteSession({ sessionId }));
+      Acp.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
     }
 
     delete(Acp.sessions[sessionId]);
@@ -338,12 +336,10 @@ export class Acp {
   static async setActiveSession(sessionId: string) {
     const session = Acp.sessions[sessionId];
 
-    if (!session || !Acp.connection) {
-      return;
-    }
+    if (!session || !Acp.connection) return;
 
     if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
-      await Acp.connection.closeSession({ sessionId: Acp.state.sessionId });
+      await Acp.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: Acp.state.sessionId });
     }
 
     if (
@@ -351,12 +347,12 @@ export class Acp {
       (!session.loaded && Acp.capabilities?.loadSession)
     ) {
       const mcpServers = await Mcp.servers();
-      const method = session.loaded ? "resumeSession" : "loadSession";
+      const method = session.loaded ? AcpSDK.methods.agent.session.resume : AcpSDK.methods.agent.session.load;
 
       Acp.setState({ ...Acp.state, status: "processing", sessionId });
-      Acp.callAgent(Acp.connection[method]({
+      Acp.callAgent(method, {
         sessionId, cwd: Acp.workspace.current.cwd, mcpServers
-      })).then(response => {
+      }).then(response => {
         if (!response) return;
 
         session.configOptions = response.configOptions || [];
@@ -377,9 +373,7 @@ export class Acp {
 
   static sendPrompt(sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) {
     const callback = (sessionId: string) => {
-      if (!Acp.connection || !Acp.sessions[sessionId]) {
-        return;
-      }
+      if (!Acp.connection || !Acp.sessions[sessionId]) return;
 
       const prompt: AcpSDK.ContentBlock[] = [
         ...(text ? [{ type: "text" as "text", text }] : []),
@@ -389,7 +383,7 @@ export class Acp {
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
       Acp.setState({ ...Acp.state, status: "processing" });
-      Acp.callAgent(Acp.connection.prompt({ sessionId, prompt })).then(result => {
+      Acp.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
         if (!result) return;
 
         if (result && result.stopReason !== "end_turn") {
@@ -412,13 +406,11 @@ export class Acp {
   }
 
   static cancelPrompt(sessionId: string) {
-    if (!Acp.connection) {
-      return;
-    }
+    if (!Acp.connection) return;
 
-    Acp.setState({ ...Acp.state, status: "processing" });
-    Acp.callAgent(Acp.connection.cancel({ sessionId }));
-    Acp.setState({ ...Acp.state, status: "connected" });
+    Acp.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
+      Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
+    });
   }
 
 
@@ -599,6 +591,19 @@ export class Acp {
     return AcpSDK.ndJsonStream(webWritable, webReadable);
   }
 
+  private static buildApp() {
+    return AcpSDK.client({ name: "Envim" })
+      .onRequest(AcpSDK.methods.client.fs.readTextFile, ctx => Acp.onReadTextFile(ctx.params))
+      .onRequest(AcpSDK.methods.client.fs.writeTextFile, ctx => Acp.onWriteTextFile(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.create, ctx => Acp.onCreateTerminal(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.output, ctx => Acp.onTerminalOutputRequest(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.waitForExit, ctx => Acp.onWaitForTerminalExit(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.kill, ctx => Acp.onKillTerminal(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.release, ctx => Acp.onReleaseTerminal(ctx.params))
+      .onRequest(AcpSDK.methods.client.session.requestPermission, ctx => Acp.onRequestPermission(ctx.params))
+      .onNotification(AcpSDK.methods.client.session.update, ctx => Acp.onSessionUpdate(ctx.params));
+  }
+
   private static async onRequestPermission(params: AcpSDK.RequestPermissionRequest): Promise<AcpSDK.RequestPermissionResponse> {
     const requestId = `perm_${randomBytes(16).toString("hex")}`;
 
@@ -628,19 +633,5 @@ export class Acp {
       delete(Acp.tool[tool.toolCallId]._meta!.permissionRequest);
       Acp.processToolUpdate(Acp.state.sessionId!, tool);
     }
-  }
-
-  private static createClient(): AcpSDK.Client {
-    return {
-      readTextFile: async params => await Acp.onReadTextFile(params),
-      writeTextFile: async params => await Acp.onWriteTextFile(params),
-      createTerminal: async params => Acp.onCreateTerminal(params),
-      terminalOutput: async params => Acp.onTerminalOutputRequest(params),
-      waitForTerminalExit: async params => Acp.onWaitForTerminalExit(params),
-      killTerminal: async params => Acp.onKillTerminal(params),
-      releaseTerminal: async params => Acp.onReleaseTerminal(params),
-      requestPermission: async params => Acp.onRequestPermission(params),
-      sessionUpdate: async params => Acp.onSessionUpdate(params)
-    };
   }
 }
