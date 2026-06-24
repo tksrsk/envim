@@ -552,6 +552,17 @@ export function AcpComponent() {
 
             <div ref={scroll} />
           </FlexComponent>
+        ) : state.status.status === "auth_required" && state.status.authMethods ? (
+          <FlexComponent color="default" direction="column" grow={1} vertical="center" horizontal="center" padding={[16]}>
+            <span style={{ marginBottom: 8 }}>Authentication Required</span>
+            {state.status.authMethods.map(method => (
+              <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
+                onClick={() => Emit.send("acp:authenticate", method.id)}
+              >
+                <IconComponent font="󰌆" text={method.name} />
+              </FlexComponent>
+            ))}
+          </FlexComponent>
         ) : (
           <FlexComponent color="default" horizontal="center" vertical="center" grow={1}>
             <span style={{ opacity: 0.5 }}>No active session</span>

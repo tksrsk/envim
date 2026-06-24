@@ -33,6 +33,7 @@ export class Acp {
       Emit.on("acp:send-prompt", Acp.sendPrompt);
       Emit.on("acp:cancel-prompt", Acp.cancelPrompt);
       Emit.on("acp:permission-response", Acp.onPermissionResponse);
+      Emit.on("acp:authenticate", Acp.authenticate);
       Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
@@ -202,7 +203,11 @@ export class Acp {
     Acp.setState({ ...Acp.state, error: undefined });
 
     return (Acp.connection.agent.request(method, params)).catch(err => {
-      Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
+      const error = err instanceof Error ? err.message : String(err);
+      const autherror = Acp.state.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
+      const status = autherror ? "auth_required" : "connected";
+
+      Acp.setState({ ...Acp.state, status, error });
     });
   }
 
@@ -233,11 +238,13 @@ export class Acp {
         if (!response) return;
 
         Acp.capabilities = response.agentCapabilities;
-        Acp.setState({ ...Acp.state, status: "connected" });
+
+        const authMethods = response.authMethods?.filter(m => m.type !== "env_var");
+        Acp.setState({ ...Acp.state, authMethods, status: "connected" });
         Acp.listSession();
       });
     } else {
-      Acp.setState({ status: result === "initialized" ? "connected" : "disconnected" });
+      Acp.setState({ ...Acp.state, status: result === "initialized" ? "connected" : "disconnected" });
     }
   }
 
@@ -306,6 +313,16 @@ export class Acp {
     Acp.setState({ status: "disconnected" });
 
     Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStop", []]);
+  }
+
+  static authenticate(methodId: string) {
+    if (!Acp.connection) return;
+
+    Acp.setState({ ...Acp.state, status: "connecting" });
+    Acp.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(() => {
+      Acp.setState({ ...Acp.state, status: "connected", authMethods: [] });
+      Acp.listSession();
+    });
   }
 
 
