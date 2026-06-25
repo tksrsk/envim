@@ -5,7 +5,6 @@ import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-import { icons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
@@ -280,12 +279,6 @@ export function AcpComponent() {
 
   function onSelectCommand(selected: string) {
     setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
-  }
-
-  function renderFile(file: string) {
-    const icon = icons.find(icon => file.match(icon.match))!;
-
-    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} onClick={() => Emit.send("envim:command", `edit ${file}`)} />;
   }
 
   function onRemoveFile(file: string) {
@@ -605,7 +598,7 @@ export function AcpComponent() {
           <CollapseComponent label=" Files" badge={`${state.files.length}`} style={{marginBottom: 4}} open>
               {state.files.map(file => (
                 <FlexComponent key={file}>
-                  {renderFile(file)}
+                  <a href={`file://${file}`}>{file}</a>
                   <div className="space" />
                   <IconComponent font="" color="gray-fg" float="right" onClick={() => onRemoveFile(file)} />
                 </FlexComponent>

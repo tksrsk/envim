@@ -112,7 +112,8 @@ export function EditorComponent(props: Props) {
     pointer.current = { row, col };
 
     if (url && action === "press") {
-      url.search(/^https?:\/\//) < 0 ? runCommand(e, `edit ${url}`) : Emit.send("envim:browser", url);
+      const href = url.replace(/^\//, "file:///")
+      if (href.match(/^\w+:/)) window.location.href = href;
     }
     if (!skip && button === "move") {
       (e.currentTarget as HTMLElement).style.cursor = url ? "pointer" : "";

@@ -8,7 +8,6 @@ import { diffLines } from "diff";
 import { IPermissionRequest } from "common/interface";
 
 import { Emit } from "renderer/utils/emit";
-import { icons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
@@ -21,12 +20,6 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotification }) => {
-  function renderFile(file: string) {
-    const icon = icons.find(icon => file.match(icon.match))!;
-
-    return <IconComponent font={icon.font} color={`${icon.color}-fg`} text={file} onClick={() => Emit.send("envim:command", `edit ${file}`)} />;
-  }
-
   function urlTransform(url: string) {
     if (/^(data:|file:\/\/)/.test(url)) return url;
     return defaultUrlTransform(url);
@@ -75,7 +68,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
 
     return (
       <>
-        {renderFile(path)}
+        <a href={`file://${path}`}>{path}</a>;
         <FlexComponent>
           {added > 0 && <span className="color-green-fg" style={{padding: "0 2px"}}>+{added}</span>}
           {removed > 0 && <span className="color-red-fg" style={{padding: "0 2px"}}>-{removed}</span>}
@@ -117,8 +110,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
       case "resource":
         return <div style={{ whiteSpace: "pre-wrap" }}>[resource: {content.resource.uri}]</div>;
       case "resource_link":
-        const { pathname } = new URL(content.uri);
-        return pathname && renderFile(pathname);
+        return <a href={content.uri}>{(new URL(content.uri)).pathname}</a>;
       default:
         return null;
     }
