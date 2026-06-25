@@ -54,6 +54,13 @@ p {
   white-space: pre-wrap;
 }
 
+blockquote {
+  border-left: 2px solid var(--color-gray);
+  margin: 1em 0;
+  padding: .5em;
+  font-style: italic;
+}
+
 table {
   display: block;
   overflow: auto;
