@@ -344,10 +344,9 @@ export class Acp {
   }
 
   static deleteSession(sessionId: string) {
-    if (Acp.connection && Acp.capabilities?.sessionCapabilities?.delete) {
-      Acp.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
-    }
+    if (!Acp.connection) return;
 
+    Acp.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
     delete(Acp.sessions[sessionId]);
 
     if (Acp.state.sessionId === sessionId) {

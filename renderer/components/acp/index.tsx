@@ -645,7 +645,7 @@ export function AcpComponent() {
               {state.sessions.filter(({ status }) => status === "show").map(session => (
                 <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onSwitchSession(session.id)} spacing >
                   {session.name}
-                  <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />
+                  {state.status.capabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />}
                 </FlexComponent>
               ))}
             </MenuComponent>
