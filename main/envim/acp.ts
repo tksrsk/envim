@@ -34,6 +34,7 @@ export class Acp {
       Emit.on("acp:cancel-prompt", Acp.cancelPrompt);
       Emit.on("acp:permission-response", Acp.onPermissionResponse);
       Emit.on("acp:authenticate", Acp.authenticate);
+      Emit.on("acp:logout", Acp.onLogout);
       Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
@@ -240,7 +241,7 @@ export class Acp {
         Acp.capabilities = response.agentCapabilities;
 
         const authMethods = response.authMethods?.filter(m => m.type !== "env_var");
-        Acp.setState({ ...Acp.state, authMethods, status: "connected" });
+        Acp.setState({ ...Acp.state, authMethods, capabilities: Acp.capabilities, status: "connected" });
         Acp.listSession();
       });
     } else {
@@ -325,6 +326,13 @@ export class Acp {
     });
   }
 
+  static onLogout() {
+    if (!Acp.connection) return;
+
+    Acp.callAgent(AcpSDK.methods.agent.logout, {}).then(() => {
+      Acp.setState({ ...Acp.state, status: "auth_required" });
+    });
+  }
 
   static cleanup() {
     Acp.tool = {};

@@ -129,6 +129,7 @@ export interface IAcpStatus {
   sessionId?: string;
   error?: string;
   authMethods?: AcpSDK.AuthMethod[];
+  capabilities?: AcpSDK.AgentCapabilities;
 }
 
 export interface IAcpRegistryAgent {

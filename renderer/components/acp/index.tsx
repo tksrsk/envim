@@ -259,6 +259,10 @@ export function AcpComponent() {
     Emit.send("acp:stop-agent");
   }
 
+  function onLogout() {
+    Emit.send("acp:logout");
+  }
+
   function onCreateSession() {
     Emit.send("acp:create-session");
   }
@@ -618,6 +622,7 @@ export function AcpComponent() {
         )}
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onStopAgent} />}
+          {checkAcpStatus("connected") && state.status.capabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
