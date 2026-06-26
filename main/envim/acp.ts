@@ -24,21 +24,21 @@ export class Acp {
   static async setup(init: boolean, workspace: string) {
     if (!Acp.initialized) {
       Acp.initialized = true;
-      Emit.on("acp:toggle", Acp.togglePanel);
-      Emit.on("acp:start-agent", Acp.startAgent);
-      Emit.on("acp:stop-agent", Acp.stopAgent);
-      Emit.on("acp:create-session", Acp.createSession);
-      Emit.on("acp:switch-session", Acp.setActiveSession);
-      Emit.on("acp:delete-session", Acp.deleteSession);
-      Emit.on("acp:send-prompt", Acp.sendPrompt);
-      Emit.on("acp:cancel-prompt", Acp.cancelPrompt);
+      Emit.on("acp:toggle", Acp.onToggle);
+      Emit.on("acp:start-agent", Acp.onStartAgent);
+      Emit.on("acp:stop-agent", Acp.onStopAgent);
+      Emit.on("acp:create-session", Acp.onCreateSession);
+      Emit.on("acp:switch-session", Acp.onSwitchSession);
+      Emit.on("acp:delete-session", Acp.onDeleteSession);
+      Emit.on("acp:send-prompt", Acp.onSendPrompt);
+      Emit.on("acp:cancel-prompt", Acp.onCancelPrompt);
       Emit.on("acp:permission-response", Acp.onPermissionResponse);
-      Emit.on("acp:authenticate", Acp.authenticate);
+      Emit.on("acp:authenticate", Acp.onAuthenticate);
       Emit.on("acp:logout", Acp.onLogout);
       Emit.on("acp:config-session", Acp.onSetSessionConfigOption);
       Emit.on("acp:terminal-output", Acp.onTerminalOutput);
       Emit.on("acp:terminal-exit", Acp.onTerminalExit);
-      Emit.on("envim:cwd", Acp.setCwd);
+      Emit.on("envim:cwd", Acp.onCwd);
     }
 
     Acp.workspace.state[Acp.workspace.current.name] = { cwd: Acp.workspace.current.cwd, status: Acp.state };
@@ -52,7 +52,7 @@ export class Acp {
     Emit.share("envim:luafile", "acp.lua");
   }
 
-  private static setCwd(cwd: string): void {
+  private static onCwd(cwd: string): void {
     if (cwd) {
       Acp.workspace.current.cwd = cwd;
       Acp.workspace.state[Acp.workspace.current.name] = { cwd, status: Acp.state };
@@ -139,7 +139,7 @@ export class Acp {
     return Acp.registry;
   }
 
-  private static async togglePanel(): Promise<void> {
+  private static async onToggle(): Promise<void> {
     Emit.send("acp:toggle", await Acp.loadRegistry());
   }
 
@@ -212,7 +212,7 @@ export class Acp {
     });
   }
 
-  static async startAgent(agent: IAcpRegistryAgent) {
+  static async onStartAgent(agent: IAcpRegistryAgent) {
     Acp.setState({ status: "connecting" });
 
     const result = await Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStart", [agent.package]]);
@@ -278,7 +278,7 @@ export class Acp {
     }
   }
 
-  static async createSession() {
+  static async onCreateSession() {
     if (!Acp.connection) return;
 
     Acp.setState({ ...Acp.state, status: "processing" });
@@ -310,13 +310,13 @@ export class Acp {
     });
   }
 
-  static stopAgent() {
+  static onStopAgent() {
     Acp.setState({ status: "disconnected" });
 
     Emit.share("envim:api", "nvim_call_function", ["EnvimAcpStop", []]);
   }
 
-  static authenticate(methodId: string) {
+  static onAuthenticate(methodId: string) {
     if (!Acp.connection) return;
 
     Acp.setState({ ...Acp.state, status: "connecting" });
@@ -334,7 +334,7 @@ export class Acp {
     });
   }
 
-  static cleanup() {
+  static onCleanup() {
     Acp.tool = {};
     Acp.permission = {};
     Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current.name));
@@ -343,7 +343,7 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static deleteSession(sessionId: string) {
+  static onDeleteSession(sessionId: string) {
     if (!Acp.connection) return;
 
     Acp.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
@@ -357,7 +357,7 @@ export class Acp {
     Acp.notifySessionUpdate();
   }
 
-  static async setActiveSession(sessionId: string) {
+  static async onSwitchSession(sessionId: string) {
     const session = Acp.sessions[sessionId];
 
     if (!session || !Acp.connection) return;
@@ -395,7 +395,7 @@ export class Acp {
     Emit.send("acp:message-added", notification);
   }
 
-  static sendPrompt(sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) {
+  static onSendPrompt(sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) {
     const callback = (sessionId: string) => {
       if (!Acp.connection || !Acp.sessions[sessionId]) return;
 
@@ -420,7 +420,7 @@ export class Acp {
     }
 
     if (!sessionId) {
-      Acp.createSession()?.then(() => {
+      Acp.onCreateSession()?.then(() => {
         callback(Acp.state.sessionId!);
       });
     } else {
@@ -429,7 +429,7 @@ export class Acp {
 
   }
 
-  static cancelPrompt(sessionId: string) {
+  static onCancelPrompt(sessionId: string) {
     if (!Acp.connection) return;
 
     Acp.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
@@ -610,7 +610,7 @@ export class Acp {
     };
 
     Emit.on("acp:stdout", onAgentResponse);
-    Emit.on("acp:exited", Acp.cleanup);
+    Emit.on("acp:exited", Acp.onCleanup);
 
     return AcpSDK.ndJsonStream(webWritable, webReadable);
   }
