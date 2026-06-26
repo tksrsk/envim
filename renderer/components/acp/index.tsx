@@ -485,8 +485,8 @@ export function AcpComponent() {
 
   function checkAcpStatus(type: "connected" | "processing"): boolean {
     const status = type === "connected"
-      ? ["connected", "processing"]
-      : ["connecting", "processing"];
+      ? ["connected", "processing", "auth_required"]
+      : ["connecting", "processing", "auth_required"];
 
     return status.includes(state.status.status);
   }
