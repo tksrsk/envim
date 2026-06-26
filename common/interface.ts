@@ -128,8 +128,7 @@ export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing" | "auth_required";
   sessionId?: string;
   error?: string;
-  authMethods?: AcpSDK.AuthMethod[];
-  capabilities?: AcpSDK.AgentCapabilities;
+  initialize?: AcpSDK.InitializeResponse;
 }
 
 export interface IAcpRegistryAgent {

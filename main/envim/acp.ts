@@ -13,7 +13,6 @@ export class Acp {
   private static state: IAcpStatus = { status: "disconnected" };
   private static workspace: { current: { name: string; cwd: string }; state: { [k: string]: { cwd: string; status: IAcpStatus } }; } = { current: { name: "default", cwd: "" }, state: {} };
   private static connection: AcpSDK.ClientConnection | null = null;
-  private static capabilities?: AcpSDK.AgentCapabilities;
   private static sessions: { [key: string]: IAcpSession } = {};
   private static tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
   private static terminal: { [key: string]: { promise: Promise<AcpSDK.WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
@@ -205,7 +204,7 @@ export class Acp {
 
     return (Acp.connection.agent.request(method, params)).catch(err => {
       const error = err instanceof Error ? err.message : String(err);
-      const autherror = Acp.state.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
+      const autherror = Acp.state.initialize?.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
       const status = autherror ? "auth_required" : "connected";
 
       Acp.setState({ ...Acp.state, status, error });
@@ -235,13 +234,11 @@ export class Acp {
           title: "Envim Editor",
           version: "1.0.0"
         }
-      }).then(response => {
-        if (!response) return;
+      }).then(initialize => {
+        if (!initialize) return;
 
-        Acp.capabilities = response.agentCapabilities;
-
-        const authMethods = response.authMethods?.filter(m => m.type !== "env_var");
-        Acp.setState({ ...Acp.state, authMethods, capabilities: Acp.capabilities, status: "connected" });
+        initialize.authMethods = initialize.authMethods?.filter(m => m.type !== "env_var");
+        Acp.setState({ ...Acp.state, initialize, status: "connected" });
         Acp.listSession();
       });
     } else {
@@ -252,7 +249,7 @@ export class Acp {
   static listSession() {
     if (!Acp.connection) return;
 
-    if (Acp.capabilities?.sessionCapabilities?.list) {
+    if (Acp.state.initialize?.agentCapabilities?.sessionCapabilities?.list) {
       Acp.setState({ ...Acp.state, status: "processing" });
       Acp.callAgent(AcpSDK.methods.agent.session.list, { cwd: Acp.workspace.current.cwd }).then(response => {
         if (!response) return;
@@ -283,7 +280,7 @@ export class Acp {
 
     Acp.setState({ ...Acp.state, status: "processing" });
 
-    if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
+    if (Acp.state.sessionId && Acp.state.initialize?.agentCapabilities?.sessionCapabilities?.close) {
       await Acp.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: Acp.state.sessionId });
     }
 
@@ -321,7 +318,7 @@ export class Acp {
 
     Acp.setState({ ...Acp.state, status: "connecting" });
     Acp.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(() => {
-      Acp.setState({ ...Acp.state, status: "connected", authMethods: [] });
+      Acp.setState({ ...Acp.state, status: "connected" });
       Acp.listSession();
     });
   }
@@ -362,13 +359,13 @@ export class Acp {
 
     if (!session || !Acp.connection) return;
 
-    if (Acp.state.sessionId && Acp.capabilities?.sessionCapabilities?.close) {
+    if (Acp.state.sessionId && Acp.state.initialize?.agentCapabilities?.sessionCapabilities?.close) {
       await Acp.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: Acp.state.sessionId });
     }
 
     if (
-      (session.loaded && Acp.capabilities?.sessionCapabilities?.resume) ||
-      (!session.loaded && Acp.capabilities?.loadSession)
+      (session.loaded && Acp.state.initialize?.agentCapabilities?.sessionCapabilities?.resume) ||
+      (!session.loaded && Acp.state.initialize?.agentCapabilities?.loadSession)
     ) {
       const mcpServers = await Mcp.servers();
       const method = session.loaded ? AcpSDK.methods.agent.session.resume : AcpSDK.methods.agent.session.load;
@@ -402,7 +399,7 @@ export class Acp {
       const prompt: AcpSDK.ContentBlock[] = [
         ...(text ? [{ type: "text" as "text", text }] : []),
         ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
-        ...(Acp.capabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
+        ...(Acp.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
       ];
 
       prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));

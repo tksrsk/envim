@@ -549,10 +549,10 @@ export function AcpComponent() {
 
             <div ref={scroll} />
           </FlexComponent>
-        ) : state.status.status === "auth_required" && state.status.authMethods ? (
+        ) : state.status.status === "auth_required" && state.status.initialize?.authMethods ? (
           <FlexComponent color="default" direction="column" grow={1} vertical="center" horizontal="center" padding={[16]}>
             <span style={{ marginBottom: 8 }}>Authentication Required</span>
-            {state.status.authMethods.map(method => (
+            {state.status.initialize?.authMethods?.map(method => (
               <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
                 onClick={() => Emit.send("acp:authenticate", method.id)}
               >
@@ -622,7 +622,7 @@ export function AcpComponent() {
         )}
         <FlexComponent overflow="visible">
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onStopAgent} />}
-          {checkAcpStatus("connected") && state.status.capabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onLogout} />}
+          {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
@@ -645,7 +645,7 @@ export function AcpComponent() {
               {state.sessions.filter(({ status }) => status === "show").map(session => (
                 <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onSwitchSession(session.id)} spacing >
                   {session.name}
-                  {state.status.capabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />}
+                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />}
                 </FlexComponent>
               ))}
             </MenuComponent>
