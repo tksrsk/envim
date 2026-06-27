@@ -17,6 +17,7 @@ export class Acp {
   private static tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
   private static terminal: { [key: string]: { promise: Promise<AcpSDK.WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
   private static permission: { [key: string]: (response: AcpSDK.RequestPermissionResponse) => void } = {};
+  private static lastMessageId: { [k: string]: string } = {};
   private static registry: IAcpRegistry = { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } };
   private static registryLoaded = false;
 
@@ -389,10 +390,23 @@ export class Acp {
   }
 
   static addMessage(notification: AcpSDK.SessionNotification) {
+    const update = notification.update;
+    const isChunk = update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_message_chunk" || update.sessionUpdate === "agent_thought_chunk";
+
+    if (isChunk) {
+      if (!update.messageId) {
+        const key = `${update.sessionUpdate}_${update.content.type}`;
+
+        update.messageId = Acp.lastMessageId[key] || `msg_${randomBytes(8).toString("hex")}`;
+        Acp.lastMessageId = { [key]: update.messageId };
+      }
+    }
+
     Emit.send("acp:message-added", notification);
   }
 
   static onSendPrompt(sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) {
+    Acp.lastMessageId = {};
     const callback = (sessionId: string) => {
       if (!Acp.connection || !Acp.sessions[sessionId]) return;
 

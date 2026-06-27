@@ -197,25 +197,23 @@ export function AcpComponent() {
   }
 
   function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
-    const prev = messages.pop();
+    const update = curr.update;
 
-    if (
-      prev && prev.sessionId === curr.sessionId && (
-        (prev.update.sessionUpdate === "user_message_chunk" && curr.update.sessionUpdate === "user_message_chunk") ||
-        (prev.update.sessionUpdate === "agent_message_chunk" && curr.update.sessionUpdate === "agent_message_chunk") ||
-        (prev.update.sessionUpdate === "agent_thought_chunk" && curr.update.sessionUpdate === "agent_thought_chunk")
-      ) && prev.update.content.type === "text" && curr.update.content.type === "text"
-    ) {
-      curr.update.content.text = `${prev.update.content.text}${curr.update.content.text}`;
-    } else if (prev) {
-      messages.push(prev);
+    if ("messageId" in update && update.messageId && update.content.type === "text") {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.sessionId !== curr.sessionId || msg.update.sessionUpdate !== update.sessionUpdate || msg.update.messageId !== update.messageId || msg.update.content.type !== "text") continue;
+          update.content.text = `${msg.update.content.text}${update.content.text}`;
+          messages[i] = curr;
 
-      if (curr.update.sessionUpdate === "tool_call" || curr.update.sessionUpdate === "tool_call_update") {
-        const toolCallId = curr.update.toolCallId;
-        messages = messages.filter(msg => !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
+          return [...messages];
       }
     }
 
+    if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
+      const toolCallId = update.toolCallId;
+      messages = messages.filter(msg => !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
+    }
     return [...messages, curr];
   }
 
