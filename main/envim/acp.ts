@@ -407,37 +407,32 @@ export class Acp {
 
   static onSendPrompt(sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) {
     Acp.lastMessageId = {};
-    const callback = (sessionId: string) => {
-      if (!Acp.connection || !Acp.sessions[sessionId]) return;
-
-      const prompt: AcpSDK.ContentBlock[] = [
-        ...(text ? [{ type: "text" as "text", text }] : []),
-        ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
-        ...(Acp.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
-      ];
-
-      prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
-      Acp.setState({ ...Acp.state, status: "processing" });
-      Acp.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
-        if (!result) return;
-
-        if (result && result.stopReason !== "end_turn") {
-          Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
-        }
-        Acp.tool = {};
-        Acp.cancelAllPermissions();
-        Acp.setState({ ...Acp.state, status: "connected" });
-      });
-    }
 
     if (!sessionId) {
-      Acp.onCreateSession()?.then(() => {
-        callback(Acp.state.sessionId!);
-      });
-    } else {
-      callback(sessionId);
+      Acp.onCreateSession()?.then(() => Acp.onSendPrompt(Acp.state.sessionId!, text, files, images));
+      return;
     }
 
+    if (!Acp.connection || !Acp.sessions[sessionId]) return;
+
+    const prompt: AcpSDK.ContentBlock[] = [
+      ...(text ? [{ type: "text" as "text", text }] : []),
+      ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
+      ...(Acp.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
+    ];
+
+    prompt.forEach(content => Acp.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
+    Acp.setState({ ...Acp.state, status: "processing" });
+    Acp.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
+      if (!result) return;
+
+      if (result && result.stopReason !== "end_turn") {
+        Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
+      }
+      Acp.tool = {};
+      Acp.cancelAllPermissions();
+      Acp.setState({ ...Acp.state, status: "connected" });
+    });
   }
 
   static onCancelPrompt(sessionId: string) {
