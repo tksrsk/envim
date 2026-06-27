@@ -332,8 +332,8 @@ export class Acp {
   }
 
   static onCleanup() {
+    Acp.cancelAllPermissions();
     Acp.tool = {};
-    Acp.permission = {};
     Acp.sessions = Object.fromEntries(Object.entries(Acp.sessions).filter(([_, s]) => s.workspace !== Acp.workspace.current.name));
 
     Acp.setState({ status: "disconnected" });
@@ -411,7 +411,7 @@ export class Acp {
           Acp.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
         }
         Acp.tool = {};
-        Acp.permission = {};
+        Acp.cancelAllPermissions();
         Acp.setState({ ...Acp.state, status: "connected" });
       });
     }
@@ -428,6 +428,8 @@ export class Acp {
 
   static onCancelPrompt(sessionId: string) {
     if (!Acp.connection) return;
+
+    Acp.cancelAllPermissions();
 
     Acp.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
       Acp.setState({ ...Acp.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
@@ -637,12 +639,13 @@ export class Acp {
 
   static onPermissionResponse(requestId: string, optionId: string): void {
     const resolver = Acp.permission[requestId];
+    const outcome = optionId ? "selected" : "cancelled";
 
     if (!resolver) {
       return;
     }
 
-    resolver({ outcome: { outcome: "selected", optionId } });
+    resolver({ outcome: { outcome, optionId } });
     delete(Acp.permission[requestId]);
 
     const tool = Object.values(Acp.tool).find(t => {
@@ -654,5 +657,11 @@ export class Acp {
       delete(Acp.tool[tool.toolCallId]._meta!.permissionRequest);
       Acp.processToolUpdate(Acp.state.sessionId!, tool);
     }
+  }
+
+  private static cancelAllPermissions() {
+    Object.keys(Acp.permission).forEach(requestId => {
+      Acp.onPermissionResponse(requestId, "");
+    });
   }
 }
