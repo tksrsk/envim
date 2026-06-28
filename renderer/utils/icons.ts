@@ -28,7 +28,7 @@ export const icons = [
   { font: "", color: "orange", name: "Git", match: /(\.git[\\\/])|(git)([^\\\/])*$/i },
   { font: "", color: "blue", name: "Docker", match: /docker([^\\\/])*$/i },
   { font: "", color: "purple", name: "Image", match: /\.(png|jpg|jpeg|gif|webp|svg)$/ },
-  { font: "󰖟", color: "lightblue", name: "WEB", match: /^(https?:\/\/|envim:\/\/browser)/ },
+  { font: "󰖟", color: "lightblue", name: "WEB", match: /^(https?:\/\/|envim-browser:\/\/)/ },
   { font: "", color: "gray", name: "Terminal", match: /^term:\/\// },
   { font: "", color: "red", name: "Quickfix", match: /\[(Quickfix|Location) List\]/ },
   { font: "󰋗", color: "pink", name: "Help", match: /help$/ },

@@ -14,29 +14,31 @@ vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   group = group,
   pattern = { "*.ico", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.mp4", "*.webm", "*.pdf", "*.webp", "*.avif", "*.mp3", "*.ogg" },
   callback = function()
-    vim.schedule(function()
-      envim_connect(0, { "envim_openurl", "file://" .. vim.fn.expand("%:p"), "vnew" })
-    end)
+    local bufname = vim.api.nvim_buf_get_name(0)
+
+    if not bufname:match("^envim%-browser://") then
+      vim.schedule(function()
+        envim_connect(0, { "envim_openurl", "file://" .. bufname, "vnew" })
+      end)
+    end
   end,
 })
 
-vim.api.nvim_create_autocmd({ "WinNew", "BufWinEnter" }, {
+vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   group = group,
-  pattern = { "envim://browser" },
+  pattern = { "envim-browser://*" },
   callback = function()
     local winid = vim.fn.win_getid()
+    local bufname = vim.api.nvim_buf_get_name(0)
+    local src = bufname:match("^envim%-browser://(.+)$")
 
-    vim.bo.filetype = "browser"
-    vim.bo.buftype = "nofile"
-    vim.bo.bufhidden = "wipe"
-    vim.bo.buflisted = false
-    vim.schedule(function() envim_connect(0, { "envim_webview", winid, true, vim.w.envim_browser_src or "" }) end)
+    vim.schedule(function() envim_connect(0, { "envim_webview", winid, true, src or "" }) end)
   end,
 })
 
 vim.api.nvim_create_autocmd({ "BufLeave" }, {
   group = group,
-  pattern = { "envim://browser" },
+  pattern = { "envim-browser://*" },
   callback = function()
     local prev = vim.fn.win_getid()
 
@@ -47,7 +49,6 @@ vim.api.nvim_create_autocmd({ "BufLeave" }, {
         local curr = vim.fn.win_getid()
 
         if prev == curr then
-          vim.w.envim_browser_src = nil
           vim.schedule(function () envim_connect(0, { "envim_webview", curr, false, "" }) end)
         end
       end,

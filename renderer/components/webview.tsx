@@ -232,9 +232,9 @@ export function WebviewComponent(props: Props) {
       case "l": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: -100, deltaY: 0 });
       case "u": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageUp" });
       case "d": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageDown" });
-      case "s": return Emit.send("envim:command", "new envim://browser");
-      case "v": return Emit.send("envim:command", "vnew envim://browser");
-      case "t": return Emit.send("envim:command", "tabnew envim://browser");
+      case "s": return Emit.send("envim:browser", "", "new");
+      case "v": return Emit.send("envim:browser", "", "vnew");
+      case "t": return Emit.send("envim:browser", "", "tabnew");
     }
 
     switch (e.key) {
