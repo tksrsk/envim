@@ -12,7 +12,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
 
 vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   group = group,
-  pattern = { "*.ico", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.mp4", "*.webm", "*.pdf" },
+  pattern = { "*.ico", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.mp4", "*.webm", "*.pdf", "*.webp", "*.avif", "*.mp3", "*.ogg" },
   callback = function()
     vim.schedule(function()
       envim_connect(0, { "envim_openurl", "file://" .. vim.fn.expand("%:p"), "vnew" })
