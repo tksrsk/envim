@@ -238,10 +238,10 @@ export function WebviewComponent(props: Props) {
     }
 
     switch (e.key) {
-      case "h": return setPointer(state.pointer.x - col2X(e.repeat ? 6 : 1), state.pointer.y);
-      case "j": return setPointer(state.pointer.x, state.pointer.y + row2Y(e.repeat ? 3 : 1));
-      case "k": return setPointer(state.pointer.x, state.pointer.y - row2Y(e.repeat ? 3 : 1));
-      case "l": return setPointer(state.pointer.x + col2X(e.repeat ? 6 : 1), state.pointer.y);
+      case "h": return setPointer(state.pointer.x - col2X(1), state.pointer.y);
+      case "j": return setPointer(state.pointer.x, state.pointer.y + row2Y(1));
+      case "k": return setPointer(state.pointer.x, state.pointer.y - row2Y(1));
+      case "l": return setPointer(state.pointer.x + col2X(1), state.pointer.y);
       case "H": return setPointer(state.pointer.x, 0);
       case "M": return setPointer(state.pointer.x, Math.floor((container.current?.offsetHeight ?? 0) / 2));
       case "L": return setPointer(state.pointer.x, "max");
