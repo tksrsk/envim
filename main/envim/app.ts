@@ -322,7 +322,7 @@ export class App {
       if (buffer?.data) {
         const active = ctab.data === tab.data;
 
-        next.tabs.push({ name, buffer: +buffer.data, active });
+        next.tabs.push({ name: decodeURIComponent(name), buffer: +buffer.data, active });
       }
     }
 

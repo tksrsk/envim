@@ -172,7 +172,8 @@ export class Envim {
 
   private onBrowser = (src: string, command?: string) => {
     command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
-    this.onCommand(`${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${src}`);
+    const encoded = encodeURIComponent(src).replace(/%/g, "\\%");
+    this.onCommand(`${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${encoded}`);
   }
 
   private toggleWebview = (winid: number, active: boolean, src: string) => {
@@ -180,7 +181,7 @@ export class Envim {
       const { id } = Grids.findByWinId(winid)?.getInfo() || {};
 
       if (id) {
-        Emit.update(`webview:${id}`, false, src, active);
+        Emit.update(`webview:${id}`, false, decodeURIComponent(src), active);
         clearInterval(timer);
       }
     }, 200);
