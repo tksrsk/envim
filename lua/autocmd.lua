@@ -24,7 +24,7 @@ vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
   end,
 })
 
-vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
+vim.api.nvim_create_autocmd({ "WinNew", "BufWinEnter" }, {
   group = group,
   pattern = { "envim-browser://*" },
   callback = function()
