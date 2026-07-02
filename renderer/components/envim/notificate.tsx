@@ -3,8 +3,8 @@ import React from "react";
 import { IMessage } from "common/interface";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
 
 import { FlexComponent } from "renderer/components/flex";
 import { MessageComponent } from "renderer/components/envim/message";
@@ -27,13 +27,14 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function NotificateComponent() {
   const { options } = useEditor();
+  const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ messages: [], enabled: options.ext_messages });
 
   React.useEffect(() => {
-    Emit.on("messages:show", onShow);
+    emit.on("messages:show", onShow);
 
     return () => {
-      Emit.off("messages:show", onShow);
+      emit.off("messages:show", onShow);
     };
   }, []);
 

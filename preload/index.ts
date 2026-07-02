@@ -2,15 +2,8 @@ import * as Electron from "electron";
 import { EventEmitter } from "events";
 
 const emit = new EventEmitter;
-const pending = new Set<number>();
-const paused = new Set<number>();
-
-const initialize = () => {
-  pending.forEach(timer => clearTimeout(timer));
-  pending.clear();
-  paused.clear();
-  share("envim:pause", false);
-};
+const pending = new Map<number, string>();
+const paused = new Map<number, string>();
 
 const on = (event: string, callback: (...args: any[]) => void) => {
   emit.on(event, callback);
@@ -37,22 +30,32 @@ const invoke = async (event: string, ...args: any[]) => {
   }
 };
 
+const release = (timer: number) => {
+  clearTimeout(timer);
+  pending.delete(timer);
+  paused.delete(timer);
+  paused.size === 0 && share("envim:pause", false);
+};
+
 const send = async (event: string, ...args: any[]) => {
   const timer = +setTimeout(() => {
     if (!pending.has(timer)) return;
-    paused.add(timer);
+    paused.set(timer, event);
     share("envim:pause", true);
   }, 100);
-  pending.add(timer);
+  pending.set(timer, event);
 
   try {
     return await invoke(event, ...args);
   } finally {
-    clearTimeout(timer);
-    pending.delete(timer);
-    paused.delete(timer);
-    paused.size === 0 && share("envim:pause", false);
+    release(timer);
   }
 };
 
-Electron.contextBridge.exposeInMainWorld("envimIPC", { initialize, on, send });
+const clear = (prefix: string) => {
+  for (const [timer, event] of pending) {
+    event.startsWith(`${prefix}:`) && release(timer);
+  }
+};
+
+Electron.contextBridge.exposeInMainWorld("envimIPC", { on, send, clear });

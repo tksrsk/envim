@@ -1,9 +1,8 @@
 import React from "react";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
-import { Highlights } from "renderer/utils/highlight";
 import { Setting } from "renderer/utils/setting";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -26,21 +25,22 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function CmdlineComponent() {
   const { options } = useEditor();
+  const { emit, highlights } = useWorkspace();
   const [state, setState] = React.useState<States>({ cmdline: [], contents: [], pos: 0, prompt: "", indent: 0, enabled: options.ext_cmdline });
 
   React.useEffect(() => {
-    Emit.on("cmdline:show", onCmdline);
-    Emit.on("cmdline:cursor", onCursor);
-    Emit.on("cmdline:special", onSpecial);
-    Emit.on("cmdline:blockshow", onBlock);
-    Emit.on("cmdline:blockhide", offBlock);
+    emit.on("cmdline:show", onCmdline);
+    emit.on("cmdline:cursor", onCursor);
+    emit.on("cmdline:special", onSpecial);
+    emit.on("cmdline:blockshow", onBlock);
+    emit.on("cmdline:blockhide", offBlock);
 
     return () => {
-      Emit.off("cmdline:show", onCmdline);
-      Emit.off("cmdline:cursor", onCursor);
-      Emit.off("cmdline:special", onSpecial);
-      Emit.off("cmdline:blockshow", onBlock);
-      Emit.off("cmdline:blockhide", offBlock);
+      emit.off("cmdline:show", onCmdline);
+      emit.off("cmdline:cursor", onCursor);
+      emit.off("cmdline:special", onSpecial);
+      emit.off("cmdline:blockshow", onBlock);
+      emit.off("cmdline:blockhide", offBlock);
     };
   }, []);
 
@@ -119,14 +119,14 @@ export function CmdlineComponent() {
 
   function getScopeStyle() {
     const { height } = Setting.font;
-    return { padding: height, ...Highlights.style("0"), ...styles.scope };
+    return { padding: height, ...highlights.style("0"), ...styles.scope };
   }
 
   function renderCmdline(cmdline: States["cmdline"], cursor: boolean) {
     return cmdline.map(({hl, c}, i) => {
       const reverse = cursor && i === state.pos;
       c = c.charCodeAt(0) < 0x20 ? `^${String.fromCharCode(c.charCodeAt(0) + 0x40)}` : c;
-      return (hl || reverse) ? <div className="inline-block" style={Highlights.style(hl, { reverse })} key={i}>{ c }</div> : c;
+      return (hl || reverse) ? <div className="inline-block" style={highlights.style(hl, { reverse })} key={i}>{ c }</div> : c;
     });
   }
 

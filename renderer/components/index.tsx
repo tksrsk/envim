@@ -8,9 +8,9 @@ import { AppComponent } from "renderer/components/app";
 declare global {
   interface Window {
     envimIPC: {
-      initialize: () => void,
       on: (event: string, callback: (...args: any[]) => void) => void,
       send: <T>(event: string, ...args: any[]) => Promise<T>,
+      clear: (prefix: string) => void,
     };
   }
 

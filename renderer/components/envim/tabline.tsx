@@ -3,6 +3,7 @@ import React from "react";
 import { ISetting, ITab, IMode, IMenu } from "common/interface";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
@@ -23,7 +24,6 @@ interface States {
   tabs: ITab[];
   menus: IMenu[];
   bookmarks: ISetting["bookmarks"];
-  connections: string[];
   mode?: IMode;
   dragging: number;
   enabled: boolean;
@@ -39,15 +39,14 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function TablineComponent(props: Props) {
   const { options, mode, tabs, menus  } = useEditor();
-  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], connections: [], dragging: -1, enabled: options.ext_tabline });
+  const { workspaces, emit } = useWorkspace();
+  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
 
   React.useEffect(() => {
-    Emit.on("envim:cwd", onCwd);
-    Emit.on("envim:connections", onConnections);
+    emit.on("envim:cwd", onCwd);
 
     return () => {
-      Emit.off("envim:cwd", onCwd);
-      Emit.off("envim:connections", onConnections);
+      emit.off("envim:cwd", onCwd);
     };
   }, []);
 
@@ -64,20 +63,16 @@ export function TablineComponent(props: Props) {
     selected && current !== selected && Emit.send("envim:connect", Setting.type, Setting.path, selected.path);
   }
 
-  function onConnections (connections: string[]) {
-    setState(state => ({ ...state, connections }));
-  }
-
   async function saveBookmark(path: string) {
     if (path !== state.cwd) {
-      path = await Emit.send<string>("envim:readline", "Bookmark Path", state.cwd, "dir") || path;
+      path = await emit.send<string>("envim:readline", "Bookmark Path", state.cwd, "dir") || path;
     }
 
     const bookmark = state.bookmarks.find(bookmark => bookmark.path === path);
     const bookmarks = state.bookmarks
       .filter(bookmark => bookmark.path !== path)
       .map(bookmark => ({ ...bookmark, selected: false }));
-    const name = await Emit.send<string>("envim:readline", "Bookmark Name", bookmark?.name || state.cwd);
+    const name = await emit.send<string>("envim:readline", "Bookmark Name", bookmark?.name || state.cwd);
 
     if (name) {
       bookmarks.push({ name: name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path, selected: false });
@@ -101,7 +96,7 @@ export function TablineComponent(props: Props) {
     e.stopPropagation();
     e.preventDefault();
 
-    Emit.send("envim:command", command);
+    emit.send("envim:command", command);
   }
 
   React.useEffect(() => {
@@ -203,7 +198,7 @@ export function TablineComponent(props: Props) {
         ) }
         { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path, selected }, i) =>
           <FlexComponent animate="hover" direction="column" active={selected} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
-            <FlexComponent>{ state.connections.includes(path) && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
+            <FlexComponent>{ path in workspaces && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
             <div className="color-gray-fg small">{ path }</div>
             <IconComponent color="gray" font="" float="right" onClick={e => deleteBookmark(e, path)} hover />
           </FlexComponent>

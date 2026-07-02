@@ -1,67 +1,39 @@
 import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
-import { Emit } from "main/emit";
-import { IMcpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
+import { Workspace } from "main/envim/workspace";
+import { McpUpstream } from "main/mcp/upstream";
 
 const MCP_APP_MIME = "text/html;profile=mcp-app";
 const UI_URI_PREFIX = "ui://";
 
 export class McpAppService {
-  private initialized = false;
   private toolUiUris = new Map<string, { [toolName: string]: string }>();
 
-  constructor(private registry: McpUpstreamRegistry) {}
+  constructor(public readonly workspace: Workspace) {}
 
-  setup(): void {
-    if (this.initialized) {
-      return;
-    }
-
-    this.initialized = true;
-    Emit.on("mcp-apps:call-tool", (upstreamId: string, params: McpTypes.CallToolRequest["params"]) =>
-      this.registry.get(upstreamId).client.callTool(params)
-    );
-    Emit.on("mcp-apps:list-resources", (upstreamId: string, params: McpTypes.ListResourcesRequest["params"]) =>
-      this.registry.get(upstreamId).client.listResources(params)
-    );
-    Emit.on(
-      "mcp-apps:list-resource-templates",
-      (upstreamId: string, params: McpTypes.ListResourceTemplatesRequest["params"]) =>
-        this.registry.get(upstreamId).client.listResourceTemplates(params)
-    );
-    Emit.on("mcp-apps:read-resource", (upstreamId: string, params: McpTypes.ReadResourceRequest["params"]) =>
-      this.registry.get(upstreamId).client.readResource(params)
-    );
-  }
-
-  async onToolResult(
-    upstreamId: string,
-    request: McpTypes.CallToolRequest["params"],
-    result: McpTypes.CallToolResult,
-  ): Promise<void> {
-    const upstream = this.registry.get(upstreamId);
-    let toolUiUris = this.toolUiUris.get(upstreamId);
+  async getToolResource(
+    upstream: McpUpstream,
+    toolName: string,
+  ): Promise<McpTypes.TextResourceContents | null> {
+    let toolUiUris = this.toolUiUris.get(upstream.id);
 
     if (!toolUiUris) {
       toolUiUris = McpAppService.toolUiUrisFor((await upstream.client.listTools()).tools);
-      this.toolUiUris.set(upstreamId, toolUiUris);
+      this.toolUiUris.set(upstream.id, toolUiUris);
     }
 
-    const uri = toolUiUris[request.name];
-    const resource = uri ? await McpAppService.readAppResource(upstream, uri) : null;
+    const uri = toolUiUris[toolName];
 
-    if (resource) {
-      Emit.send("mcp-apps:render", { upstreamId, server: upstream.name, tool: request.name, request, resource, result });
-    }
+    return uri ? McpAppService.readAppResource(upstream, uri) : null;
   }
 
   onToolsChanged(upstreamId: string): void {
     this.toolUiUris.delete(upstreamId);
-    Emit.send("mcp-apps:tools-changed", upstreamId);
+    this.workspace.emit.send("mcp-apps:tools-changed", upstreamId);
   }
 
   onResourcesChanged(upstreamId: string): void {
-    Emit.send("mcp-apps:resources-changed", upstreamId);
+    this.workspace.emit.send("mcp-apps:resources-changed", upstreamId)
   }
 
   onUpstreamsChanged(upstreamIds: Iterable<string>): void {
@@ -89,7 +61,7 @@ export class McpAppService {
     return uris;
   }
 
-  private static async readAppResource(upstream: IMcpUpstream, uri: string): Promise<McpTypes.TextResourceContents | null> {
+  private static async readAppResource(upstream: McpUpstream, uri: string): Promise<McpTypes.TextResourceContents | null> {
     if (!uri.startsWith(UI_URI_PREFIX)) {
       return null;
     }

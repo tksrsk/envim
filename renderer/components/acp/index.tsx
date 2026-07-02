@@ -3,6 +3,8 @@ import * as AcpSDK from "@agentclientprotocol/sdk";
 
 import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
+import { useWorkspace } from "renderer/context/workspace";
+
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 
@@ -48,6 +50,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function AcpComponent() {
+  const { emit } = useWorkspace();
   const [state, setState] = React.useState<State>({
     visible: false,
     status: { status: "disconnected" },
@@ -69,20 +72,20 @@ export function AcpComponent() {
   const color = state.mode.main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
-    Emit.on("acp:toggle", onAgentToggle);
-    Emit.on("acp:status-changed", onStatusChanged);
-    Emit.on("acp:session-update", onAcpSessionUpdate);
-    Emit.on("acp:message-added", onMessageAdded);
-    Emit.on("acp:file-add", onFileAdd);
-    Emit.on("envim:focused", onFocused);
+    emit.on("acp:toggle", onAgentToggle);
+    emit.on("acp:status-changed", onStatusChanged);
+    emit.on("acp:session-update", onAcpSessionUpdate);
+    emit.on("acp:message-added", onMessageAdded);
+    emit.on("acp:file-add", onFileAdd);
+    emit.on("envim:focused", onFocused);
 
     return () => {
-      Emit.off("acp:toggle", onAgentToggle);
-      Emit.off("acp:status-changed", onStatusChanged);
-      Emit.off("acp:session-update", onAcpSessionUpdate);
-      Emit.off("acp:message-added", onMessageAdded);
-      Emit.off("acp:file-add", onFileAdd);
-      Emit.off("envim:focused", onFocused);
+      emit.off("acp:toggle", onAgentToggle);
+      emit.off("acp:status-changed", onStatusChanged);
+      emit.off("acp:session-update", onAcpSessionUpdate);
+      emit.off("acp:message-added", onMessageAdded);
+      emit.off("acp:file-add", onFileAdd);
+      emit.off("envim:focused", onFocused);
     };
   }, []);
 
@@ -250,33 +253,33 @@ export function AcpComponent() {
   }
 
   function onStartAgent(agent: IAcpRegistryAgent) {
-    Emit.send("acp:start-agent", agent);
+    emit.send("acp:start-agent", agent);
   }
 
   function onStopAgent() {
-    Emit.send("acp:stop-agent");
+    emit.send("acp:stop-agent");
   }
 
   function onLogout() {
-    Emit.send("acp:logout");
+    emit.send("acp:logout");
   }
 
   function onCreateSession() {
-    Emit.send("acp:create-session");
+    emit.send("acp:create-session");
   }
 
   function onSwitchSession(sessionId: string) {
     if (checkAcpStatus("connected")) {
-      Emit.send("acp:switch-session", sessionId);
+      emit.send("acp:switch-session", sessionId);
     }
   }
 
   function onDeleteSession(sessionId: string) {
-    Emit.send("acp:delete-session", sessionId);
+    emit.send("acp:delete-session", sessionId);
   }
 
   function onSetSessionConfigOption(configId: string, value: string | boolean) {
-    checkAcpStatus("processing") || Emit.send("acp:config-session", configId, value);
+    checkAcpStatus("processing") || emit.send("acp:config-session", configId, value);
   }
 
   function onSelectCommand(selected: string) {
@@ -378,7 +381,7 @@ export function AcpComponent() {
           return;
         }
 
-        Emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files, state.images);
+        emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files, state.images);
 
         break;
       case "search":
@@ -397,7 +400,7 @@ export function AcpComponent() {
       return;
     }
 
-    Emit.send("acp:cancel-prompt", state.status.sessionId);
+    emit.send("acp:cancel-prompt", state.status.sessionId);
   }
 
   function onNormalKeyDown(e: React.KeyboardEvent) {
@@ -539,7 +542,7 @@ export function AcpComponent() {
 
   return (
     <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
-      <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => Emit.share("envim:focused")} tabIndex={-1} />
+      <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("envim:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
           <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
@@ -552,7 +555,7 @@ export function AcpComponent() {
             <span style={{ marginBottom: 8 }}>Authentication Required</span>
             {state.status.initialize?.authMethods?.map(method => (
               <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
-                onClick={() => Emit.send("acp:authenticate", method.id)}
+                onClick={() => emit.send("acp:authenticate", method.id)}
               >
                 <IconComponent font="󰌆" text={method.name} />
               </FlexComponent>
@@ -656,7 +659,7 @@ export function AcpComponent() {
           onChange={e => setState(state => ({ ...state, input: e.target.value }))}
           onKeyDown={onInputKeyDown}
           onPaste={onPaste}
-          onFocus={() => Emit.share("envim:focused")}
+          onFocus={() => emit.share("envim:focused")}
           rows={8}
         />
         <FlexComponent overflow="visible" vertical="center" padding={[4, 0, 0]}>

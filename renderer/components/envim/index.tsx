@@ -3,9 +3,9 @@ import React from "react";
 import { ISetting, IWindow, IHighlight } from "common/interface";
 
 import { EditorProvider } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
-import { Highlights } from "renderer/utils/highlight";
 import { Setting } from "renderer/utils/setting";
 import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
@@ -27,10 +27,8 @@ interface Props {
 }
 
 interface States {
-  init: boolean;
   pause: boolean;
-  grids: { [k: string]: {
-    id: string;
+  grids: { [k: number]: {
     gid: number;
     winid: number;
     order: number;
@@ -56,58 +54,43 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function EnvimComponent(props: Props) {
-  const [state, setState] = React.useState<States>({ init: true, pause: false, grids: {} });
+  const [state, setState] = React.useState<States>({ pause: false, grids: {} });
+  const { active, emit, highlights } = useWorkspace();
   const { size, height } = Setting.font;
   const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
-    Emit.on("app:switch", onSwitch);
-    Emit.on("highlight:set", onHighlight);
-    Emit.on("win:pos", onWin);
+    highlights.setHighlight("0", true, {  });
+    emit.on("highlight:set", onHighlight);
+    emit.on("win:pos", onWin);
     Emit.on("envim:setting", onSetting);
     Emit.on("envim:pause", onPause);
+    emit.send("envim:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options);
 
     return () => {
-      Emit.off("app:switch", onSwitch);
-      Emit.off("highlight:set", onHighlight);
-      Emit.off("win:pos", onWin);
+      emit.off("highlight:set", onHighlight);
+      emit.off("win:pos", onWin);
       Emit.off("envim:setting", onSetting);
       Emit.off("envim:pause", onPause);
     };
   }, []);
 
   React.useEffect(() => {
-    state.init
-      ? Emit.send("envim:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options)
-      : setState(state => ({ ...state, init: true }));
-  }, [state.init]);
-
-  React.useEffect(() => {
-    Emit.send("envim:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
+    emit.send("envim:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
   }, [props.main.width, props.main.height]);
 
-  function onSwitch() {
-    setState(({ grids, ...state }) => {
-      Object.values(grids).forEach(grid => {
-        grid.focus = false;
-        grid.style.visibility = "hidden";
-      });
-      return { ...state, init: false, grids };
-    });
-  }
-
-  function onHighlight(highlights: {id: string, ui: boolean, hl: IHighlight}[]) {
-    highlights.forEach(({id, ui, hl}) => {
-      Highlights.setHighlight(id, ui, hl);
+  function onHighlight(hls: {id: string, ui: boolean, hl: IHighlight}[]) {
+    hls.forEach(({id, ui, hl}) => {
+      highlights.setHighlight(id, ui, hl);
     });
   }
 
   function onWin(wins: IWindow[]) {
     setState(({ grids, ...state }) => {
       const nextOrder = Object.values(grids).reduce((order, grid) => Math.max(order, grid.order), 1);
-      const refresh = wins.reverse().filter(({ id, gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
-        const curr = grids[id]?.style;
-        const order = grids[id]?.order || i + nextOrder;
+      const refresh = wins.reverse().filter(({ gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
+        const curr = grids[gid]?.style;
+        const order = grids[gid]?.order || i + nextOrder;
         const next = {
           zIndex: (status === "show" ? zIndex : -1) + +focus ,
           width: col2X(width),
@@ -117,16 +100,16 @@ export function EnvimComponent(props: Props) {
         };
 
         if (status === "delete") {
-          delete(grids[id]);
+          delete(grids[gid]);
         } else if (JSON.stringify(curr) !== JSON.stringify(next)) {
-          grids[id] = { id, gid, winid, order, focusable, focus, shadow, type, style: next };
+          grids[gid] = { gid, winid, order, focusable, focus, shadow, type, style: next };
         }
 
         return type === "normal" && curr && (curr.visibility !== next.visibility || curr.width !== next.width || curr.height !== next.height);
       }).length > 0;
 
       clearTimeout(timer.current);
-      timer.current = refresh ? +setTimeout(() => Emit.send("envim:command", "mode"), 100) : 0;
+      timer.current = refresh ? +setTimeout(() => emit.send("envim:command", "mode"), 100) : 0;
 
       return { ...state, grids };
     });
@@ -141,32 +124,32 @@ export function EnvimComponent(props: Props) {
   }
 
   function onMouseUp() {
-    Emit.share("envim:drag", "");
-    Emit.share("envim:focus");
+    emit.share("envim:drag", "");
+    emit.share("envim:focus");
   }
 
   return (
     <EditorProvider>
-      <div style={{fontSize: size, lineHeight: `${height}px`}} onMouseUp={onMouseUp}>
-        { state.init && <TablineComponent {...props.header} /> }
+      <div style={{fontSize: size, lineHeight: `${height}px`, display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
+        <TablineComponent {...props.header} />
         <FlexComponent zIndex={0}>
           <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />
           <FlexComponent zIndex={0} direction="column" overflow="visible">
             <div className="color-default" style={{height: Setting.font.height}} />
             <FlexComponent overflow="visible" style={props.main}>
               { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
-                <EditorComponent key={grid.id} { ...grid } />
+                <EditorComponent key={grid.gid} { ...grid } />
               )) }
-              { state.init && <PopupmenuComponent /> }
-              { state.init && <InputComponent /> }
+              <PopupmenuComponent />
+              <InputComponent />
             </FlexComponent>
           </FlexComponent>
-          { state.init && <CmdlineComponent /> }
-          { state.init && <NotificateComponent /> }
+          <CmdlineComponent />
+          <NotificateComponent />
           <AcpComponent />
           <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />
         </FlexComponent>
-        { state.init && <HistoryComponent {...props.footer} /> }
+        <HistoryComponent {...props.footer} />
         { state.pause && (
           <FlexComponent direction="column" horizontal="center" vertical="center" color="default" position="absolute" zIndex={100} inset={[0]} style={styles.backdrop}>
             <div className="animate loading" />

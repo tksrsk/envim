@@ -6,46 +6,96 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
-export interface IMcpUpstream {
-  id: string;
-  name: string;
-  client: Client;
-}
-
-interface IMcpUpstreamRegistryOptions {
-  onToolsChanged: (upstreamId: string) => void;
-  onResourcesChanged: (upstreamId: string) => void;
-}
+import { WorkspaceEmit } from "main/emit";
+import { McpAppService } from "main/mcp/app";
 
 type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
 
 const MCP_APP_MIME = "text/html;profile=mcp-app";
 
+export class McpUpstream {
+  private constructor(
+    public readonly id: string,
+    public readonly name: string,
+    public readonly client: Client,
+    private readonly emit: WorkspaceEmit,
+    app: McpAppService,
+  ) {
+    client.setNotificationHandler(McpTypes.ToolListChangedNotificationSchema, () => app.onToolsChanged(id));
+    client.setNotificationHandler(McpTypes.ResourceListChangedNotificationSchema, () => app.onResourcesChanged(id));
+
+    emit.on(`mcp-apps:call-tool:${id}`, params => client.callTool(params));
+    emit.on(`mcp-apps:list-resources:${id}`, params => client.listResources(params));
+    emit.on(`mcp-apps:list-resource-templates:${id}`, params => client.listResourceTemplates(params));
+    emit.on(`mcp-apps:read-resource:${id}`, params => client.readResource(params));
+  }
+
+  static async connect(id: string, server: HttpMcpServer, app: McpAppService, emit: WorkspaceEmit): Promise<McpUpstream | null> {
+    const client = new Client(
+      { name: "envim", version: "1.0.0" },
+      { capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [MCP_APP_MIME] } } } as any }
+    );
+
+    try {
+      await client.connect(McpUpstream.createTransport(server));
+
+      return new McpUpstream(id, server.name, client, emit, app);
+    } catch {
+      await client.close().catch(() => {});
+
+      return null;
+    }
+  }
+
+  async close(): Promise<void> {
+    this.emit.off(`mcp-apps:call-tool:${this.id}`);
+    this.emit.off(`mcp-apps:list-resources:${this.id}`);
+    this.emit.off(`mcp-apps:list-resource-templates:${this.id}`);
+    this.emit.off(`mcp-apps:read-resource:${this.id}`);
+
+    await this.client.close().catch(() => {});
+  }
+
+  private static createTransport(server: HttpMcpServer): StreamableHTTPClientTransport | SSEClientTransport {
+    const requestInit = { headers: Object.fromEntries(server.headers.map(header => [header.name, header.value])) };
+
+    return server.type === "http"
+      ? new StreamableHTTPClientTransport(new URL(server.url), { requestInit })
+      : new SSEClientTransport(new URL(server.url), { requestInit });
+  }
+}
+
 export class McpUpstreamRegistry {
-  private upstreams = new Map<string, IMcpUpstream>();
+  private upstreams = new Map<string, McpUpstream>();
+  private syncPromise: Promise<void> = Promise.resolve();
 
-  constructor(private options: IMcpUpstreamRegistryOptions) {}
+  constructor(private readonly app: McpAppService, private readonly emit: WorkspaceEmit) {}
 
-  async sync(servers: AcpSDK.McpServer[]): Promise<Map<string, IMcpUpstream>> {
-    const next = new Map<string, IMcpUpstream>();
+  sync(servers: AcpSDK.McpServer[]): Promise<Map<AcpSDK.McpServer, McpUpstream>> {
+    const operation = this.syncPromise.then(() => this.syncNow(servers));
+
+    this.syncPromise = operation.then(() => undefined, () => undefined);
+
+    return operation;
+  }
+
+  private async syncNow(servers: AcpSDK.McpServer[]): Promise<Map<AcpSDK.McpServer, McpUpstream>> {
+    const next = new Map<string, McpUpstream>();
+    const resolved = new Map<AcpSDK.McpServer, McpUpstream>();
 
     for (const server of servers) {
       if (!McpUpstreamRegistry.isHttpServer(server)) {
         continue;
       }
 
-      const id = McpUpstreamRegistry.idFor(server);
-      const existing = next.get(id) || this.upstreams.get(id);
-
-      if (existing) {
-        next.set(id, existing);
-        continue;
-      }
-
-      const upstream = await this.connect(id, server);
+      const headers = [...server.headers].sort((left, right) => left.name.localeCompare(right.name));
+      const definition = JSON.stringify({ name: server.name, type: server.type, url: server.url, headers });
+      const id = createHash("sha256").update(definition).digest("hex");
+      const upstream = next.get(id) || this.upstreams.get(id) || await McpUpstream.connect(id, server, this.app, this.emit);
 
       if (upstream) {
         next.set(id, upstream);
+        resolved.set(server, upstream);
       }
     }
 
@@ -54,12 +104,12 @@ export class McpUpstreamRegistry {
       .map(([, upstream]) => upstream);
 
     this.upstreams = next;
-    await Promise.all(removed.map(upstream => upstream.client.close().catch(() => {})));
+    await Promise.all(removed.map(upstream => upstream.close()));
 
-    return new Map(this.upstreams);
+    return resolved;
   }
 
-  get(upstreamId: string): IMcpUpstream {
+  get(upstreamId: string): McpUpstream {
     const upstream = this.upstreams.get(upstreamId);
 
     if (!upstream) {
@@ -69,50 +119,7 @@ export class McpUpstreamRegistry {
     return upstream;
   }
 
-  static idFor(server: AcpSDK.McpServer): string {
-    if (!McpUpstreamRegistry.isHttpServer(server)) {
-      throw new Error("MCP upstream registry only accepts HTTP and SSE servers");
-    }
-
-    const headers = Object.entries(McpUpstreamRegistry.keyValuePairs(server.headers))
-      .sort(([left], [right]) => left.localeCompare(right));
-    const definition = JSON.stringify({ name: server.name, type: server.type, url: server.url, headers });
-
-    return createHash("sha256").update(definition).digest("hex");
-  }
-
-  private async connect(id: string, server: HttpMcpServer): Promise<IMcpUpstream | null> {
-    const client = new Client(
-      { name: "envim", version: "1.0.0" },
-      { capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [MCP_APP_MIME] } } } as any }
-    );
-
-    try {
-      await client.connect(McpUpstreamRegistry.createTransport(server));
-      client.setNotificationHandler(McpTypes.ToolListChangedNotificationSchema, () => this.options.onToolsChanged(id));
-      client.setNotificationHandler(McpTypes.ResourceListChangedNotificationSchema, () => this.options.onResourcesChanged(id));
-
-      return { id, name: server.name, client };
-    } catch {
-      await client.close().catch(() => {});
-
-      return null;
-    }
-  }
-
-  private static createTransport(server: HttpMcpServer): StreamableHTTPClientTransport | SSEClientTransport {
-    const requestInit = { headers: McpUpstreamRegistry.keyValuePairs(server.headers) };
-
-    return server.type === "http"
-      ? new StreamableHTTPClientTransport(new URL(server.url), { requestInit })
-      : new SSEClientTransport(new URL(server.url), { requestInit });
-  }
-
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {
     return "type" in server && (server.type === "http" || server.type === "sse");
-  }
-
-  private static keyValuePairs(values: { name: string; value: string; }[]): Record<string, string> {
-    return Object.fromEntries(values.map(value => [value.name, value.value]));
   }
 }

@@ -6,42 +6,31 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
 
-import { Emit } from "main/emit";
-import { IMcpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
+import { McpAppService } from "main/mcp/app";
+import { McpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
+import { Workspace } from "main/envim/workspace";
 
 interface IMcpGatewaySession {
   upstreamId: string;
   transport: StreamableHTTPServerTransport;
 }
 
-type OnToolResult = (
-  upstreamId: string,
-  request: McpTypes.CallToolRequest["params"],
-  result: McpTypes.CallToolResult,
-) => Promise<void> | void;
-
 const GATEWAY_HOST = "127.0.0.1";
 
 export class McpGateway {
-  private static active: McpGateway | null = null;
-
   private httpServer: HttpServer | null = null;
   private pending: { [connectionId: string]: Buffer[] } = {};
   private proxyPort = 0;
   private sessions = new Map<string, IMcpGatewaySession>();
   private sockets: { [connectionId: string]: Socket } = {};
   private startPromise: Promise<string> | null = null;
+  public readonly app: McpAppService;
+  public readonly upstreams: McpUpstreamRegistry;
 
-  constructor(
-    private registry: McpUpstreamRegistry,
-    private onToolResult: OnToolResult,
-  ) {
-    McpGateway.active = this;
-  }
-
-  static setup(): void {
-    McpGateway.active?.switchWorkspace();
-    Emit.share("envim:luafile", "mcp.lua");
+  constructor(public readonly workspace: Workspace) {
+    this.app = new McpAppService(this.workspace);
+    this.upstreams = new McpUpstreamRegistry(this.app, this.workspace.emit);
+    this.workspace.emit.share("envim:luafile", "mcp.lua");
   }
 
   start(): Promise<string> {
@@ -59,63 +48,48 @@ export class McpGateway {
     return this.startPromise;
   }
 
-  urlFor(upstreamId: string, gatewayUrl: string): string {
-    this.registry.get(upstreamId);
-
-    return `${gatewayUrl}/mcp/${encodeURIComponent(upstreamId)}`;
-  }
-
-  static onOpen(connectionId: string): void {
-    const gateway = McpGateway.active;
-
-    if (!gateway?.proxyPort) {
-      McpGateway.closeRemote(connectionId);
+  onOpen(connectionId: string): void {
+    if (!this.proxyPort) {
+      this.closeRemote(connectionId);
       return;
     }
 
-    const socket = createConnection({ host: GATEWAY_HOST, port: gateway.proxyPort }, () => {
-      for (const data of gateway.pending[connectionId] || []) {
+    const socket = createConnection({ host: GATEWAY_HOST, port: this.proxyPort }, () => {
+      for (const data of this.pending[connectionId] || []) {
         socket.write(data);
       }
 
-      delete(gateway.pending[connectionId]);
+      delete(this.pending[connectionId]);
     });
 
-    socket.on("data", data => McpGateway.sendData(connectionId, Buffer.isBuffer(data) ? data : Buffer.from(data)));
-    socket.on("close", () => McpGateway.closeRemote(connectionId));
+    socket.on("data", data => this.sendData(connectionId, Buffer.isBuffer(data) ? data : Buffer.from(data)));
+    socket.on("close", () => this.closeRemote(connectionId));
     socket.on("error", () => socket.destroy());
-    gateway.sockets[connectionId] = socket;
-    gateway.pending[connectionId] ||= [];
+    this.sockets[connectionId] = socket;
+    this.pending[connectionId] ||= [];
   }
 
-  static onData(connectionId: string, data: string): void {
-    const gateway = McpGateway.active;
-    const socket = gateway?.sockets[connectionId];
+  onData(connectionId: string, data: string): void {
+    const socket = this.sockets[connectionId];
     const chunk = Buffer.from(data, "base64");
 
-    if (!gateway) {
-      McpGateway.closeRemote(connectionId);
-    } else if (!socket || socket.connecting) {
-      (gateway.pending[connectionId] ||= []).push(chunk);
+    if (!socket || socket.connecting) {
+      (this.pending[connectionId] ||= []).push(chunk);
     } else {
       socket.write(chunk);
     }
   }
 
-  static onClose(connectionId: string): void {
-    const gateway = McpGateway.active;
+  onClose(connectionId: string): void {
+    this.sockets[connectionId]?.destroy();
 
-    gateway?.sockets[connectionId]?.destroy();
-
-    if (gateway) {
-      delete(gateway.sockets[connectionId]);
-      delete(gateway.pending[connectionId]);
-    }
+    delete(this.sockets[connectionId]);
+    delete(this.pending[connectionId]);
   }
 
   private async startGateway(): Promise<string> {
     this.proxyPort = await this.startHttpServer();
-    const port = await Emit.share("envim:api", "nvim_call_function", ["EnvimMcpTunnelStart", []]);
+    const port = await this.workspace.emit.share("envim:function", "EnvimMcpTunnelStart", []);
 
     if (typeof port !== "number" || port <= 0) {
       throw new Error("Neovim did not return a valid MCP tunnel port");
@@ -153,10 +127,10 @@ export class McpGateway {
       return McpGateway.writeError(res, 404, "Unknown MCP endpoint");
     }
 
-    let upstream: IMcpUpstream;
+    let upstream: McpUpstream;
 
     try {
-      upstream = this.registry.get(upstreamId);
+      upstream = this.upstreams.get(upstreamId);
     } catch {
       return McpGateway.writeError(res, 404, "Unknown MCP endpoint");
     }
@@ -180,7 +154,7 @@ export class McpGateway {
     await session.transport.handleRequest(req, res, body);
   }
 
-  private async createSession(upstream: IMcpUpstream): Promise<StreamableHTTPServerTransport> {
+  private async createSession(upstream: McpUpstream): Promise<StreamableHTTPServerTransport> {
     const capabilities = upstream.client.getServerCapabilities() || {};
     const server = new Server({ name: `envim-proxy:${upstream.name}`, version: "1.0.0" }, { capabilities });
     let transport: StreamableHTTPServerTransport;
@@ -191,7 +165,12 @@ export class McpGateway {
       const appResult = McpTypes.CallToolResultSchema.safeParse(result);
 
       if (appResult.success) {
-        Promise.resolve(this.onToolResult(upstream.id, request.params, appResult.data)).catch(() => {});
+        this.app.getToolResource(upstream, request.params.name).then(resource => {
+          resource && this.workspace.emit.send("mcp-apps:render", {
+            upstreamId: upstream.id, server: upstream.name, tool: request.params.name,
+            request: request.params, resource, result: appResult.data,
+          });
+        }).catch(() => {});
       }
 
       return result;
@@ -256,22 +235,20 @@ export class McpGateway {
     res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }));
   }
 
-  private static sendData(connectionId: string, data: Buffer): void {
-    Emit.share("envim:api", "nvim_call_function", ["EnvimMcpTunnelWrite", [connectionId, data.toString("base64")]]);
+  private sendData(connectionId: string, data: Buffer): void {
+    this.workspace.emit.share("envim:function", "EnvimMcpTunnelWrite", [connectionId, data.toString("base64")]);
   }
 
-  private static closeRemote(connectionId: string): void {
-    const gateway = McpGateway.active;
+  private closeRemote(connectionId: string): void {
+    delete(this.sockets[connectionId]);
+    delete(this.pending[connectionId]);
 
-    if (gateway) {
-      delete(gateway.sockets[connectionId]);
-      delete(gateway.pending[connectionId]);
-    }
-
-    Emit.share("envim:api", "nvim_call_function", ["EnvimMcpTunnelClose", [connectionId]]);
+    this.workspace.emit.share("envim:function", "EnvimMcpTunnelClose", [connectionId]);
   }
 
-  private switchWorkspace(): void {
+  dispose(): void {
+    this.upstreams.sync([]).catch(() => {});
+
     for (const socket of Object.values(this.sockets)) {
       socket.removeAllListeners();
       socket.destroy();
@@ -279,6 +256,11 @@ export class McpGateway {
 
     this.pending = {};
     this.sockets = {};
+    this.sessions.clear();
+
+    this.httpServer?.closeAllConnections();
+    this.httpServer?.close();
+    this.httpServer = null;
     this.startPromise = null;
   }
 }

@@ -1,8 +1,9 @@
 import React from "react";
 
-import { Emit } from "renderer/utils/emit";
+import { WorkspaceProvider } from "renderer/context/workspace";
+
+import { Emit, WorkspaceEmit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-import { Highlights } from "renderer/utils/highlight";
 import { Cache } from "renderer/utils/cache";
 import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
@@ -13,10 +14,11 @@ interface States {
   init: boolean;
   theme: "dark" | "light";
   window: { width: number; height: number; };
+  workspaces: { [key: string]: boolean };
 }
 
 export function AppComponent() {
-  const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight } });
+  const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight }, workspaces: {} });
   const titlebar = navigator.windowControlsOverlay.getTitlebarAreaRect
     ? navigator.windowControlsOverlay.getTitlebarAreaRect()
     : { x: 0, y: 0, width: 0, height: 0, left: 0, right: 0 };
@@ -39,23 +41,12 @@ export function AppComponent() {
     document.fonts.load("10px Icon").then();
     document.fonts.load("10px Git").then();
     Emit.on("app:resize", onResize);
-    Emit.on("app:switch", onSwitch);
     Emit.on("app:theme", onTheme);
-    Highlights.setHighlight("0", true, {  });
+    Emit.on("app:workspace", onWorkspace);
   }, []);
 
   function onResize (width: number, height: number) {
     setState(state => ({ ...state, window: { width, height } }));
-  }
-
-  function onSwitch (init: boolean) {
-    setState(state => {
-      Emit.initialize();
-
-      state.init === init || Emit.send("envim:setting", Setting.get());
-
-      return { ...state, init };
-    });
   }
 
   function onTheme (theme: "dark" | "light") {
@@ -63,10 +54,24 @@ export function AppComponent() {
     Cache.set<"dark" | "light">("common", "theme", theme);
   }
 
+  function onWorkspace(workspaces: { [key: string]: boolean }) {
+    const init = Object.keys(workspaces).length > 0;
+
+    setState(state => {
+      state.init === init || Emit.send("envim:setting", Setting.get());
+
+      return { ...state, init, workspaces };
+    });
+  }
+
   return (
     <div className={`theme-${state.theme}`}>
       {state.init
-        ? <EnvimComponent { ...{ header, main, footer } } />
+        ? Object.entries(state.workspaces).map(([key, active]) => (
+          <WorkspaceProvider key={key} workspace={key} workspaces={state.workspaces} active={active} emit={new WorkspaceEmit(key)}>
+            <EnvimComponent { ...{ header, main, footer } } />
+          </WorkspaceProvider>
+        ))
         : <SettingComponent {...state.window} />
       }
     </div>

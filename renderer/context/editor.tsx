@@ -2,7 +2,7 @@ import React from "react";
 
 import { ISetting, ITab, IBuffer, IMode, IMenu } from "common/interface";
 
-import { Emit } from "renderer/utils/emit";
+import { useWorkspace } from "renderer/context/workspace";
 import { Setting } from "renderer/utils/setting";
 
 interface EditorContextType {
@@ -29,6 +29,7 @@ const EditorContext = React.createContext<EditorContextType>({
 export const useEditor = () => React.useContext(EditorContext);
 
 export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { emit } = useWorkspace();
   const [state, setState] = React.useState<EditorContextType>({
     busy: false,
     connections: [],
@@ -40,20 +41,20 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   React.useEffect(() => {
-    Emit.on("app:busy", onBusy);
-    Emit.on("option:set", onOption);
-    Emit.on("mode:change", onMode);
-    Emit.on("tabline:update", onTabline);
-    Emit.on("menu:update", onMenu);
-    Emit.on("envim:drag", onDrag);
+    emit.on("app:busy", onBusy);
+    emit.on("option:set", onOption);
+    emit.on("mode:change", onMode);
+    emit.on("tabline:update", onTabline);
+    emit.on("menu:update", onMenu);
+    emit.on("envim:drag", onDrag);
 
     return () => {
-      Emit.off("app:busy", onBusy);
-      Emit.off("option:set", onOption);
-      Emit.off("mode:change", onMode);
-      Emit.off("tabline:update", onTabline);
-      Emit.off("menu:update", onMenu);
-      Emit.off("envim:drag", onDrag);
+      emit.off("app:busy", onBusy);
+      emit.off("option:set", onOption);
+      emit.off("mode:change", onMode);
+      emit.off("tabline:update", onTabline);
+      emit.off("menu:update", onMenu);
+      emit.off("envim:drag", onDrag);
     };
   }, []);
 
@@ -88,4 +89,3 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     </EditorContext.Provider>
   );
 };
-

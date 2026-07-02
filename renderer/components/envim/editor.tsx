@@ -3,10 +3,9 @@ import React from "react";
 import { ICell, IScroll, IBuffer } from "common/interface";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-import { Canvas } from "renderer/utils/canvas";
 import { y2Row, x2Col } from "renderer/utils/size";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -15,7 +14,6 @@ import { MenuComponent } from "renderer/components/menu";
 import { WebviewComponent } from "renderer/components/webview";
 
 interface Props {
-  id: string;
   gid: number;
   winid: number;
   focusable: boolean;
@@ -47,7 +45,8 @@ interface States {
 
 export function EditorComponent(props: Props) {
   const { busy, options, mode, bufs, drag } = useEditor();
-  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.id, dragging: false, hidden: false, scrolling: 0, webview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
+  const { emit, canvas: canvasApi } = useWorkspace();
+  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.gid, dragging: false, hidden: false, scrolling: 0, webview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
   const canvas: React.RefObject<HTMLCanvasElement | null> = React.useRef<HTMLCanvasElement>(null);
   const timer: React.RefObject<number> = React.useRef(0);
   const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
@@ -56,18 +55,18 @@ export function EditorComponent(props: Props) {
   const { height, scale } = Setting.font;
 
   React.useEffect(() => {
-    Emit.on(`clear:${props.id}`, onClear);
-    Emit.on(`flush:${props.id}`, onFlush);
-    Emit.on(`webview:${props.id}`, onWebview);
-    Emit.on(`viewport:${props.id}`, onViewport);
+    emit.on(`clear:${props.gid}`, onClear);
+    emit.on(`flush:${props.gid}`, onFlush);
+    emit.on(`webview:${props.gid}`, onWebview);
+    emit.on(`viewport:${props.gid}`, onViewport);
 
     return () => {
       clearInterval(timer.current);
-      Canvas.delete(props.id);
-      Emit.off(`clear:${props.id}`, onClear);
-      Emit.off(`flush:${props.id}`, onFlush);
-      Emit.off(`webview:${props.id}`, onWebview);
-      Emit.off(`viewport:${props.id}`, onViewport);
+      canvasApi.delete(props.gid);
+      emit.off(`clear:${props.gid}`, onClear);
+      emit.off(`flush:${props.gid}`, onFlush);
+      emit.off(`webview:${props.gid}`, onWebview);
+      emit.off(`viewport:${props.gid}`, onViewport);
     };
   }, []);
 
@@ -75,25 +74,25 @@ export function EditorComponent(props: Props) {
     const ctx = canvas.current?.getContext("2d");
 
     if (canvas.current && ctx) {
-      Canvas.create(props.id, canvas.current, ctx, props.type === "normal");
-      Emit.send("envim:ready", props.gid);
+      canvasApi.create(props.gid, canvas.current, ctx, props.type === "normal");
+      emit.send("envim:ready", props.gid);
     }
   }, []);
 
   React.useEffect(() => {
-      Canvas.update(props.id, props.type === "normal");
-      Emit.send("envim:resized", props.gid);
+      canvasApi.update(props.gid, props.type === "normal");
+      emit.send("envim:resized", props.gid);
   }, [props.style.width, props.style.height]);
 
   React.useEffect(() => {
-      props.focus && Emit.share("envim:focusable", !state.webview.active);
+      props.focus && emit.share("envim:focusable", !state.webview.active);
   }, [props.focus, state.webview.active]);
 
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
     e.preventDefault();
 
-    command && Emit.send("envim:api", "nvim_call_function", ["win_execute", [props.winid, command]]);
+    command && emit.send("envim:function", "win_execute", [props.winid, command]);
   }
 
   function onMouseEvent(e: React.MouseEvent, action: string, button: string = "") {
@@ -103,7 +102,7 @@ export function EditorComponent(props: Props) {
     const modiffier: string[] = [];
     const skip = (button === "move" || action === "drag") && row === pointer.current.row && col === pointer.current.col;
     const gid = props.gid === 1 ? 0 : props.gid;
-    const url = (action === "press" || button === "move") ? Canvas.link(props.id, row, col) : "";
+    const url = (action === "press" || button === "move") ? canvasApi.link(props.gid, row, col) : "";
 
     e.shiftKey && modiffier.push("S");
     e.ctrlKey && modiffier.push("C");
@@ -119,14 +118,14 @@ export function EditorComponent(props: Props) {
       (e.currentTarget as HTMLElement).style.cursor = url ? "pointer" : "";
     }
 
-    skip || Emit.send("envim:mouse", gid, button, action, modiffier.join("-"), row, col);
+    skip || emit.send("envim:mouse", gid, button, action, modiffier.join("-"), row, col);
   }
 
   function onMouseDown(e: React.MouseEvent) {
     clearTimeout(timer.current);
 
     timer.current = +setTimeout(() => {
-      Emit.share("envim:drag", props.id);
+      emit.share("envim:drag", props.gid);
     });
 
     onMouseEvent(e, "press");
@@ -142,7 +141,7 @@ export function EditorComponent(props: Props) {
     clearTimeout(timer.current);
 
     if (drag) {
-      Emit.share("envim:drag", "");
+      emit.share("envim:drag", "");
     }
     onMouseEvent(e, "release");
   }
@@ -164,9 +163,9 @@ export function EditorComponent(props: Props) {
       dragging.current = { x: 0, y: 0 };
       setState(state => ({ ...state, dragging: false }));
 
-      Emit.share("envim:drag", "");
-      Emit.send("envim:position", props.gid, x2Col(Math.max(0, offset.x)), y2Row(Math.max(0, offset.y)));
-      Emit.send("envim:resize", props.gid, Math.max(x2Col(resize.width), 18), y2Row(resize.height));
+      emit.share("envim:drag", "");
+      emit.send("envim:position", props.gid, x2Col(Math.max(0, offset.x)), y2Row(Math.max(0, offset.y)));
+      emit.send("envim:resize", props.gid, Math.max(x2Col(resize.width), 18), y2Row(resize.height));
     }
   }
 
@@ -192,11 +191,11 @@ export function EditorComponent(props: Props) {
   }
 
   function onClear() {
-    Canvas.clear(props.id, x2Col(props.style.width), y2Row(props.style.height));
+    canvasApi.clear(props.gid, x2Col(props.style.width), y2Row(props.style.height));
   }
 
   function onFlush(flush: { cells: ICell[], scroll?: IScroll }[]) {
-    flush.forEach(({ cells, scroll }) => Canvas.push(props.id, cells, scroll));
+    flush.forEach(({ cells, scroll }) => canvasApi.push(props.gid, cells, scroll));
   }
 
   function onWebview(src: string, active: boolean) {
@@ -215,7 +214,7 @@ export function EditorComponent(props: Props) {
     e.preventDefault();
 
     setState(state => ({ ...state, dragging: true }));
-    Emit.share("envim:drag", props.id);
+    emit.share("envim:drag", props.gid);
   }
 
   function toggleExtWindow(e: React.MouseEvent) {
@@ -242,10 +241,10 @@ export function EditorComponent(props: Props) {
   }
 
   React.useEffect(() => {
-    const nomouse = ["", props.id].indexOf(drag) < 0;
+    const nomouse = ["", props.gid].indexOf(drag) < 0;
 
     setState(state => ({ ...state, nomouse, dragging: drag === "" ? false : state.dragging }));
-  }, [drag === "" || drag === props.id]);
+  }, [drag === "" || drag === props.gid]);
 
   React.useEffect(() => {
     setState(state => ({ ...state, bufs }));

@@ -7,7 +7,7 @@ import { diffLines } from "diff";
 
 import { IPermissionRequest } from "common/interface";
 
-import { Emit } from "renderer/utils/emit";
+import { useWorkspace } from "renderer/context/workspace";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
@@ -20,6 +20,8 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotification }) => {
+  const { emit } = useWorkspace();
+
   function urlTransform(url: string) {
     if (/^(data:|file:\/\/)/.test(url)) return url;
     return defaultUrlTransform(url);
@@ -36,7 +38,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   }
 
   function onPermissionChoice(requestId: string, optionId: string) {
-    Emit.send("acp:permission-response", requestId, optionId);
+    emit.send("acp:permission-response", requestId, optionId);
   }
 
   function getPermissionIcon(kind: string, suffix: string = "") {

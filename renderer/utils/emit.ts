@@ -1,9 +1,37 @@
+export class WorkspaceEmit {
+  constructor(private readonly workspace: string) {}
+
+  event(base: string) {
+    return `${this.workspace}:${base}`;
+  }
+
+  on(event: string, callback: (...args: any[]) => void) {
+    return Emit.on(this.event(event), callback);
+  }
+
+  off(event: string, callback: (...args: any[]) => void) {
+    return Emit.off(this.event(event), callback);
+  }
+
+  once(event: string, callback: (...args: any[]) => void) {
+    return Emit.once(this.event(event), callback);
+  }
+
+  send<T>(event: string, ...args: any[]) {
+    return Emit.send<T>(this.event(event), ...args);
+  }
+
+  share(event: string, ...args: any[]) {
+    return Emit.share(this.event(event), ...args);
+  }
+
+  dispose() {
+    Emit.clear(this.workspace);
+  }
+}
+
 export class Emit {
   private static events: { [k: string]: ((...args: any[]) => void)[] } = {};
-
-  static initialize() {
-    window.envimIPC.initialize();
-  }
 
   static on(event: string, callback: (...args: any[]) => void) {
     if (!Emit.events[event]) {
@@ -35,5 +63,9 @@ export class Emit {
     if (Emit.events[event]) {
       Emit.events[event] = Emit.events[event].filter(stored => callback !== stored);
     }
+  }
+
+  static clear(prefix: string) {
+    window.envimIPC.clear(prefix);
   }
 }

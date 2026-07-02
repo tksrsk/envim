@@ -1,7 +1,7 @@
-import { Emit } from "main/emit";
+import { Workspace } from "main/envim/workspace";
 
 export class Function {
-  static setup() {
-    Emit.share("envim:luafile", "function.lua");
+  constructor(private readonly workspace: Workspace) {
+    this.workspace.emit.share("envim:luafile", "function.lua");
   }
 }

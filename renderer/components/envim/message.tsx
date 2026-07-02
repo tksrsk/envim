@@ -2,7 +2,8 @@ import React from "react";
 
 import { IMessage } from "common/interface";
 
-import { Highlights } from "renderer/utils/highlight";
+import { useWorkspace } from "renderer/context/workspace";
+
 import { notificates } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -28,10 +29,11 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function MessageComponent(props: Props) {
+  const { highlights } = useWorkspace();
   const [state, setState] = React.useState<States>({ open: props.open });
   const { font } = notificates.filter(icon => icon.kinds.indexOf(props.message.kind) >= 0)[0] || { font: "󱈸" };
   const defaultHl = props.message.contents[0].hl;
-  const defaultStyle = Highlights.style(defaultHl);
+  const defaultStyle = highlights.style(defaultHl);
 
   function onToggleOpen() {
     setState(state => ({ ...state, open: !state.open }));
@@ -46,10 +48,10 @@ export function MessageComponent(props: Props) {
 
   return (
     <FlexComponent grow={1} basis="0" onClick={onToggleOpen}>
-      <IconComponent font={font} style={Highlights.style(defaultHl, { reverse: true, normal: true })} />
+      <IconComponent font={font} style={highlights.style(defaultHl, { reverse: true, normal: true })} />
       <FlexComponent whiteSpace={state.open ? "pre-wrap" : "nowrap"} grow={1} shrink={1} basis="0" padding={[2, 4]} style={defaultStyle} selectable>
         <div style={styles.message}>
-          {props.message.contents.map(({hl, content}, i) => <span {...contentStyle(hl, hl === defaultHl ? {} : Highlights.style(hl))} key={i}>{ content }</span>)}
+          {props.message.contents.map(({hl, content}, i) => <span {...contentStyle(hl, hl === defaultHl ? {} : highlights.style(hl))} key={i}>{ content }</span>)}
         </div>
       </FlexComponent>
     </FlexComponent>
