@@ -291,9 +291,11 @@ export function WebviewComponent(props: Props) {
     switch (state.mode) {
       case "input":
         if (state.input) {
+          const url = webview.current.getURL();
+
+          setState(state => ({ ...state, input: url === "about:blank" ? "" : url }));
           webview.current.src = getUrl(state.input);
         }
-        setState(state => ({ ...state, input: "" }));
         break;
       case "search":
         if (state.search) {
