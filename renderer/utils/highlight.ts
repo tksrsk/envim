@@ -1,14 +1,11 @@
 import { IHighlight } from "common/interface";
 import { Setting } from "renderer/utils/setting";
-import { Cache } from "renderer/utils/cache";
 
 interface IOptions {
   reverse?: boolean;
   normal?: boolean;
   lighten?: boolean;
 }
-
-const TYPE = "highlight";
 
 class Highlight {
   public foreground: { normal: string; alpha: string; lighten: string; };
@@ -89,23 +86,25 @@ class Highlight {
 }
 
 export class Highlights {
-  static setHighlight(id: string, ui: boolean, hl: IHighlight) {
+  private hls: { [k: string]: Highlight } = {};
+
+  setHighlight(id: string, ui: boolean, hl: IHighlight) {
     const alpha = ui ? Setting.opacity : 0;
     const lighten = alpha && Setting.options.ext_multigrid ? Math.sqrt(alpha / 100) * 100 : alpha;
 
-    Cache.set<Highlight>(TYPE, id, new Highlight(hl, alpha, lighten));
+    this.hls[id] = new Highlight(hl, alpha, lighten);
   }
 
-  static color(id: string, type: "foreground" | "background" | "special", options: IOptions = {}) {
-    const reverse = !!Cache.get<Highlight>(TYPE, id)?.reverse !== !!options.reverse;
+  color(id: string, type: "foreground" | "background" | "special", options: IOptions = {}) {
+    const reverse = !!this.hls[id]?.reverse !== !!options.reverse;
 
     if (reverse && type !== "special") {
       type = type === "foreground" ? "background" : "foreground";
     }
 
     const alpha = type === "background" && !options.normal ? "alpha" : "normal";
-    const color1 = Cache.get<Highlight>(TYPE, 0) && Cache.get<Highlight>(TYPE, 0)[type];
-    const color2 = Cache.get<Highlight>(TYPE, id) && Cache.get<Highlight>(TYPE, id)[type] || color1;
+    const color1 = this.hls[0] && this.hls[0][type];
+    const color2 = this.hls[id] && this.hls[id][type] || color1;
 
     if (options.lighten && type === "background") {
       return color2.lighten || color1.lighten;
@@ -114,13 +113,13 @@ export class Highlights {
     return color2[alpha] || color1[alpha];
   }
 
-  static style(id: string, options: IOptions = {}) {
-    const background = Highlights.color(id, "background", options);
-    const foreground = Highlights.color(id, "foreground", options);
-    const special = Highlights.color(id, "special");
-    const fontFamily = Highlights.fontFamily(id);
-    const fontStyle = Highlights.fontStyle(id);
-    const textDecoration = Highlights.decoration(id)
+  style(id: string, options: IOptions = {}) {
+    const background = this.color(id, "background", options);
+    const foreground = this.color(id, "foreground", options);
+    const special = this.color(id, "special");
+    const fontFamily = this.fontFamily(id);
+    const fontStyle = this.fontStyle(id);
+    const textDecoration = this.decoration(id)
       .map(type => ({
         strikethrough: ["line-through", special],
         underline: ["underline", "solid", special],
@@ -138,23 +137,23 @@ export class Highlights {
     return { background, color: foreground, borderColor: foreground, fontFamily, fontStyle, textDecoration };
   }
 
-  static font(id: string, size: number) {
-    return Cache.get<Highlight>(TYPE, id)?.font(size) || "";
+  font(id: string, size: number) {
+    return this.hls[id]?.font(size) || "";
   }
 
-  static fontFamily(id: string) {
-    return Cache.get<Highlight>(TYPE, id)?.fontFamily() || "";
+  fontFamily(id: string) {
+    return this.hls[id]?.fontFamily() || "";
   }
 
-  static fontStyle(id: string) {
-    return Cache.get<Highlight>(TYPE, id)?.fontStyle() || "";
+  fontStyle(id: string) {
+    return this.hls[id]?.fontStyle() || "";
   }
 
-  static decoration(id: string) {
-    return Cache.get<Highlight>(TYPE, id)?.decoration() || [];
+  decoration(id: string) {
+    return this.hls[id]?.decoration() || [];
   }
 
-  static link(id: string) {
-    return Cache.get<Highlight>(TYPE, id)?.link();
+  link(id: string) {
+    return this.hls[id]?.link();
   }
 }

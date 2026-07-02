@@ -3,6 +3,8 @@ import React from "react";
 
 import { ISetting } from "common/interface";
 
+import { useWorkspace } from "renderer/context/workspace";
+
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { col2X, row2Y } from "renderer/utils/size";
@@ -49,6 +51,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function WebviewComponent(props: Props) {
+  const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<Electron.WebviewTag | null> = React.useRef<Electron.WebviewTag>(null);
@@ -61,12 +64,12 @@ export function WebviewComponent(props: Props) {
   const color = { command: "green", visual: "purple", browser: "blue" }[state.mode] || "default";
 
   React.useEffect(() => {
-    Emit.on("envim:focused", onFocused);
+    emit.on("envim:focused", onFocused);
     Emit.on("webview:action", onAction);
     Emit.on("webview:searchengines", onSearchengines);
 
     return () => {
-      Emit.off("envim:focused", onFocused);
+      emit.off("envim:focused", onFocused);
       Emit.off("webview:action", onAction);
       Emit.off("webview:searchengines", onSearchengines);
     };
@@ -136,7 +139,7 @@ export function WebviewComponent(props: Props) {
   }
 
   function onFocus () {
-    Emit.share("envim:focused");
+    emit.share("envim:focused");
   }
 
   function onClose() {
@@ -211,7 +214,7 @@ export function WebviewComponent(props: Props) {
 
     webview.current.sendInputEvent({ type: "mouseDown", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
     webview.current.sendInputEvent({ type: "mouseUp", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
-    Emit.once("envim:focused", () => runAction("mode-command"));
+    emit.once("envim:focused", () => runAction("mode-command"));
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -232,9 +235,9 @@ export function WebviewComponent(props: Props) {
       case "l": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: -100, deltaY: 0 });
       case "u": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageUp" });
       case "d": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageDown" });
-      case "s": return Emit.send("envim:browser", "", "new");
-      case "v": return Emit.send("envim:browser", "", "vnew");
-      case "t": return Emit.send("envim:browser", "", "tabnew");
+      case "s": return emit.send("envim:browser", "", "new");
+      case "v": return emit.send("envim:browser", "", "vnew");
+      case "t": return emit.send("envim:browser", "", "tabnew");
     }
 
     switch (e.key) {
@@ -368,7 +371,7 @@ export function WebviewComponent(props: Props) {
 
     if (webview.current && selected && selected.uri.indexOf("${query}") < 0) {
       if (e.ctrlKey || e.metaKey) {
-        Emit.send("envim:browser", selected.uri);
+        emit.send("envim:browser", selected.uri);
       } else {
         webview.current.src = selected.uri;
       }
@@ -390,9 +393,9 @@ export function WebviewComponent(props: Props) {
 
   const saveEngine = async () => {
     if (webview.current) {
-      const uri = await Emit.send<string>("envim:readline", "URI", webview.current.getURL());
+      const uri = await emit.send<string>("envim:readline", "URI", webview.current.getURL());
       const selected = state.searchengines.find(engine => engine.uri === uri);
-      const name = uri && await Emit.send<string>("envim:readline", "Name", selected?.name || "");
+      const name = uri && await emit.send<string>("envim:readline", "Name", selected?.name || "");
       const hasquery = uri.indexOf("${query}") >= 0;
 
       if (uri && name) {

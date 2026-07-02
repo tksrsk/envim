@@ -1,95 +1,54 @@
 import * as AcpSDK from "@agentclientprotocol/sdk";
 
-import { McpAppService } from "main/mcp/app";
-import { McpGateway } from "main/mcp/gateway";
-import { McpUpstreamRegistry } from "main/mcp/upstream";
+import { Workspace } from "main/envim/workspace";
 import { Setting } from "main/setting";
-
-interface IMcpServices {
-  app: McpAppService;
-  gateway: McpGateway;
-  registry: McpUpstreamRegistry;
-}
 
 type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
 
 export class Mcp {
-  private static services: IMcpServices | null = null;
   private static syncPromise: Promise<void> = Promise.resolve();
 
-  static servers(): Promise<AcpSDK.McpServer[]> {
-    const operation = Mcp.syncPromise.then(() => Mcp.syncServers());
+  static servers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
+    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace));
 
     Mcp.syncPromise = operation.then(() => undefined, () => undefined);
 
     return operation;
   }
 
-  private static async syncServers(): Promise<AcpSDK.McpServer[]> {
+  private static async syncServers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
     const servers = (Setting.get()?.acp?.mcpServers || [])
       .filter(mcp => mcp.enabled)
       .map(mcp => mcp.server);
     const httpServers = servers.filter(Mcp.isHttpServer);
+    const gateway = workspace.mcpGateway;
 
     if (httpServers.length === 0) {
-      if (Mcp.services) {
-        await Mcp.services.registry.sync([]);
-        Mcp.services.app.onUpstreamsChanged([]);
-      }
+      await gateway.upstreams.sync([]);
+      gateway.app.onUpstreamsChanged([]);
 
       return servers;
     }
 
-    const services = Mcp.ensureServices();
-    const upstreams = await services.registry.sync(httpServers);
-    services.app.onUpstreamsChanged(upstreams.keys());
+    const upstreams = await gateway.upstreams.sync(httpServers);
+    gateway.app.onUpstreamsChanged([...upstreams.values()].map(upstream => upstream.id));
     let gatewayUrl: string;
 
     try {
-      gatewayUrl = await services.gateway.start();
+      gatewayUrl = await gateway.start();
     } catch {
       return servers;
     }
 
     return servers.map(server => {
-      if (!Mcp.isHttpServer(server)) {
-        return server;
-      }
+      const upstream = upstreams.get(server);
 
-      const upstreamId = McpUpstreamRegistry.idFor(server);
+      if (!upstream) return server;
 
-      if (!upstreams.has(upstreamId)) {
-        return server;
-      }
+      const url = `${gatewayUrl}/mcp/${encodeURIComponent(upstream.id)}`;
 
-      return {
-        type: "http",
-        name: server.name,
-        url: services.gateway.urlFor(upstreamId, gatewayUrl),
-        headers: [],
-      };
+      return { type: "http", name: server.name, url, headers: [] };
     });
-  }
-
-  private static ensureServices(): IMcpServices {
-    if (Mcp.services) {
-      return Mcp.services;
-    }
-
-    const registry = new McpUpstreamRegistry({
-      onToolsChanged: upstreamId => app.onToolsChanged(upstreamId),
-      onResourcesChanged: upstreamId => app.onResourcesChanged(upstreamId),
-    });
-
-    const app = new McpAppService(registry);
-    const gateway = new McpGateway(registry, (upstreamId, request, result) =>
-      app.onToolResult(upstreamId, request, result)
-    );
-
-    app.setup();
-    Mcp.services = { app, gateway, registry };
-
-    return Mcp.services;
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {

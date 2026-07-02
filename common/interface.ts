@@ -14,7 +14,6 @@ export interface ISetting {
 }
 
 export interface IWindow {
-  id: string;
   gid: number;
   winid: number;
   x: number;
@@ -115,7 +114,6 @@ export interface IMcpApp {
 export interface IAcpSession {
   id: string;
   name: string;
-  workspace: string;
   loaded: boolean;
   status: "show" | "hide";
   commands: AcpSDK.AvailableCommand[];

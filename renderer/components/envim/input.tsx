@@ -1,8 +1,8 @@
 import React from "react";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
 import { keycode } from "renderer/utils/keycode";
 import { row2Y, col2X } from "renderer/utils/size";
 
@@ -28,18 +28,19 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function InputComponent () {
   const { busy, mode } = useEditor();
+  const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy, focus: true, focusable: true });
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    Emit.on("envim:focus", onFocus);
-    Emit.on("envim:focusable", onFocusable);
-    Emit.on("grid:cursor", onCursor);
+    emit.on("envim:focus", onFocus);
+    emit.on("envim:focusable", onFocusable);
+    emit.on("grid:cursor", onCursor);
 
     return () => {
-      Emit.off("envim:focus", onFocus);
-      Emit.off("envim:focusable", onFocusable);
-      Emit.off("grid:cursor", onCursor);
+      emit.off("envim:focus", onFocus);
+      emit.off("envim:focusable", onFocusable);
+      emit.off("grid:cursor", onCursor);
     };
   }, []);
 
@@ -105,7 +106,7 @@ export function InputComponent () {
       () => (document.activeElement === input.current) === focus && setState(state => ({ ...state, focus })),
       200
     );
-    focus && Emit.share("envim:focused");
+    focus && emit.share("envim:focused");
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -115,12 +116,12 @@ export function InputComponent () {
     e.stopPropagation();
     e.preventDefault();
 
-    code && Emit.send("envim:input", code);
+    code && emit.send("envim:input", code);
   }
 
   function onKeyUp (e: React.KeyboardEvent) {
     if (!e.nativeEvent.isComposing && input.current?.value) {
-      Emit.send("envim:input", input.current.value);
+      emit.send("envim:input", input.current.value);
       input.current.value = "";
     }
 

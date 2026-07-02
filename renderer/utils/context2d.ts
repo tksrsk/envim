@@ -18,6 +18,7 @@ export class Context2D {
     private canvas: HTMLCanvasElement,
     private ctx: CanvasRenderingContext2D,
     private lighten: boolean,
+    private highlights: Highlights,
   ) {
     const { size, width, height, scale } = Setting.font;
     const bg = this.getCanvas();
@@ -59,13 +60,13 @@ export class Context2D {
   }
 
   private style(ctx: CanvasRenderingContext2D, hl: string, type: "foreground" | "background" | "special") {
-    const color = Highlights.color(hl, type, { lighten: this.lighten });
+    const color = this.highlights.color(hl, type, { lighten: this.lighten });
     const field = type === "special" ? "strokeStyle" : "fillStyle";
 
     ctx[field] === color || (ctx[field] = color);
 
     if (type === "foreground") {
-      const font = Highlights.font(hl, this.font.size);
+      const font = this.highlights.font(hl, this.font.size);
 
       ctx.font === font || (ctx.font = font);
     }
@@ -80,7 +81,7 @@ export class Context2D {
       this.urlhls.delete(`${row},${col + i}`);
     }
 
-    Highlights.decoration(hl).forEach(type => {
+    this.highlights.decoration(hl).forEach(type => {
       this.style(this.bgctx, hl, "special");
       this.bgctx.beginPath();
       this.bgctx.setLineDash([]);
@@ -250,7 +251,7 @@ export class Context2D {
   link(row: number, col: number) {
     const hl = this.urlhls.get(`${row},${col}`);
 
-    return hl && Highlights.link(hl);
+    return hl && this.highlights.link(hl);
   }
 
   push(cells: ICell[], scroll?: IScroll) {

@@ -3,15 +3,42 @@ import { EventEmitter } from "events";
 
 import { Bootstrap } from "main/bootstrap";
 
+export class WorkspaceEmit {
+  constructor(private readonly workspace: string) {}
+
+  event(base: string) {
+    return `${this.workspace}:${base}`;
+  }
+
+  send(event: string, ...args: any[]) {
+    return Emit.send(this.event(event), ...args);
+  }
+
+  update(event: string, async: boolean, ...args: any[]) {
+    return Emit.update(this.event(event), async, ...args);
+  }
+
+  on(event: string, callback: (...args: any[]) => unknown) {
+    return Emit.on(this.event(event), callback);
+  }
+
+  off(event: string) {
+    return Emit.off(this.event(event));
+  }
+
+  share(event: string, ...args: any[]) {
+    return Emit.share(this.event(event), ...args);
+  }
+
+  dispose() {
+    Emit.offByPrefix(this.workspace);
+  }
+}
+
 export class Emit {
   private static emit = new EventEmitter;
   private static events: { [k: string]: ((...args: any[]) => unknown)[] } = {};
   private static cache: { [k: string ]: { json: string; timer: number; } } = {};
-
-  static init() {
-    Object.values(Emit.cache).forEach(({ timer }) => clearTimeout(timer));
-    Emit.cache = {};
-  }
 
   static on(event: string, callback: (...args: any[]) => unknown) {
     if (!Emit.events[event]) {
@@ -52,7 +79,15 @@ export class Emit {
     }
   }
 
-  static off(event: string, callback: (...args: any[]) => void) {
-    Emit.events[event] = Emit.events[event]?.filter(stored => callback !== stored) || [];
+  static off(event: string) {
+    Emit.events[event] = [];
+  }
+
+  static offByPrefix(prefix: string) {
+    for (const event of Object.keys(Emit.events)) {
+      if (event.startsWith(`${prefix}:`)) {
+        Emit.events[event] = [];
+      }
+    }
   }
 }

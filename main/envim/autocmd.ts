@@ -1,12 +1,12 @@
-import { Emit } from "main/emit";
+import { Workspace } from "main/envim/workspace";
 
 export class Autocmd {
-  static setup() {
-    Emit.share("envim:luafile", "autocmd.lua");
+  constructor(private readonly workspace: Workspace) {
+    this.workspace.emit.share("envim:luafile", "autocmd.lua");
   }
 
-  static dirchanged(cwd: string) {
-    Emit.share("envim:cwd", cwd);
-    Emit.send("envim:cwd", cwd);
+  dirchanged(cwd: string) {
+    this.workspace.emit.share("envim:cwd", cwd);
+    this.workspace.emit.send("envim:cwd", cwd);
   }
 }

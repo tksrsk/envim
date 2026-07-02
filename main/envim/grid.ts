@@ -1,7 +1,8 @@
 import { IWindow, ICell, IScroll, IMode } from "common/interface";
 
-import { Emit } from "main/emit";
-import { Highlights } from "main/envim/highlight";
+import { Workspace } from "main/envim/workspace";
+
+const DEFAULT_GRID = 1;
 
 class Grid {
   private info: IWindow;
@@ -12,21 +13,19 @@ class Grid {
   private ready: "init" | "resize" | true = "init";
   private size?: { width: number; height: number; };
 
-  constructor(gid: number, workspace: string, width: number, height: number) {
-    const id = `${workspace}.${gid}`;
-
-    this.info = { id, gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
+  constructor(private workspace: Workspace, gid: number, width: number, height: number) {
+    this.info = { gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
     this.resize(width, height);
   }
 
   setInfo(info: Object) {
-    const { id, gid, ...curr } = this.info;
+    const { gid, ...curr } = this.info;
     const next = { ...curr, ...info };
     const update = JSON.stringify(curr) !== JSON.stringify(next);
 
     if (update) {
       this.resize(next.width, next.height);
-      this.info = { id, gid, ...next };
+      this.info = { gid, ...next };
     }
 
     return update;
@@ -91,7 +90,7 @@ class Grid {
 
     hl = +hl < 0 ? prev.hl : hl;
 
-    const hl1 = Highlights.get(hl);
+    const hl1 = this.workspace.highlights.get(hl);
     const hl2 = this.getCell(row, col).hl;
     const dirty = (hl1.fg ^ hl2.fg || cell.text !== text) || (hl1.bg ^ hl2.bg) || (hl1.sp ^ hl2.sp);
 
@@ -161,69 +160,47 @@ class Grid {
 }
 
 export class Grids {
-  private static grids: { [k: number]: Grid } = {};
-  private static layer: { [i: number]: { parent: number, children: number[] }[] } = {};
-  private static default: 1 = 1;
-  private static active: { gid: number; row: number; col: number; } = { gid: 0, row: 0, col: 0 };
-  private static changes: { [k: number]: number } = {};
-  private static mode?: IMode;
-  private static workspace: { current: string; caches: { [k: string]: Grid[] } } = { current: "", caches: {} };
+  private grids: { [k: number]: Grid } = {};
+  private layer: { [i: number]: { parent: number, children: number[] }[] } = {};
+  private active: { gid: number; row: number; col: number; } = { gid: 0, row: 0, col: 0 };
+  private changes: { [k: number]: number } = {};
+  private mode?: IMode;
 
-  static init(init: boolean, workspace: string) {
-    Grids.workspace.caches[Grids.workspace.current] = [];
-    Object.values(Grids.grids).forEach(grid => Grids.workspace.caches[Grids.workspace.current].push(grid));
+  constructor(private readonly workspace: Workspace) {}
 
-    Grids.grids = {};
-    Grids.layer = {};
-    Grids.active = { gid: 0, row: 0, col: 0 };
-    Grids.changes = {};
-    Grids.workspace.current = workspace;
+  get(gid: number = DEFAULT_GRID, add: boolean = true) {
+    const curr = this.grids[gid] || new Grid(this.workspace, gid, 0, 0);
 
-    init || Grids.workspace.caches[workspace].forEach(grid => {
-      const { gid } = grid.getInfo();
-
-      Grids.grids[gid] = grid;
-    });
-  }
-
-  static disconnect() {
-    Object.keys(Grids.grids).forEach(gid => Grids.setStatus(+gid, "delete", true));
-    Grids.flush();
-  }
-
-  static get(gid: number = Grids.default, add: boolean = true) {
-    const curr = Grids.grids[gid] || new Grid(gid, Grids.workspace.current, 0, 0);
-
-    if (!Grids.grids[gid] && add) {
-      Grids.grids[gid] = curr;
+    if (!this.grids[gid] && add) {
+      this.grids[gid] = curr;
     }
 
     return curr;
   }
 
-  static findByWinId(winid: number) {
-    return Object.values(Grids.grids).find(grid => grid.getInfo().winid === winid );
+  findByWinId(winid: number) {
+    return Object.values(this.grids).find(grid => grid.getInfo().winid === winid );
   }
 
-  static cursor(gid: number, row: number, col: number) {
-    if (Object.keys(Grids.grids).length <= 1 || gid !== Grids.default) {
-      const active = Grids.get(Grids.active.gid, false).getInfo();
+  cursor(gid: number, row: number, col: number) {
+    if (Object.keys(this.grids).length <= 1 || gid !== DEFAULT_GRID) {
+      const active = this.get(this.active.gid, false).getInfo();
 
-      active.gid !== gid &&  Grids.setStatus(active.gid, active.status, true);
-      Grids.active = { gid, row, col };
-      Grids.setStatus(gid, "show", true);
+      active.gid !== gid &&  this.setStatus(active.gid, active.status, true);
+      this.active = { gid, row, col };
+      this.setStatus(gid, "show", true);
     }
   }
 
-  static setStatus(gid: number, status: "show" | "hide" | "delete", update: boolean) {
-    if (Grids.get(gid, false).setInfo({ status }) || update) {
-      Grids.changes[gid] = gid;
+  setStatus(gid: number, status: "show" | "hide" | "delete", update: boolean) {
+    if (this.get(gid, false).setInfo({ status }) || update) {
+      this.changes[gid] = gid;
     }
     if (status === "delete") {
-      Object.entries(Grids.layer).forEach(([zIndex, layers]) => layers.some(layer => {
+      Object.entries(this.layer).forEach(([zIndex, layers]) => layers.some(layer => {
         if (layer.parent === gid) {
           layers = layers.filter(item => item !== layer);
-          layers.length || delete(Grids.layer[+zIndex]);
+          layers.length || delete(this.layer[+zIndex]);
         } else {
           layer.children = layer.children.filter(child => child !== gid);
         }
@@ -231,30 +208,30 @@ export class Grids {
     }
   }
 
-  static setMode(mode: IMode) {
-    Grids.mode = mode;
+  setMode(mode: IMode) {
+    this.mode = mode;
   }
 
-  static setLayer(gid: number, zIndex: number) {
-    if (!Grids.layer[zIndex]) {
-      Grids.layer[zIndex] = [];
+  setLayer(gid: number, zIndex: number) {
+    if (!this.layer[zIndex]) {
+      this.layer[zIndex] = [];
     }
 
-    const exists = Grids.layer[zIndex].some(layer => {
+    const exists = this.layer[zIndex].some(layer => {
       if (layer.parent === gid) return;
 
-      const current = Grids.get(gid).getInfo();
-      const parent = Grids.get(layer.parent).getInfo();
+      const current = this.get(gid).getInfo();
+      const parent = this.get(layer.parent).getInfo();
 
       if (
         current.x < parent.x && current.y < parent.y &&
         (current.x + current.width) > (parent.x + parent.width) &&
         (current.y + current.height) > (parent.y + parent.height)
       ) {
-        Grids.changes[layer.parent] = layer.parent;
-        Grids.changes[gid] = gid;
-        Grids.get(layer.parent).setInfo({ shadow: false });
-        Grids.get(gid).setInfo({ shadow: true });
+        this.changes[layer.parent] = layer.parent;
+        this.changes[gid] = gid;
+        this.get(layer.parent).setInfo({ shadow: false });
+        this.get(gid).setInfo({ shadow: true });
         layer.children = [ layer.parent, ...layer.children.filter(child => child !== gid) ];
         layer.parent = gid;
         return true;
@@ -264,55 +241,55 @@ export class Grids {
         (parent.x + parent.width) > (current.x + current.width) &&
         (parent.y + parent.height) > (current.y + current.height)
       ) {
-        Grids.changes[gid] = gid;
-        Grids.get(gid).setInfo({ shadow: false });
+        this.changes[gid] = gid;
+        this.get(gid).setInfo({ shadow: false });
         layer.children = [ gid, ...layer.children.filter(child => child !== gid) ];
         return true;
       }
     });
 
-    exists || Grids.layer[zIndex].push({ parent: gid, children: [] });
+    exists || this.layer[zIndex].push({ parent: gid, children: [] });
   }
 
-  static refresh() {
-    Object.values(Grids.grids).forEach(grid => grid.refresh());
+  refresh() {
+    Object.values(this.grids).forEach(grid => grid.refresh());
   }
 
-  static flush() {
-    const winsize = Grids.get().getInfo();
-    const cursor = Grids.get(Grids.active.gid, false).getCursorPos(Grids.active.row, Grids.active.col);
+  flush() {
+    const winsize = this.get().getInfo();
+    const cursor = this.get(this.active.gid, false).getCursorPos(this.active.row, this.active.col);
 
     if (cursor && cursor.x >= 0 && cursor.y >= 0) {
-      Emit.update("grid:cursor", false, cursor);
+      this.workspace.emit.update("grid:cursor", false, cursor);
     }
 
-    const wins: IWindow[] = Object.values(Grids.changes).map(grid => {
-      const info = { ...Grids.get(grid).getInfo() };
+    const wins: IWindow[] = Object.values(this.changes).map(grid => {
+      const info = { ...this.get(grid).getInfo() };
 
-      info.focus = info.status === "show" && info.gid === Grids.active.gid && Grids.mode?.short_name !== "c";
+      info.focus = info.status === "show" && info.gid === this.active.gid && this.mode?.short_name !== "c";
       info.status = info.width && info.height ? info.status : "delete";
 
       if (info.status === "delete") {
-        delete(Grids.grids[info.gid]);
+        delete(this.grids[info.gid]);
       }
 
       if (info.status === "show" && winsize.width < info.width || winsize.height < info.height) {
-        Emit.share("envim:resize", grid, Math.min(winsize.width - 2, info.width), Math.min(winsize.height - 2, info.height));
+        this.workspace.emit.share("envim:resize", grid, Math.min(winsize.width - 2, info.width), Math.min(winsize.height - 2, info.height));
       }
 
       return info;
     });
 
-    Grids.changes = {};
-    wins.length && Emit.update("win:pos", false, wins);
+    this.changes = {};
+    wins.length && this.workspace.emit.update("win:pos", false, wins);
 
-    Object.values(Grids.grids).map(grid => {
-      const { id } = grid.getInfo();
+    Object.values(this.grids).map(grid => {
+      const { gid } = grid.getInfo();
       const { flush, viewport } = grid.getFlush();
-      flush && flush.length && Emit.send(`flush:${id}`, flush);
-      viewport && Emit.update(`viewport:${id}`, false, viewport.top, viewport.bottom, viewport.total);
+      flush && flush.length && this.workspace.emit.send(`flush:${gid}`, flush);
+      viewport && this.workspace.emit.update(`viewport:${gid}`, false, viewport.top, viewport.bottom, viewport.total);
     });
 
-    Emit.update("mode:change", true, Grids.mode);
+    this.workspace.emit.update("mode:change", true, this.mode);
   }
 }

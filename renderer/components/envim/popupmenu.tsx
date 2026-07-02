@@ -1,10 +1,9 @@
 import React from "react";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-import { Highlights } from "renderer/utils/highlight";
 import { row2Y, col2X, x2Col } from "renderer/utils/size";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -22,18 +21,19 @@ interface States {
 
 export function PopupmenuComponent() {
   const { options } = useEditor();
+  const { emit, highlights } = useWorkspace();
   const [ state, setState ] = React.useState<States>({ items: [], selected: -1, clicked: false, row: 0, col: 0, height: 0, zIndex: 0, enabled: options.ext_popupmenu });
   const scope: React.RefObject<HTMLDivElement | null> = React.useRef(null);
 
   React.useEffect(() => {
-    Emit.on("popupmenu:show", onPopupmenu);
-    Emit.on("popupmenu:select", onSelect);
-    Emit.on("popupmenu:hide", offPopupmenu);
+    emit.on("popupmenu:show", onPopupmenu);
+    emit.on("popupmenu:select", onSelect);
+    emit.on("popupmenu:hide", offPopupmenu);
 
     return () => {
-      Emit.off("popupmenu:show", onPopupmenu);
-      Emit.off("popupmenu:select", onSelect);
-      Emit.off("popupmenu:hide", offPopupmenu);
+      emit.off("popupmenu:show", onPopupmenu);
+      emit.off("popupmenu:select", onSelect);
+      emit.off("popupmenu:hide", offPopupmenu);
     };
   });
 
@@ -42,14 +42,14 @@ export function PopupmenuComponent() {
 
     const width = x2Col(scope.current.clientWidth) + 2;
 
-    Emit.send("envim:api", "nvim_ui_pum_set_bounds", [width, state.height, state.row, state.col]);
+    emit.send("envim:api", "nvim_ui_pum_set_bounds", [width, state.height, state.row, state.col]);
   }, [scope.current?.clientWidth, state.items.length, state.height, state.row, state.col]);
 
   function onPopupmenu(state: States) {
     state.col--;
 
     setState(({ enabled }) => ({ ...state, enabled }));
-    Emit.share("envim:drag", -1);
+    emit.share("envim:drag", -1);
   }
 
   function onSelect(selected: number) {
@@ -63,7 +63,7 @@ export function PopupmenuComponent() {
 
   function offPopupmenu() {
     setState(state => ({ ...state, items: [] }));
-    Emit.share("envim:drag", "");
+    emit.share("envim:drag", "");
   }
 
   React.useEffect(() => {
@@ -72,7 +72,7 @@ export function PopupmenuComponent() {
 
   function onItem(i: number) {
     setState(state => ({ ...state, clicked: true }));
-    Emit.send("envim:api", "nvim_select_popupmenu_item", [i, true, false, {}]);
+    emit.send("envim:api", "nvim_select_popupmenu_item", [i, true, false, {}]);
   }
 
   function getScopeStyle() {
@@ -100,7 +100,7 @@ export function PopupmenuComponent() {
       <div ref={scope}></div>
       {state.items.map(({ word, kind, menu }, i) => (
         <FlexComponent active={state.selected === i} onClick={() => onItem(i)} key={i}>
-          <FlexComponent padding={[0, Setting.font.width]} grow={1} style={Highlights.style("0")}>{ word }</FlexComponent>
+          <FlexComponent padding={[0, Setting.font.width]} grow={1} style={highlights.style("0")}>{ word }</FlexComponent>
           { `${kind}${menu}` && <FlexComponent padding={[0, Setting.font.width]} color={getKindStyle(`${kind}${menu}`)}>{ kind } { menu }</FlexComponent> }
         </FlexComponent>
       ))}

@@ -1,15 +1,11 @@
 import { IHighlight } from "common/interface";
 
 export class Highlights {
-  private static hls: { [k: string]: { fg: number; bg: number; sp: number; } } = {};
+  private hls: { [k: string]: { fg: number; bg: number; sp: number; } } = {};
 
-  static init() {
-    Highlights.hls = {};
-  }
-
-  static set(id: string, hl: IHighlight, ui: boolean) {
+  set(id: string, hl: IHighlight, ui: boolean) {
     const highlight = { fg: 0x01000000, bg: 0x02000000, sp: 0x03000000 };
-    const old = Highlights.get(id) || {};
+    const old = this.get(id) || {};
 
     if (hl.foreground) highlight.fg = hl.foreground;
     if (hl.background) highlight.bg = hl.background;
@@ -30,12 +26,12 @@ export class Highlights {
     if (hl.underdotted) highlight.sp = 0x40000000 | highlight.sp;
     if (hl.underdashed) highlight.sp = 0x80000000 | highlight.sp;
 
-    Highlights.hls[id] = highlight;
+    this.hls[id] = highlight;
 
     return JSON.stringify(highlight) !== JSON.stringify(old);
   }
 
-  static get(id: string) {
-    return Highlights.hls[id];
+  get(id: string) {
+    return this.hls[id];
   }
 }

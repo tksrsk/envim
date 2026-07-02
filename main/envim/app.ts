@@ -1,40 +1,23 @@
-import { NeovimClient } from "neovim";
 import { Response } from "neovim/lib/host";
 import { Tabpage, Buffer, Window } from "neovim/lib/api";
 
 import { ITab, IBuffer, IMode, IMenu } from "common/interface";
 
 import { Emit } from "main/emit";
-import { Function } from "main/envim/function";
-import { Acp } from "main/envim/acp";
-import { Autocmd } from "main/envim/autocmd";
-import { Clipboard } from "main/envim/clipboard";
-import { Grids } from "main/envim/grid";
-import { Highlights } from "main/envim/highlight";
-import { McpGateway } from "main/mcp/gateway";
+import { Workspace } from "main/envim/workspace";
 
 export class App {
   private modes: IMode[] = [];
-  private static nvim: NeovimClient;
 
-  constructor(nvim: NeovimClient, init: boolean, workspace: string) {
-    App.nvim = nvim;
-    Emit.init();
-    Highlights.init();
-    Grids.init(init, workspace);
-    Function.setup();
-    Acp.setup(init, workspace);
-    McpGateway.setup();
-    Autocmd.setup();
-    Clipboard.setup();
-    nvim.on("request", this.onRequest);
-    nvim.on("notification", this.onNotification);
+  constructor(private readonly workspace: Workspace) {
+    this.workspace.nvim.on("request", this.onRequest);
+    this.workspace.nvim.on("notification", this.onNotification);
     this.menu();
   }
 
   private onRequest = (method: string, args: any, res: Response) => {
     switch (method) {
-      case "envim_clipboard": return Clipboard.paste(res);
+      case "envim_clipboard": return this.workspace.clipboard.paste(res);
     }
     console.log({ method, args });
   }
@@ -42,20 +25,20 @@ export class App {
   private onNotification = (method: string, args: any) => {
     switch (method) {
       case "redraw": return this.redraw(args);
-      case "envim_clipboard": return Clipboard.copy(args[0], args[1]);
-      case "envim_dirchanged": return Autocmd.dirchanged(args[0]);
+      case "envim_clipboard": return this.workspace.clipboard.copy(args[0], args[1]);
+      case "envim_dirchanged": return this.workspace.autocmd.dirchanged(args[0]);
       case "envim_setbackground": return Emit.share("envim:theme", args[0]);
-      case "envim_openurl": return args.length && Emit.share("envim:browser", args[0], args[1] || "");
-      case "envim_webview": return args.length === 3 && Emit.share("envim:webview", args[0], args[1], args[2]);
-      case "envim_acp_stdout": return Emit.share("acp:stdout", args[0]);
-      case "envim_acp_exited": return Emit.share("acp:exited");
-      case "envim_acp_error": return Emit.share("acp:error", args[0]);
-      case "envim_acp_file_add": return Emit.send("acp:file-add", args[0]);
-      case "envim_acp_terminal_output": return Emit.share("acp:terminal-output", args[0]);
-      case "envim_acp_terminal_exit": return Emit.share("acp:terminal-exit", args[0]);
-      case "envim_mcp_open": return McpGateway.onOpen(args[0]);
-      case "envim_mcp_data": return McpGateway.onData(args[0], args[1]);
-      case "envim_mcp_close": return McpGateway.onClose(args[0]);
+      case "envim_openurl": return args.length && this.workspace.emit.share("envim:browser", args[0], args[1] || "");
+      case "envim_webview": return args.length === 3 && this.workspace.emit.share("envim:webview", args[0], args[1], args[2]);
+      case "envim_acp_stdout": return this.workspace.emit.share("acp:stdout", args[0]);
+      case "envim_acp_exited": return this.workspace.emit.share("acp:exited");
+      case "envim_acp_error": return this.workspace.emit.share("acp:error", args[0]);
+      case "envim_acp_file_add": return this.workspace.emit.send("acp:file-add", args[0]);
+      case "envim_acp_terminal_output": return this.workspace.emit.share("acp:terminal-output", args[0]);
+      case "envim_acp_terminal_exit": return this.workspace.emit.share("acp:terminal-exit", args[0]);
+      case "envim_mcp_open": return this.workspace.mcpGateway.onOpen(args[0]);
+      case "envim_mcp_data": return this.workspace.mcpGateway.onData(args[0], args[1]);
+      case "envim_mcp_close": return this.workspace.mcpGateway.onClose(args[0]);
     }
   }
 
@@ -198,8 +181,8 @@ export class App {
   }
 
   private gridResize(gid: number, width: number, height: number) {
-    Grids.get(gid).resize(width, height);
-    Grids.setStatus(gid, "show", true);
+    this.workspace.grids.get(gid).resize(width, height);
+    this.workspace.grids.setStatus(gid, "show", true);
   }
 
   private defaultColorsSet(foreground: number, background: number, special: number) {
@@ -207,9 +190,9 @@ export class App {
     background = background >= 0 ? background : 0x000000;
     special = special >= 0 ? special : foreground;
 
-    Highlights.set("0", { foreground, background, special }, true);
-    Grids.refresh();
-    Emit.update("highlight:set", false, [{id: "0", ui: true, hl: { foreground, background, special }}]);
+    this.workspace.highlights.set("0", { foreground, background, special }, true);
+    this.workspace.grids.refresh();
+    this.workspace.emit.update("highlight:set", false, [{id: "0", ui: true, hl: { foreground, background, special }}]);
   }
 
   private hlAttrDefine(highlights: any[]) {
@@ -217,8 +200,8 @@ export class App {
       const ui = info.some((info: { kind: string }) => info.kind === "ui");
 
       return { id, ui, hl };
-    }).filter(({ id, hl, ui }) => Highlights.set(id, hl, ui));
-    Emit.update("highlight:set", false, highlights);
+    }).filter(({ id, hl, ui }) => this.workspace.highlights.set(id, hl, ui));
+    this.workspace.emit.update("highlight:set", false, highlights);
   }
 
   private gridLine(gid: number, row: number, col: number, cells: string[][]) {
@@ -226,33 +209,33 @@ export class App {
     cells.forEach(cell => {
       const repeat = cell.length >= 3 ? +cell[2] : 1;
       for (let j = 0; j < repeat; j++) {
-        Grids.get(gid).setCell(row, col + i++, cell[0], cell.length > 1 ? cell[1] : "-1");
+        this.workspace.grids.get(gid).setCell(row, col + i++, cell[0], cell.length > 1 ? cell[1] : "-1");
       }
     });
   }
 
   private gridClear(gid: number) {
-    const { id, width, height } = Grids.get(gid).getInfo();
+    const { width, height } = this.workspace.grids.get(gid).getInfo();
 
-    Grids.get(gid).resize(width, height, true);
-    Emit.send(`clear:${id}`);
+    this.workspace.grids.get(gid).resize(width, height, true);
+    this.workspace.emit.send(`clear:${gid}`);
   }
 
   private gridDestory(gid: number) {
-    Grids.setStatus(gid, "delete", false);
+    this.workspace.grids.setStatus(gid, "delete", false);
   }
 
   private gridCursorGoto(gid: number, row: number, col: number) {
-    Grids.cursor(gid, row, col);
+    this.workspace.grids.cursor(gid, row, col);
   }
 
   private gridScroll(gid: number, top: number, bottom: number, left: number, right: number, rows: number, cols: number) {
-    Grids.get(gid).setScroll(top, bottom, left, right, rows, cols);
+    this.workspace.grids.get(gid).setScroll(top, bottom, left, right, rows, cols);
   }
 
   private winPos(gid: number, win: Window | null, row: number, col: number, width: number, height: number, focusable: boolean, zIndex: number, type: "normal" | "floating" | "external") {
-    const winsize = Grids.get().getInfo();
-    const current = Grids.get(gid);
+    const winsize = this.workspace.grids.get().getInfo();
+    const current = this.workspace.grids.get(gid);
     const winid = win ? win.id : 0;
     const overwidth = Math.max(0, col + width - winsize.width);
     const overheight = Math.max(0, row + height - winsize.height);
@@ -262,37 +245,37 @@ export class App {
     zIndex = gid === 1 ? 1 : zIndex;
 
     const update = current.setInfo({ winid, x: col, y: row, width, height, zIndex, focusable, type });
-    Grids.setStatus(gid, "show", update);
+    this.workspace.grids.setStatus(gid, "show", update);
   }
 
   private winFloatPos(gid: number, win: Window, anchor: string, pgid: number, row: number, col: number, focusable: boolean, zIndex: number, compIndex?: number, screenRow?: number, screenCol?: number) {
-    const current = Grids.get(gid).getInfo();
-    const parent = Grids.get(pgid).getInfo();
+    const current = this.workspace.grids.get(gid).getInfo();
+    const parent = this.workspace.grids.get(pgid).getInfo();
     const index = compIndex ? compIndex : zIndex;
 
     row = screenRow !== undefined ? screenRow : parent.y + (anchor[0] === "N" ? row : row - current.height);
     col = screenCol !== undefined ? screenCol : parent.x + (anchor[1] === "W" ? col : col - current.width);
 
     this.winPos(gid, win, row, col, current.width, current.height, focusable, Math.max(index, parent.zIndex + 4), "floating");
-    Grids.setLayer(gid, zIndex);
+    this.workspace.grids.setLayer(gid, zIndex);
   }
 
   private async winExternalPos(gid: number, win: Window) {
     if (!await win.valid) return;
 
-    const nvim = App.nvim;
-    const { x, y } = Grids.get(gid).getInfo();
+    const nvim = this.workspace.nvim;
+    const { x, y } = this.workspace.grids.get(gid).getInfo();
     const width = await win.width;
     const height = await win.height;
 
-    if (App.nvim === nvim) {
+    if (this.workspace.nvim === nvim) {
       this.winPos(gid, win, y, x, width, height, true, 10000, "external");
-      Grids.flush();
+      this.workspace.grids.flush();
     }
   }
 
   private msgSetPos(gid: number, row: number) {
-    const winsize = Grids.get().getInfo();
+    const winsize = this.workspace.grids.get().getInfo();
     const width = winsize.width;
     const height = winsize.height - row;
 
@@ -300,19 +283,18 @@ export class App {
   }
 
   private winHide(gid: number) {
-    Grids.setStatus(gid, "hide", false);
+    this.workspace.grids.setStatus(gid, "hide", false);
   }
 
   private winClose(gid: number) {
-    Grids.setStatus(gid, "delete", false);
+    this.workspace.grids.setStatus(gid, "delete", false);
   }
 
   private winViewport(gid: number, top: number, bottom: number, total: number) {
-    Grids.get(gid, false).setViewport(top, bottom, total);
+    this.workspace.grids.get(gid, false).setViewport(top, bottom, total);
   }
 
   private async tablineUpdate(ctab: Tabpage, tabs: { tab: Tabpage, name: string }[], cbuf: Buffer, bufs: { buffer: Buffer, name: string }[]) {
-    const nvim = App.nvim;
     const next: { tabs: ITab[]; bufs: IBuffer[] } = { tabs: [], bufs: [] };
 
     for (let i = 0; i < tabs.length; i++) {
@@ -333,36 +315,36 @@ export class App {
       buffer.data && next.bufs.push({ name, buffer: +buffer.data, active });
     }
 
-    App.nvim === nvim && Emit.update("tabline:update", true, next.tabs, next.bufs);
+    this.workspace.emit.update("tabline:update", true, next.tabs, next.bufs);
   }
 
   private cmdlineShow(content: string[][], pos: number, prompt: string, indent: number) {
-    Emit.update("cmdline:show", true, content, pos, prompt, indent);
+    this.workspace.emit.update("cmdline:show", true, content, pos, prompt, indent);
   }
 
   private cmdlinePos(pos: number) {
-    Emit.update("cmdline:cursor", true, pos);
+    this.workspace.emit.update("cmdline:cursor", true, pos);
   }
 
   private cmdlineSpecialChar(c: string, shift: boolean) {
-    Emit.send("cmdline:special", c, shift);
+    this.workspace.emit.send("cmdline:special", c, shift);
   }
 
   private cmdlineBlockShow(lines: string[][][]) {
-    Emit.update("cmdline:blockshow", true, lines);
+    this.workspace.emit.update("cmdline:blockshow", true, lines);
   }
 
   private cmdlineBlockAppend(line: string[][]) {
-    Emit.update("cmdline:blockshow", true, [line]);
+    this.workspace.emit.update("cmdline:blockshow", true, [line]);
   }
 
   private cmdlineBlockHide() {
-    Emit.update("cmdline:blockhide", true);
+    this.workspace.emit.update("cmdline:blockhide", true);
   }
 
   private popupmenuShow(items: string[][], selected: number, row: number, col: number, gid: number) {
-    const parent = Grids.get().getInfo();
-    const current = gid === -1 ? { y: 1, x: parent.width * 0.1 + 3, zIndex: 20 } : Grids.get(gid).getInfo();
+    const parent = this.workspace.grids.get().getInfo();
+    const current = gid === -1 ? { y: 1, x: parent.width * 0.1 + 3, zIndex: 20 } : this.workspace.grids.get(gid).getInfo();
     const [ x, y ] = [ col + current.x, row + current.y ];
     const height = Math.min(Math.max(y, parent.height - y - 1), items.length);
     const zIndex = current.zIndex + 1;
@@ -370,7 +352,7 @@ export class App {
     row = y + height >= parent.height ? y - height : y + 1;
     col = Math.min(x, parent.width - 10);
 
-    Emit.send("popupmenu:show", {
+    this.workspace.emit.send("popupmenu:show", {
       items: items.map(([ word, kind, menu ]) => ({ word, kind, menu })),
       selected,
       start: 0,
@@ -382,11 +364,11 @@ export class App {
   }
 
   private popupmenuSelect(selected: number) {
-    Emit.send("popupmenu:select", selected);
+    this.workspace.emit.send("popupmenu:select", selected);
   }
 
   private popupmenuHide() {
-    Emit.send("popupmenu:hide");
+    this.workspace.emit.send("popupmenu:hide");
   }
 
   private msgShow(messages: [string, [string, string][], boolean][]) {
@@ -395,23 +377,23 @@ export class App {
       .map(message => this.convertMessage(message[0], message[1]))
       .filter(({ contents }) => contents.length);
 
-    Emit.update("messages:show", true, entries, replace);
+    this.workspace.emit.update("messages:show", true, entries, replace);
   }
 
   private msgClear() {
-    Emit.update("messages:show", true, [], true);
+    this.workspace.emit.update("messages:show", true, [], true);
   }
 
   private msgShowmode(contents: [string, string][]) {
-    Emit.update("messages:mode", true, this.convertMessage("mode", contents));
+    this.workspace.emit.update("messages:mode", true, this.convertMessage("mode", contents));
   }
 
   private msgShowcmd(contents: [string, string][]) {
-    Emit.update("messages:command", true, this.convertMessage("command", contents));
+    this.workspace.emit.update("messages:command", true, this.convertMessage("command", contents));
   }
 
   private msgRuler(contents: [string, string][]) {
-    Emit.update("messages:ruler", true, this.convertMessage("ruler", contents));
+    this.workspace.emit.update("messages:ruler", true, this.convertMessage("ruler", contents));
   }
 
   private msgHistoryShow(entries: [string, [string, string][]][]) {
@@ -420,8 +402,8 @@ export class App {
     ).filter(({ contents }) => contents.length);
 
     if (history.length) {
-      App.nvim.command("messages clear");
-      Emit.send("messages:history", history);
+      this.workspace.nvim.command("messages clear");
+      this.workspace.emit.send("messages:history", history);
     }
   }
 
@@ -439,28 +421,27 @@ export class App {
   }
 
   private modeChange(index: number) {
-    Grids.setMode(this.modes[index]);
+    this.workspace.grids.setMode(this.modes[index]);
   }
 
   private optionsSet(options: string[][]) {
-    Emit.send("option:set", options.reduce((obj: { [k: string]: string }, [name, value]) => {
+    this.workspace.emit.send("option:set", options.reduce((obj: { [k: string]: string }, [name, value]) => {
       obj[name] = value;
       return obj;
     }, {}));
   }
 
   private busy(busy: boolean) {
-    Emit.update("app:busy", true, busy);
+    this.workspace.emit.update("app:busy", true, busy);
   }
 
   private async menu() {
-    const nvim = App.nvim;
-    const menus: IMenu[] = await App.nvim.call("menu_get", [""]);
+    const menus: IMenu[] = await this.workspace.nvim.call("menu_get", [""]);
 
-    App.nvim === nvim && Emit.send("menu:update", menus.filter(({ name }) => !name.match(/^(PopUp)|\]/)));
+    this.workspace.emit.send("menu:update", menus.filter(({ name }) => !name.match(/^(PopUp)|\]/)));
   }
 
   private flush() {
-    Grids.flush();
+    this.workspace.grids.flush();
   }
 }

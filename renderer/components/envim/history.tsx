@@ -3,6 +3,7 @@ import React from "react";
 import { ISetting, IMessage } from "common/interface";
 
 import { useEditor } from "renderer/context/editor";
+import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
 
@@ -39,21 +40,22 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function HistoryComponent(props: Props) {
   const { options } = useEditor();
+  const { emit } = useWorkspace();
   const [ state, setState ] = React.useState<States>({ messages: [], theme: "dark", options, debug: "" });
   const bottom: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
-    Emit.on("messages:mode", onMode);
-    Emit.on("messages:command", onCommand);
-    Emit.on("messages:ruler", onRuler);
-    Emit.on("messages:history", onHistory);
+    emit.on("messages:mode", onMode);
+    emit.on("messages:command", onCommand);
+    emit.on("messages:ruler", onRuler);
+    emit.on("messages:history", onHistory);
 
     return () => {
-      Emit.off("messages:mode", onMode);
-      Emit.off("messages:command", onCommand);
-      Emit.off("messages:ruler", onRuler);
-      Emit.off("messages:history", onHistory);
+      emit.off("messages:mode", onMode);
+      emit.off("messages:command", onCommand);
+      emit.off("messages:ruler", onRuler);
+      emit.off("messages:history", onHistory);
     };
   }, []);
 
@@ -104,7 +106,7 @@ export function HistoryComponent(props: Props) {
 
   function loadMessages() {
     clearInterval(timer.current);
-    timer.current = +setInterval(() => Emit.send("envim:command", "messages"), 500);
+    timer.current = +setInterval(() => emit.send("envim:command", "messages"), 500);
   }
 
   function unloadMessages() {
@@ -115,14 +117,14 @@ export function HistoryComponent(props: Props) {
     setState(state => {
       const theme = state.theme === "dark" ? "light" : "dark";
 
-      Emit.send("envim:command", `set background=${theme}`);
+      emit.send("envim:command", `set background=${theme}`);
 
       return { ...state, theme };
     });
   }
 
   async function toggleDebug() {
-    const debug = await Emit.send<string>("envim:readline", "Event name");
+    const debug = await emit.send<string>("envim:readline", "Event name");
 
     try {
       "".search(debug);
@@ -130,7 +132,7 @@ export function HistoryComponent(props: Props) {
     } catch (e: any) {
       if (e instanceof Error) {
         const contents = [{ hl: "color-red", content: e.message }];
-        Emit.share("messages:show", [{ kind: "debug", contents }], true);
+        emit.share("messages:show", [{ kind: "debug", contents }], true);
       }
     }
   }
@@ -144,7 +146,7 @@ export function HistoryComponent(props: Props) {
         <div className="space" />
         <MenuComponent color="gray-fg" label="">
           { ["ext_tabline", "ext_cmdline", "ext_messages", "ext_popupmenu", "ext_termcolors"].map(ext => (
-            <FlexComponent key={ext} onClick={() => Emit.send("envim:option", ext, !state.options[ext])} spacing>
+            <FlexComponent key={ext} onClick={() => emit.send("envim:option", ext, !state.options[ext])} spacing>
               <input type="checkbox" value="command" checked={state.options[ext]} />{ ext }
             </FlexComponent>
           )) }
@@ -154,8 +156,8 @@ export function HistoryComponent(props: Props) {
             <IconComponent color="yellow-fg" active={state.theme === "dark"} font="" />
           </FlexComponent>
         </MenuComponent>
-        { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => Emit.send("envim:browser", "", "tabnew")} /> }
-        <IconComponent color="purple-fg" font="" onClick={() => Emit.send("acp:toggle")} />
+        { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => emit.send("envim:browser", "", "tabnew")} /> }
+        <IconComponent color="purple-fg" font="" onClick={() => emit.send("acp:toggle")} />
         <IconComponent color="green-fg" active={state.debug.length > 0} font="" onClick={toggleDebug} />
       </FlexComponent>
       <FlexComponent overflow="visible" hover>

@@ -1,54 +1,55 @@
 import { ICell, IScroll } from "common/interface";
 
 import { Context2D } from "renderer/utils/context2d";
-import { Cache } from "renderer/utils/cache";
-
-const TYPE = "renderer";
+import { Highlights } from "renderer/utils/highlight";
 
 export class Canvas {
-  private static processing = false;
+  private processing = false;
+  private renderers: { [k: string]: Context2D } = {};
 
-  static create(
+  constructor(private highlights: Highlights) {}
+
+  create(
     id: string,
     canvas: HTMLCanvasElement,
     ctx: CanvasRenderingContext2D,
     lighten: boolean,
   ) {
-    Cache.set<Context2D>(TYPE, id, new Context2D(canvas, ctx, lighten));
+    this.renderers[id] = new Context2D(canvas, ctx, lighten, this.highlights);
   }
 
-  static update(id: string, lighten: boolean) {
-    Cache.get<Context2D>(TYPE, id)?.update(lighten);
-    Canvas.render();
+  update(id: string, lighten: boolean) {
+    this.renderers[id]?.update(lighten);
+    this.render();
   }
 
-  static delete(id: string) {
-    Cache.delete(TYPE, id);
-    Canvas.render();
+  delete(id: string) {
+    delete this.renderers[id];
+    this.render();
   }
 
-  static clear(id: string, width: number, height: number) {
-    Cache.get<Context2D>(TYPE, id)?.clear(0, 0, width, height);
-    Canvas.render();
+  clear(id: string, width: number, height: number) {
+    this.renderers[id]?.clear(0, 0, width, height);
+    this.render();
   }
 
-  static push(id: string, cells: ICell[], scroll: IScroll | undefined) {
-    Cache.get<Context2D>(TYPE, id)?.push(cells, scroll);
-    Canvas.render();
+  push(id: string, cells: ICell[], scroll: IScroll | undefined) {
+    this.renderers[id]?.push(cells, scroll);
+    this.render();
   }
 
-  static link(id: string, row: number, col: number) {
-    return Cache.get<Context2D>(TYPE, id)?.link(row, col);
+  link(id: string, row: number, col: number) {
+    return this.renderers[id]?.link(row, col);
   }
 
-  private static render() {
-    if (Canvas.processing) return;
+  private render = () => {
+    if (this.processing) return;
 
     const result: boolean[] = [];
 
-    Canvas.processing = true;
-    Cache.each<Context2D>(TYPE, (renderer) => result.push(renderer.render()));
-    Canvas.processing = false;
-    result.some(r => r) && requestAnimationFrame(Canvas.render);
+    this.processing = true;
+    Object.values(this.renderers).forEach((renderer) => result.push(renderer.render()));
+    this.processing = false;
+    result.some(r => r) && requestAnimationFrame(this.render);
   }
 }

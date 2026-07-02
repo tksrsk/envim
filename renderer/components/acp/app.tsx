@@ -3,6 +3,8 @@ import React from "react";
 
 import { IMcpApp } from "common/interface";
 
+import { useWorkspace } from "renderer/context/workspace";
+
 import { Emit } from "renderer/utils/emit";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -61,6 +63,7 @@ function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
 }
 
 const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; sessionId: string; onClose: () => void }) => {
+  const { emit } = useWorkspace();
   const iframe = React.useRef<HTMLIFrameElement>(null);
   const sendQueue = React.useRef<Promise<void>>(Promise.resolve());
   const activeBridge = React.useRef<McpAppBridge.AppBridge | null>(null);
@@ -80,15 +83,15 @@ const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; ses
       { hostContext: getHostContext(iframe.current!) }
     );
     activeBridge.current = nextBridge;
-    nextBridge.oncalltool = params => Emit.send("mcp-apps:call-tool", app.upstreamId, params);
-    nextBridge.onlistresources = params => Emit.send("mcp-apps:list-resources", app.upstreamId, params);
-    nextBridge.onlistresourcetemplates = params => Emit.send("mcp-apps:list-resource-templates", app.upstreamId, params);
-    nextBridge.onreadresource = params => Emit.send("mcp-apps:read-resource", app.upstreamId, params);
+    nextBridge.oncalltool = params => emit.send(`mcp-apps:call-tool:${app.upstreamId}`, params);
+    nextBridge.onlistresources = params => emit.send(`mcp-apps:list-resources:${app.upstreamId}`, params);
+    nextBridge.onlistresourcetemplates = params => emit.send(`mcp-apps:list-resource-templates:${app.upstreamId}`, params);
+    nextBridge.onreadresource = params => emit.send(`mcp-apps:read-resource:${app.upstreamId}`, params);
     nextBridge.onmessage = async (params: McpAppBridge.McpUiMessageRequest["params"]) => {
       const text = params.content.filter(c  => c.type === "text").map(c => c.text).join("\n");
 
       if (text) {
-        Emit.send("acp:send-prompt", sessionId, text, [], []);
+        emit.send("acp:send-prompt", sessionId, text, [], []);
         onClose();
       }
 
@@ -99,25 +102,25 @@ const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; ses
     nextBridge.connect(new McpAppBridge.PostMessageTransport(contentWindow, contentWindow))
       .then(() => nextBridge.sendSandboxResourceReady({ html: app.resource.text }))
       .catch(error => console.error("Failed to connect MCP App bridge", error));
-  }, [app.resource.text, app.upstreamId, sessionId, onClose]);
+  }, [app.resource.text, app.upstreamId, sessionId, onClose, emit]);
 
   React.useEffect(() => {
     const onToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
     const onResourcesChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendResourceListChanged();
 
-    Emit.on("mcp-apps:tools-changed", onToolsChanged);
-    Emit.on("mcp-apps:resources-changed", onResourcesChanged);
+    emit.on("mcp-apps:tools-changed", onToolsChanged);
+    emit.on("mcp-apps:resources-changed", onResourcesChanged);
 
     return () => {
-      Emit.off("mcp-apps:tools-changed", onToolsChanged);
-      Emit.off("mcp-apps:resources-changed", onResourcesChanged);
+      emit.off("mcp-apps:tools-changed", onToolsChanged);
+      emit.off("mcp-apps:resources-changed", onResourcesChanged);
       const closingBridge = activeBridge.current;
 
       activeBridge.current = null;
       setBridge(current => current === closingBridge ? null : current);
       closingBridge?.close().catch(() => {});
     };
-  }, [app.upstreamId]);
+  }, [app.upstreamId, emit]);
 
   React.useEffect(() => {
     if (!bridge || !iframe.current) return;
@@ -149,14 +152,15 @@ const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; ses
 export function McpAppsComponent({ sessionId }: { sessionId: string }) {
   const [apps, setApps] = React.useState<(IMcpApp & { id: string })[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const { emit } = useWorkspace();
   const filtered = apps.filter(a => a.id.startsWith(sessionId));
   const onClose = React.useCallback(() => setActiveId(null), []);
 
   React.useEffect(() => {
-    Emit.on("mcp-apps:render", onRender);
+    emit.on("mcp-apps:render", onRender);
 
     return () => {
-      Emit.off("mcp-apps:render", onRender);
+      emit.off("mcp-apps:render", onRender);
     };
   }, [sessionId]);
 
