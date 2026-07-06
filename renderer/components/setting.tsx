@@ -129,7 +129,7 @@ export function SettingComponent (props: Props) {
     Setting.searchengines = searchengines;
     Setting.acp = acp;
 
-    Emit.send("envim:connect", type, path, bookmarks.find(({ selected }) => selected)?.path);
+    Emit.send("envim:connect", Setting.get(), bookmarks.find(({ selected }) => selected)?.path);
   }
 
   function getStyle() {

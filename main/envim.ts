@@ -29,8 +29,8 @@ export class Envim {
     setting && Emit.send("envim:setting", setting);
   }
 
-  private onConnect = (type: string, path: string, bookmark: string) => {
-    Connection.connect(type, path, bookmark);
+  private onConnect = (setting: ISetting, bookmark: string) => {
+    Connection.connect(setting, bookmark);
   }
 
   private onSetting = (setting: ISetting) => {

@@ -39,7 +39,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function TablineComponent(props: Props) {
   const { options, mode, tabs, menus  } = useEditor();
-  const { workspaces, emit } = useWorkspace();
+  const { workspace, workspaces, emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
 
   React.useEffect(() => {
@@ -51,16 +51,7 @@ export function TablineComponent(props: Props) {
   }, []);
 
   function onCwd(cwd: string) {
-    const bookmarks = Setting.bookmarks;
-    const current = bookmarks.find(({ selected }) => selected);
-    const selected = bookmarks
-      .filter(({ path }) => cwd === path || cwd.indexOf(`${path}/`) === 0)
-      .sort((a, b) => a.path.length - b.path.length)
-      .pop();
-    Setting.bookmarks = bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark === selected }));
-
     setState(state => ({ ...state, cwd, bookmarks: Setting.bookmarks }));
-    selected && current !== selected && Emit.send("envim:connect", Setting.type, Setting.path, selected.path);
   }
 
   async function saveBookmark(path: string) {
@@ -78,7 +69,8 @@ export function TablineComponent(props: Props) {
       bookmarks.push({ name: name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path, selected: false });
       Setting.bookmarks = bookmarks.sort((a, b) => a.name > b.name ? 1 : -1);
 
-      onCwd(path);
+      Emit.send("envim:setting", Setting.get());
+      setState(state => ({ ...state, bookmarks }));
     }
   }
 
@@ -89,6 +81,7 @@ export function TablineComponent(props: Props) {
     e.preventDefault();
 
     Setting.bookmarks = bookmarks;
+    Emit.send("envim:setting", Setting.get());
     setState(state => ({ ...state, bookmarks }));
   }
 
@@ -176,7 +169,7 @@ export function TablineComponent(props: Props) {
   }
 
   function renderBookmark() {
-    const bookmark = state.bookmarks.find(({ selected }) => selected);
+    const bookmark = state.bookmarks.find(({ path }) => path === workspace);
     const text = bookmark && bookmark.name.split("/").pop() || "";
     const icon = bookmark ? { color: "blue-fg", font: "", text } : { color: "gray-fg", font: "", text };
 
@@ -187,7 +180,7 @@ export function TablineComponent(props: Props) {
     const regexp = new RegExp(`^${base}`);
     const bookmarks = state.bookmarks.filter(({ name }) => name.match(regexp)).map(({ name, ...other }) => ({ ...other, name: name.replace(regexp, "") }));
     const groups = bookmarks.map(({ name }) => name.split("/")).reduce((all, curr) => curr.length === 1 || all.indexOf(curr[0]) >= 0 ? all : [...all, curr[0]], []);
-    const selected = state.bookmarks.find(({ selected }) => selected)?.name || "";
+    const selected = state.bookmarks.find(({ path }) => path === workspace)?.name || "";
 
     return (
       <>
@@ -196,8 +189,8 @@ export function TablineComponent(props: Props) {
             { renderBookmarkMenu(`${base}${group}/`) }
           </MenuComponent>
         ) }
-        { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path, selected }, i) =>
-          <FlexComponent animate="hover" direction="column" active={selected} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
+        { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path }, i) =>
+          <FlexComponent animate="hover" direction="column" active={path === workspace} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
             <FlexComponent>{ path in workspaces && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
             <div className="color-gray-fg small">{ path }</div>
             <IconComponent color="gray" font="" float="right" onClick={e => deleteBookmark(e, path)} hover />

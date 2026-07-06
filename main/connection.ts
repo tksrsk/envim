@@ -7,6 +7,8 @@ import Docker from "dockerode";
 import { Client as SSHClient } from "ssh2";
 import { NeovimClient } from "neovim";
 
+import { ISetting } from "common/interface";
+
 import { Emit } from "main/emit";
 import { Setting } from "main/setting";
 import { Workspace } from "main/envim/workspace";
@@ -107,7 +109,7 @@ export class Connection {
     }
   }
 
-  static connect(type: string, path: string, bookmark: string) {
+  static connect(setting: ISetting, bookmark: string) {
     const next = Connection.workspaces.get(bookmark);
     const attach = (nvim: NeovimClient) => {
       const workspace = next || new Workspace(nvim, bookmark);
@@ -120,11 +122,11 @@ export class Connection {
 
     if (next) return attach(next.nvim);
 
-    switch (type) {
-      case "command": return Connection.command(path, bookmark, attach);
-      case "address": return Connection.network(path, bookmark, attach);
-      case "docker": return Connection.docker(path, bookmark, attach);
-      case "ssh": return Connection.ssh(path, bookmark, attach);
+    switch (setting.type) {
+      case "command": return Connection.command(setting.path, bookmark, attach);
+      case "address": return Connection.network(setting.path, bookmark, attach);
+      case "docker": return Connection.docker(setting.path, bookmark, attach);
+      case "ssh": return Connection.ssh(setting.path, bookmark, attach);
     }
   }
 
@@ -140,13 +142,16 @@ export class Connection {
 
   private static async emitWorkspace() {
     const state: { [key: string]: boolean } = {};
+    const setting = Setting.get();
+    const current = Connection.current
 
     Connection.workspaces.forEach((workspace, key) => {
-      state[key] = workspace === Connection.current;
+      state[key] = workspace === current;
     });
 
+    Setting.set({ ...setting, bookmarks: setting.bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark.path === current?.bookmark })) });
     Emit.update("app:workspace", false, state);
-    Connection.current?.bookmark && await Connection.current.nvim.command(`cd ${Connection.current.bookmark}`);
+    current?.bookmark && await current.nvim.command(`cd ${current.bookmark}`);
   }
 
   static active() {

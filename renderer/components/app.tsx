@@ -57,11 +57,8 @@ export function AppComponent() {
   function onWorkspace(workspaces: { [key: string]: boolean }) {
     const init = Object.keys(workspaces).length > 0;
 
-    setState(state => {
-      state.init === init || Emit.send("envim:setting", Setting.get());
-
-      return { ...state, init, workspaces };
-    });
+    init || Emit.send("envim:setting", Setting.get());
+    setState(state => ({ ...state, workspaces, init }));
   }
 
   return (

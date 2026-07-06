@@ -3,7 +3,8 @@ import { UiAttachOptions } from "neovim/lib/api/Neovim";
 import { readFile } from "fs/promises";
 import { join } from "path";
 
-import { WorkspaceEmit } from "main/emit";
+import { Setting } from "main/setting";
+import { Emit, WorkspaceEmit } from "main/emit";
 import { Acp } from "main/envim/acp";
 import { App } from "main/envim/app";
 import { Autocmd } from "main/envim/autocmd";
@@ -23,6 +24,7 @@ export class Workspace {
   public readonly function: Function;
   public readonly mcpGateway: McpGateway;
   public readonly app: App;
+  public cwd = "";
 
   constructor(
     public readonly nvim: NeovimClient,
@@ -45,6 +47,7 @@ export class Workspace {
     emit.on("envim:browser", this.onBrowser);
     emit.on("envim:webview", this.onWebview);
     emit.on("envim:function", this.onFunction);
+    emit.on("envim:cwd", this.onCwd);
 
     this.emit = emit;
     this.app = new App(this);
@@ -133,6 +136,15 @@ export class Workspace {
 
   private onFunction = (name: string, args: any[] = []) => {
     return this.nvim.request("nvim_call_function", [name, args]);
+  }
+
+  private onCwd = (cwd: string) => {
+    const setting = Setting.get();
+    const selected = setting?.bookmarks.findLast(({ path }) => cwd === path || cwd.indexOf(`${path}/`) === 0);
+
+    this.cwd = cwd;
+
+    if (selected && selected.path !== this.bookmark) Emit.share("envim:connect", setting, selected.path);
   }
 
   dispose() {

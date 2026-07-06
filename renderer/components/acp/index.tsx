@@ -5,7 +5,6 @@ import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common
 
 import { useWorkspace } from "renderer/context/workspace";
 
-import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -108,7 +107,6 @@ export function AcpComponent() {
       }
     })();
 
-    typeof state.mode.mcp === "number" && Emit.send("envim:setting", Setting.get());
     setState(state => ({ ...state, input }));
   }, [state.mode.sub, state.mode.mcp]);
 
@@ -249,7 +247,6 @@ export function AcpComponent() {
     e.stopPropagation();
 
     Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
-    Emit.send("envim:setting", Setting.get());
   }
 
   function onStartAgent(agent: IAcpRegistryAgent) {
@@ -327,7 +324,6 @@ export function AcpComponent() {
     }
 
     setState(state => ({ ...state, mode: { main: "input", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
-    Emit.send("envim:setting", Setting.get());
   }
 
   function getPlaceholder() {
@@ -351,7 +347,6 @@ export function AcpComponent() {
           if (!agent) return;
 
           Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== agent?.name), agent] };
-          Emit.send("envim:setting", Setting.get());
           onStartAgent(agent);
         } finally {
           return;
@@ -369,8 +364,6 @@ export function AcpComponent() {
           } else {
             Setting.acp.mcpServers.push({ enabled: true, server });
           }
-
-          Emit.send("envim:setting", Setting.get());
         } catch {
           return;
         }

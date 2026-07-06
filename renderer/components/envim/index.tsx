@@ -1,6 +1,6 @@
 import React from "react";
 
-import { ISetting, IWindow, IHighlight } from "common/interface";
+import { IWindow, IHighlight } from "common/interface";
 
 import { EditorProvider } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
@@ -63,14 +63,12 @@ export function EnvimComponent(props: Props) {
     highlights.setHighlight("0", true, {  });
     emit.on("highlight:set", onHighlight);
     emit.on("win:pos", onWin);
-    Emit.on("envim:setting", onSetting);
     Emit.on("envim:pause", onPause);
     emit.send("envim:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options);
 
     return () => {
       emit.off("highlight:set", onHighlight);
       emit.off("win:pos", onWin);
-      Emit.off("envim:setting", onSetting);
       Emit.off("envim:pause", onPause);
     };
   }, []);
@@ -113,10 +111,6 @@ export function EnvimComponent(props: Props) {
 
       return { ...state, grids };
     });
-  }
-
-  function onSetting(setting: ISetting) {
-    Setting.searchengines = setting.searchengines;
   }
 
   function onPause(pause: boolean) {

@@ -12,7 +12,6 @@ export class Acp {
   private static registry: IAcpRegistry = { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } };
   private static registryLoaded = false;
 
-  private cwd = "";
   private state: IAcpStatus = { status: "disconnected" };
   private connection: AcpSDK.ClientConnection | null = null;
   private sessions: { [key: string]: IAcpSession } = {};
@@ -24,7 +23,6 @@ export class Acp {
 
   constructor(private readonly workspace: Workspace) {
     this.workspace.emit.share("envim:luafile", "acp.lua");
-    this.workspace.emit.on("envim:cwd", this.onCwd);
     this.workspace.emit.on("acp:stdout", this.onAcpStdout);
     this.workspace.emit.on("acp:exited", this.onAcpExited);
     this.workspace.emit.on("acp:error", this.onAcpError);
@@ -42,10 +40,6 @@ export class Acp {
     this.workspace.emit.on("acp:authenticate", this.onAuthenticate);
     this.workspace.emit.on("acp:logout", this.onLogout);
     this.workspace.emit.on("acp:config-session", this.onSetSessionConfigOption);
-  }
-
-  private onCwd = (cwd: string): void => {
-    this.cwd = cwd;
   }
 
   private onSetSessionConfigOption = (configId: string, value: string | boolean) => {
@@ -249,7 +243,7 @@ export class Acp {
 
     if (this.state.initialize?.agentCapabilities?.sessionCapabilities?.list) {
       this.setState({ ...this.state, status: "processing" });
-      this.callAgent(AcpSDK.methods.agent.session.list, { cwd: this.cwd }).then(response => {
+      this.callAgent(AcpSDK.methods.agent.session.list, { cwd: this.workspace.cwd }).then(response => {
         if (!response) return;
 
         response.sessions.forEach(session => {
@@ -282,7 +276,7 @@ export class Acp {
     }
 
     return this.callAgent(AcpSDK.methods.agent.session.new, {
-      cwd: this.cwd,
+      cwd: this.workspace.cwd,
       mcpServers: await Mcp.servers(this.workspace),
     }).then(response => {
       if (!response) return;
@@ -368,7 +362,7 @@ export class Acp {
 
       this.setState({ ...this.state, status: "processing", sessionId });
       this.callAgent(method, {
-        sessionId, cwd: this.cwd, mcpServers
+        sessionId, cwd: this.workspace.cwd, mcpServers
       }).then(response => {
         if (!response) return;
 
