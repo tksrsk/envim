@@ -31,14 +31,14 @@ export function NotificateComponent() {
   const [state, setState] = React.useState<States>({ messages: [], enabled: options.ext_messages });
 
   React.useEffect(() => {
-    emit.on("messages:show", onShow);
+    emit.on("neovim:ui:messages:show", onNeovimUiMessagesShow);
 
     return () => {
-      emit.off("messages:show", onShow);
+      emit.off("neovim:ui:messages:show", onNeovimUiMessagesShow);
     };
   }, []);
 
-  function onShow(messages: IMessage[], replace: boolean) {
+  function onNeovimUiMessagesShow(messages: IMessage[], replace: boolean) {
     setState(state => {
       replace && state.messages.splice(0);
 

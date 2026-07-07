@@ -46,16 +46,16 @@ export function HistoryComponent(props: Props) {
   const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
-    emit.on("messages:mode", onMode);
-    emit.on("messages:command", onCommand);
-    emit.on("messages:ruler", onRuler);
-    emit.on("messages:history", onHistory);
+    emit.on("neovim:ui:messages:mode", onNeovimUiMessagesMode);
+    emit.on("neovim:ui:messages:command", onNeovimUiMessagesCommand);
+    emit.on("neovim:ui:messages:ruler", onNeovimUiMessagesRuler);
+    emit.on("neovim:ui:messages:history", onNeovimUiMessagesHistory);
 
     return () => {
-      emit.off("messages:mode", onMode);
-      emit.off("messages:command", onCommand);
-      emit.off("messages:ruler", onRuler);
-      emit.off("messages:history", onHistory);
+      emit.off("neovim:ui:messages:mode", onNeovimUiMessagesMode);
+      emit.off("neovim:ui:messages:command", onNeovimUiMessagesCommand);
+      emit.off("neovim:ui:messages:ruler", onNeovimUiMessagesRuler);
+      emit.off("neovim:ui:messages:history", onNeovimUiMessagesHistory);
     };
   }, []);
 
@@ -71,19 +71,19 @@ export function HistoryComponent(props: Props) {
     state.messages.length && bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [state.messages]);
 
-  function onMode(message: IMessage) {
+  function onNeovimUiMessagesMode(message: IMessage) {
     setState(state => ({ ...state, mode: message.contents.length ? message : undefined }));
   }
 
-  function onCommand(message: IMessage) {
+  function onNeovimUiMessagesCommand(message: IMessage) {
     setState(state => ({ ...state, command: message.contents.length ? message : undefined }));
   }
 
-  function onRuler(message: IMessage) {
+  function onNeovimUiMessagesRuler(message: IMessage) {
     setState(state => ({ ...state, ruler: message.contents.length ? message : undefined }));
   }
 
-  function onHistory(messages: IMessage[]) {
+  function onNeovimUiMessagesHistory(messages: IMessage[]) {
     setState(state => ({ ...state, messages: [ ...state.messages, ...messages ].slice(-1000) }));
   }
 
@@ -94,7 +94,7 @@ export function HistoryComponent(props: Props) {
   function onDebug(direction: "send" | "receive", event: string, ...args: any[]) {
     if (`${direction} ${event}`.search(state.debug) < 0) return;
 
-    onHistory([{ contents: [
+    onNeovimUiMessagesHistory([{ contents: [
       direction === "send" ? { hl: "color-yellow", content: `[ 󰕒${event} ]` } : { hl: "color-blue", content: `[ 󰇚 ${event} ]` },
       { hl: "0", content: `\n${JSON.stringify(args, null, 2)}` }], kind: "debug" }
     ]);
@@ -106,7 +106,7 @@ export function HistoryComponent(props: Props) {
 
   function loadMessages() {
     clearInterval(timer.current);
-    timer.current = +setInterval(() => emit.send("envim:command", "messages"), 500);
+    timer.current = +setInterval(() => emit.send("neovim:command", "messages"), 500);
   }
 
   function unloadMessages() {
@@ -117,14 +117,14 @@ export function HistoryComponent(props: Props) {
     setState(state => {
       const theme = state.theme === "dark" ? "light" : "dark";
 
-      emit.send("envim:command", `set background=${theme}`);
+      emit.send("neovim:command", `set background=${theme}`);
 
       return { ...state, theme };
     });
   }
 
   async function toggleDebug() {
-    const debug = await emit.send<string>("envim:readline", "Event name");
+    const debug = await emit.send<string>("neovim:readline", "Event name");
 
     try {
       "".search(debug);
@@ -132,7 +132,7 @@ export function HistoryComponent(props: Props) {
     } catch (e: any) {
       if (e instanceof Error) {
         const contents = [{ hl: "color-red", content: e.message }];
-        emit.share("messages:show", [{ kind: "debug", contents }], true);
+        emit.share("neovim:ui:messages:show", [{ kind: "debug", contents }], true);
       }
     }
   }
@@ -146,7 +146,7 @@ export function HistoryComponent(props: Props) {
         <div className="space" />
         <MenuComponent color="gray-fg" label="">
           { ["ext_tabline", "ext_cmdline", "ext_messages", "ext_popupmenu", "ext_termcolors"].map(ext => (
-            <FlexComponent key={ext} onClick={() => emit.send("envim:option", ext, !state.options[ext])} spacing>
+            <FlexComponent key={ext} onClick={() => emit.send("neovim:ui:option", ext, !state.options[ext])} spacing>
               <input type="checkbox" value="command" checked={state.options[ext]} />{ ext }
             </FlexComponent>
           )) }
@@ -156,7 +156,7 @@ export function HistoryComponent(props: Props) {
             <IconComponent color="yellow-fg" active={state.theme === "dark"} font="" />
           </FlexComponent>
         </MenuComponent>
-        { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => emit.send("envim:browser", "", "tabnew")} /> }
+        { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => emit.send("browser:open", "", "tabnew")} /> }
         <IconComponent color="purple-fg" font="" onClick={() => emit.send("acp:toggle")} />
         <IconComponent color="green-fg" active={state.debug.length > 0} font="" onClick={toggleDebug} />
       </FlexComponent>

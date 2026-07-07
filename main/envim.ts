@@ -8,61 +8,64 @@ import { Setting } from "main/setting";
 
 export class Envim {
   constructor() {
-    Emit.on("envim:init", this.onInit);
-    Emit.on("envim:connect", this.onConnect);
-    Emit.on("envim:setting", this.onSetting);
-    Emit.on("envim:api", this.onApi);
-    Emit.on("envim:function", this.onFunction);
-    Emit.on("envim:readline", this.onReadline);
-    Emit.on("envim:command", this.onCommand);
-    Emit.on("envim:theme", this.onTheme);
-    Emit.on("envim:browser", this.onBrowser);
-    Emit.on("envim:native:theme", this.onNativeTheme);
+    Emit.on("app:init", this.onAppInit);
+    Emit.on("app:setting", this.onAppSetting);
+    Emit.on("app:theme:native", this.onAppThemeNative);
+    Emit.on("browser:open", this.onBrowserOpen);
+    Emit.on("neovim:api", this.onNeovimApi);
+    Emit.on("neovim:command", this.onNeovimCommand);
+    Emit.on("neovim:connect", this.onNeovimConnect);
+    Emit.on("neovim:function", this.onNeovimFunction);
+    Emit.on("neovim:readline", this.onNeovimReadline);
+    Emit.on("neovim:theme", this.onNeovimTheme);
     process.on("uncaughtException", this.onError);
     process.on("unhandledRejection", this.onError);
-    Electron.nativeTheme.on("updated", this.onNativeTheme);
+    Electron.nativeTheme.on("updated", this.onAppThemeNative);
   }
 
-  private onInit = () => {
+  private onAppInit = () => {
     const setting = Setting.get();
 
-    setting && Emit.send("envim:setting", setting);
+    setting && Emit.send("app:setting", setting);
   }
 
-  private onConnect = (setting: ISetting, bookmark: string) => {
-    Connection.connect(setting, bookmark);
-  }
-
-  private onSetting = (setting: ISetting) => {
+  private onAppSetting = (setting: ISetting) => {
     Setting.set(setting);
   }
 
-  private onApi = async (fname: string, args: any[]) => {
-    return await Connection.active()?.emit.share("envim:api", fname, args);
+  private onAppThemeNative = () => {
+    const theme = this.onNeovimTheme();
+
+    setTimeout(() => {
+      Emit.share("neovim:command", `set background=${theme}`);
+    }, 200);
   }
 
-  private onFunction = async (name: string, args: any[]) => {
-    return await Connection.active()?.emit.share("envim:function", name, args);
+  private onBrowserOpen = (url: string) => {
+    return Connection.active()?.emit.share("browser:open", url);
   }
 
-  private onReadline = async (prompt: string, value?: string) => {
-    return await Connection.active()?.emit.share("envim:readline", prompt, value);
+  private onNeovimApi = async (fname: string, args: any[]) => {
+    return await Connection.active()?.emit.share("neovim:api", fname, args);
   }
 
-  private onCommand = async (command: string) => {
-    return await Connection.active()?.emit.share("envim:command", command);
+  private onNeovimCommand = async (command: string) => {
+    return await Connection.active()?.emit.share("neovim:command", command);
   }
 
-  private onError = (e: Error | any) => {
-    if (e instanceof Error) {
-      Electron.dialog.showErrorBox("Error", `${e.message}\n${e.stack || ""}`);
-    } else if (e instanceof String) {
-      Electron.dialog.showErrorBox("Error", e.toString());
-    }
-    Connection.disconnect();
+  private onNeovimConnect = (setting: ISetting, bookmark: string) => {
+    Connection.connect(setting, bookmark);
   }
 
-  private onTheme = (theme?: "dark" | "light") => {
+  private onNeovimFunction = async (name: string, args: any[]) => {
+    return await Connection.active()?.emit.share("neovim:function", name, args);
+  }
+
+  private onNeovimReadline = async (prompt: string, value?: string) => {
+    return await Connection.active()?.emit.share("neovim:readline", prompt, value);
+  }
+
+  private onNeovimTheme = (theme?: "dark" | "light") => {
     if (!theme) {
       theme = Electron.nativeTheme.shouldUseDarkColors ? "dark" : "light";
     }
@@ -73,15 +76,12 @@ export class Envim {
     return theme;
   }
 
-  private onBrowser = (url: string) => {
-    return Connection.active()?.emit.share("envim:browser", url);
-  }
-
-  private onNativeTheme = () => {
-    const theme = this.onTheme();
-
-    setTimeout(() => {
-      Emit.share("envim:command", `set background=${theme}`);
-    }, 200);
+  private onError = (e: Error | any) => {
+    if (e instanceof Error) {
+      Electron.dialog.showErrorBox("Error", `${e.message}\n${e.stack || ""}`);
+    } else if (e instanceof String) {
+      Electron.dialog.showErrorBox("Error", e.toString());
+    }
+    Connection.disconnect();
   }
 }

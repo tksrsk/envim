@@ -26,14 +26,14 @@ export function PopupmenuComponent() {
   const scope: React.RefObject<HTMLDivElement | null> = React.useRef(null);
 
   React.useEffect(() => {
-    emit.on("popupmenu:show", onPopupmenu);
-    emit.on("popupmenu:select", onSelect);
-    emit.on("popupmenu:hide", offPopupmenu);
+    emit.on("neovim:ui:popupmenu:show", onNeovimUiPopupmenuShow);
+    emit.on("neovim:ui:popupmenu:select", onNeovimUiPopupmenuSelect);
+    emit.on("neovim:ui:popupmenu:hide", onNeovimUiPopupmenuHide);
 
     return () => {
-      emit.off("popupmenu:show", onPopupmenu);
-      emit.off("popupmenu:select", onSelect);
-      emit.off("popupmenu:hide", offPopupmenu);
+      emit.off("neovim:ui:popupmenu:show", onNeovimUiPopupmenuShow);
+      emit.off("neovim:ui:popupmenu:select", onNeovimUiPopupmenuSelect);
+      emit.off("neovim:ui:popupmenu:hide", onNeovimUiPopupmenuHide);
     };
   });
 
@@ -42,17 +42,17 @@ export function PopupmenuComponent() {
 
     const width = x2Col(scope.current.clientWidth) + 2;
 
-    emit.send("envim:api", "nvim_ui_pum_set_bounds", [width, state.height, state.row, state.col]);
+    emit.send("neovim:api", "nvim_ui_pum_set_bounds", [width, state.height, state.row, state.col]);
   }, [scope.current?.clientWidth, state.items.length, state.height, state.row, state.col]);
 
-  function onPopupmenu(state: States) {
+  function onNeovimUiPopupmenuShow(state: States) {
     state.col--;
 
     setState(({ enabled }) => ({ ...state, enabled }));
-    emit.share("envim:drag", -1);
+    emit.share("ui:drag", -1);
   }
 
-  function onSelect(selected: number) {
+  function onNeovimUiPopupmenuSelect(selected: number) {
     setState(state => {
       const top = row2Y(Math.max(0, Math.min(selected, state.items.length - state.height)));
 
@@ -61,9 +61,9 @@ export function PopupmenuComponent() {
     });
   }
 
-  function offPopupmenu() {
+  function onNeovimUiPopupmenuHide() {
     setState(state => ({ ...state, items: [] }));
-    emit.share("envim:drag", "");
+    emit.share("ui:drag", "");
   }
 
   React.useEffect(() => {
@@ -72,7 +72,7 @@ export function PopupmenuComponent() {
 
   function onItem(i: number) {
     setState(state => ({ ...state, clicked: true }));
-    emit.send("envim:api", "nvim_select_popupmenu_item", [i, true, false, {}]);
+    emit.send("neovim:api", "nvim_select_popupmenu_item", [i, true, false, {}]);
   }
 
   function getScopeStyle() {

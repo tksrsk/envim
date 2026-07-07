@@ -55,18 +55,18 @@ export function EditorComponent(props: Props) {
   const { height, scale } = Setting.font;
 
   React.useEffect(() => {
-    emit.on(`clear:${props.gid}`, onClear);
-    emit.on(`flush:${props.gid}`, onFlush);
-    emit.on(`webview:${props.gid}`, onWebview);
-    emit.on(`viewport:${props.gid}`, onViewport);
+    emit.on(`browser:view:${props.gid}`, onBrowserView);
+    emit.on(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
+    emit.on(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
+    emit.on(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
 
     return () => {
       clearInterval(timer.current);
       canvasApi.delete(props.gid);
-      emit.off(`clear:${props.gid}`, onClear);
-      emit.off(`flush:${props.gid}`, onFlush);
-      emit.off(`webview:${props.gid}`, onWebview);
-      emit.off(`viewport:${props.gid}`, onViewport);
+      emit.off(`browser:view:${props.gid}`, onBrowserView);
+      emit.off(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
+      emit.off(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
+      emit.off(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
     };
   }, []);
 
@@ -75,24 +75,24 @@ export function EditorComponent(props: Props) {
 
     if (canvas.current && ctx) {
       canvasApi.create(props.gid, canvas.current, ctx, props.type === "normal");
-      emit.send("envim:ready", props.gid);
+      emit.send("neovim:ui:ready", props.gid);
     }
   }, []);
 
   React.useEffect(() => {
       canvasApi.update(props.gid, props.type === "normal");
-      emit.send("envim:resized", props.gid);
+      emit.send("neovim:ui:resized", props.gid);
   }, [props.style.width, props.style.height]);
 
   React.useEffect(() => {
-      props.focus && emit.share("envim:focusable", !state.webview.active);
+      props.focus && emit.share("ui:focusable", !state.webview.active);
   }, [props.focus, state.webview.active]);
 
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
     e.preventDefault();
 
-    command && emit.send("envim:function", "win_execute", [props.winid, command]);
+    command && emit.send("neovim:function", "win_execute", [props.winid, command]);
   }
 
   function onMouseEvent(e: React.MouseEvent, action: string, button: string = "") {
@@ -118,14 +118,14 @@ export function EditorComponent(props: Props) {
       (e.currentTarget as HTMLElement).style.cursor = url ? "pointer" : "";
     }
 
-    skip || emit.send("envim:mouse", gid, button, action, modiffier.join("-"), row, col);
+    skip || emit.send("neovim:mouse", gid, button, action, modiffier.join("-"), row, col);
   }
 
   function onMouseDown(e: React.MouseEvent) {
     clearTimeout(timer.current);
 
     timer.current = +setTimeout(() => {
-      emit.share("envim:drag", props.gid);
+      emit.share("ui:drag", props.gid);
     });
 
     onMouseEvent(e, "press");
@@ -141,7 +141,7 @@ export function EditorComponent(props: Props) {
     clearTimeout(timer.current);
 
     if (drag) {
-      emit.share("envim:drag", "");
+      emit.share("ui:drag", "");
     }
     onMouseEvent(e, "release");
   }
@@ -163,9 +163,9 @@ export function EditorComponent(props: Props) {
       dragging.current = { x: 0, y: 0 };
       setState(state => ({ ...state, dragging: false }));
 
-      emit.share("envim:drag", "");
-      emit.send("envim:position", props.gid, x2Col(Math.max(0, offset.x)), y2Row(Math.max(0, offset.y)));
-      emit.send("envim:resize", props.gid, Math.max(x2Col(resize.width), 18), y2Row(resize.height));
+      emit.share("ui:drag", "");
+      emit.send("neovim:ui:position", props.gid, x2Col(Math.max(0, offset.x)), y2Row(Math.max(0, offset.y)));
+      emit.send("neovim:ui:resize", props.gid, Math.max(x2Col(resize.width), 18), y2Row(resize.height));
     }
   }
 
@@ -190,16 +190,16 @@ export function EditorComponent(props: Props) {
     runCommand(e, `${line} | redraw`);
   }
 
-  function onClear() {
+  function onBrowserView(src: string, active: boolean) {
+    setState(state => ({ ...state, webview: { src, active } }));
+  }
+
+  function onNeovimUiGridClear() {
     canvasApi.clear(props.gid, x2Col(props.style.width), y2Row(props.style.height));
   }
 
-  function onFlush(flush: { cells: ICell[], scroll?: IScroll }[]) {
+  function onNeovimUiGridFlush(flush: { cells: ICell[], scroll?: IScroll }[]) {
     flush.forEach(({ cells, scroll }) => canvasApi.push(props.gid, cells, scroll));
-  }
-
-  function onWebview(src: string, active: boolean) {
-    setState(state => ({ ...state, webview: { src, active } }));
   }
 
   function openExtWindow(e: React.MouseEvent) {
@@ -214,7 +214,7 @@ export function EditorComponent(props: Props) {
     e.preventDefault();
 
     setState(state => ({ ...state, dragging: true }));
-    emit.share("envim:drag", props.gid);
+    emit.share("ui:drag", props.gid);
   }
 
   function toggleExtWindow(e: React.MouseEvent) {
@@ -224,7 +224,7 @@ export function EditorComponent(props: Props) {
     setState(state => ({ ...state, hidden: !state.hidden }));
   }
 
-  function onViewport(top: number, bottom: number, total: number) {
+  function onNeovimUiGridViewport(top: number, bottom: number, total: number) {
     setState(state => {
       const limit = props.style.height;
       const height = Math.min(Math.floor((bottom - top) / total * 100), 100);

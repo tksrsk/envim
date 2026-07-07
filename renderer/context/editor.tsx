@@ -41,45 +41,50 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   React.useEffect(() => {
-    emit.on("app:busy", onBusy);
-    emit.on("option:set", onOption);
-    emit.on("mode:change", onMode);
-    emit.on("tabline:update", onTabline);
-    emit.on("menu:update", onMenu);
-    emit.on("envim:drag", onDrag);
+    emit.on("neovim:ui:busy", onNeovimUiBusy);
+    emit.on("neovim:ui:option:set", onNeovimUiOptionSet);
+    emit.on("neovim:ui:mode:change", onNeovimUiModeChange);
+    emit.on("neovim:ui:tabline:update", onNeovimUiTablineUpdate);
+    emit.on("neovim:ui:menu:update", onNeovimUiMenuUpdate);
+    emit.on("ui:drag", onUiDrag);
 
     return () => {
-      emit.off("app:busy", onBusy);
-      emit.off("option:set", onOption);
-      emit.off("mode:change", onMode);
-      emit.off("tabline:update", onTabline);
-      emit.off("menu:update", onMenu);
-      emit.off("envim:drag", onDrag);
+      emit.off("neovim:ui:busy", onNeovimUiBusy);
+      emit.off("neovim:ui:option:set", onNeovimUiOptionSet);
+      emit.off("neovim:ui:mode:change", onNeovimUiModeChange);
+      emit.off("neovim:ui:tabline:update", onNeovimUiTablineUpdate);
+      emit.off("neovim:ui:menu:update", onNeovimUiMenuUpdate);
+      emit.off("ui:drag", onUiDrag);
     };
   }, []);
 
-  function onBusy (busy: boolean) {
+  function onNeovimUiBusy (busy: boolean) {
     setState(state => ({ ...state, busy }));
   }
 
-  function onOption(options: { [k: string]: boolean }) {
-    Setting.options = options;
-    setState(state => ({ ...state, options: { ...state.options, ...options } }));
+  function onNeovimUiOptionSet(options: ISetting["options"]) {
+    setState(state => {
+      const next = { ...state.options, ...options };
+
+      Setting.options = next;
+
+      return { ...state, options: next };
+    });
   }
 
-  function onMode (mode: IMode) {
+  function onNeovimUiModeChange (mode: IMode) {
     setState(state => ({ ...state, mode }));
   }
 
-  async function onTabline(tabs: ITab[], bufs: IBuffer[]) {
+  async function onNeovimUiTablineUpdate(tabs: ITab[], bufs: IBuffer[]) {
     setState(state => ({ ...state, tabs, bufs }));
   }
 
-  function onMenu(menus: IMenu[]) {
+  function onNeovimUiMenuUpdate(menus: IMenu[]) {
     setState(state => ({ ...state, menus }));
   }
 
-  function onDrag (drag: string) {
+  function onUiDrag (drag: string) {
     setState(state => ({ ...state, drag }));
   }
 

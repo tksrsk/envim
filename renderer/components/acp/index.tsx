@@ -71,20 +71,20 @@ export function AcpComponent() {
   const color = state.mode.main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
-    emit.on("acp:toggle", onAgentToggle);
-    emit.on("acp:status-changed", onStatusChanged);
-    emit.on("acp:session-update", onAcpSessionUpdate);
-    emit.on("acp:message-added", onMessageAdded);
-    emit.on("acp:file-add", onFileAdd);
-    emit.on("envim:focused", onFocused);
+    emit.on("acp:file:add", onAcpFileAdd);
+    emit.on("acp:message:added", onAcpMessageAdded);
+    emit.on("acp:session:update", onAcpSessionUpdate);
+    emit.on("acp:status:changed", onAcpStatusChanged);
+    emit.on("acp:toggle", onAcpToggle);
+    emit.on("ui:focused", onUiFocused);
 
     return () => {
-      emit.off("acp:toggle", onAgentToggle);
-      emit.off("acp:status-changed", onStatusChanged);
-      emit.off("acp:session-update", onAcpSessionUpdate);
-      emit.off("acp:message-added", onMessageAdded);
-      emit.off("acp:file-add", onFileAdd);
-      emit.off("envim:focused", onFocused);
+      emit.off("acp:file:add", onAcpFileAdd);
+      emit.off("acp:message:added", onAcpMessageAdded);
+      emit.off("acp:session:update", onAcpSessionUpdate);
+      emit.off("acp:status:changed", onAcpStatusChanged);
+      emit.off("acp:toggle", onAcpToggle);
+      emit.off("ui:focused", onUiFocused);
     };
   }, []);
 
@@ -160,18 +160,14 @@ export function AcpComponent() {
     }
   }, [state.search]);
 
-  function onAgentToggle(registry: IAcpRegistry) {
-    setState(state => {
-      !state.visible && state.status.status !== "disconnected" && scrollTo("bottom");
-      return { ...state, visible: !state.visible, mode: { ...state.mode, main: state.visible ? "blur" : "normal" }, registry };
-    });
+  function onAcpFileAdd(file: string) {
+    setState(state => ({
+      ...state,
+      files: [ ...state.files.filter(f => f !== file), file ]
+    }));
   }
 
-  function onStatusChanged(status: IAcpStatus) {
-    setState(state => ({ ...state, status }));
-  }
-
-  function onMessageAdded(message: AcpSDK.SessionNotification) {
+  function onAcpMessageAdded(message: AcpSDK.SessionNotification) {
     setState(state => ({
       ...state,
       messages: filterMessages(state.messages, message)
@@ -190,11 +186,15 @@ export function AcpComponent() {
     });
   }
 
-  function onFileAdd(file: string) {
-    setState(state => ({
-      ...state,
-      files: [ ...state.files.filter(f => f !== file), file ]
-    }));
+  function onAcpStatusChanged(status: IAcpStatus) {
+    setState(state => ({ ...state, status }));
+  }
+
+  function onAcpToggle(registry: IAcpRegistry) {
+    setState(state => {
+      !state.visible && state.status.status !== "disconnected" && scrollTo("bottom");
+      return { ...state, visible: !state.visible, mode: { ...state.mode, main: state.visible ? "blur" : "normal" }, registry };
+    });
   }
 
   function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
@@ -239,7 +239,7 @@ export function AcpComponent() {
     if (provider === "custom") {
       setState(state => ({ ...state, mode: { main: "input", sub: "package" }, input: JSON.stringify(agent, null, 2) }));
     } else {
-      onStartAgent(agent);
+      onAcpAgentStart(agent);
     }
   }
 
@@ -249,34 +249,34 @@ export function AcpComponent() {
     Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
   }
 
-  function onStartAgent(agent: IAcpRegistryAgent) {
-    emit.send("acp:start-agent", agent);
+  function onAcpAgentStart(agent: IAcpRegistryAgent) {
+    emit.send("acp:agent:start", agent);
   }
 
-  function onStopAgent() {
-    emit.send("acp:stop-agent");
+  function onAcpAgentStop() {
+    emit.send("acp:agent:stop");
   }
 
-  function onLogout() {
-    emit.send("acp:logout");
+  function onAcpAuthLogout() {
+    emit.send("acp:auth:logout");
   }
 
-  function onCreateSession() {
-    emit.send("acp:create-session");
+  function onAcpSessionCreate() {
+    emit.send("acp:session:create");
   }
 
-  function onSwitchSession(sessionId: string) {
+  function onAcpSessionSwitch(sessionId: string) {
     if (checkAcpStatus("connected")) {
-      emit.send("acp:switch-session", sessionId);
+      emit.send("acp:session:switch", sessionId);
     }
   }
 
-  function onDeleteSession(sessionId: string) {
-    emit.send("acp:delete-session", sessionId);
+  function onAcpSessionDelete(sessionId: string) {
+    emit.send("acp:session:delete", sessionId);
   }
 
-  function onSetSessionConfigOption(configId: string, value: string | boolean) {
-    checkAcpStatus("processing") || emit.send("acp:config-session", configId, value);
+  function onAcpSessionConfig(configId: string, value: string | boolean) {
+    checkAcpStatus("processing") || emit.send("acp:session:config", configId, value);
   }
 
   function onSelectCommand(selected: string) {
@@ -347,7 +347,7 @@ export function AcpComponent() {
           if (!agent) return;
 
           Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== agent?.name), agent] };
-          onStartAgent(agent);
+          onAcpAgentStart(agent);
         } finally {
           return;
         }
@@ -374,7 +374,7 @@ export function AcpComponent() {
           return;
         }
 
-        emit.send("acp:send-prompt", state.status.sessionId, input.trim(), state.files, state.images);
+        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images);
 
         break;
       case "search":
@@ -388,12 +388,12 @@ export function AcpComponent() {
     setState(state => ({ ...state, search, input: "", files: [], images: [], mode: { main: "normal", sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
   }
 
-  function onCancelPrompt() {
+  function onAcpPromptCancel() {
     if (!checkAcpStatus("processing")) {
       return;
     }
 
-    emit.send("acp:cancel-prompt", state.status.sessionId);
+    emit.send("acp:prompt:cancel", state.status.sessionId);
   }
 
   function onNormalKeyDown(e: React.KeyboardEvent) {
@@ -408,7 +408,7 @@ export function AcpComponent() {
       case "j": return scrollTo("down");
       case "u": return e.ctrlKey && scrollTo("pageup");
       case "d": return e.ctrlKey && scrollTo("pagedown");
-      case "q": return onCancelPrompt();
+      case "q": return onAcpPromptCancel();
       case "n": return state.search.query && onSearch(state.search.active + 1);
       case "N": return state.search.query && onSearch(state.search.active - 1);
       case "/": return onSearchInput();
@@ -439,7 +439,7 @@ export function AcpComponent() {
     setState(s => ({ ...s, search: { ...s.search, highlight: false } }));
   }
 
-  function onFocused() {
+  function onUiFocused() {
     setState(state => {
       const main = (() => {
         switch (document.activeElement) {
@@ -509,14 +509,14 @@ export function AcpComponent() {
     switch (config.type) {
       case "boolean":
         return (
-          <FlexComponent key={config.id} animate="hover" onClick={() => onSetSessionConfigOption(config.id, !config.currentValue)} spacing>
+          <FlexComponent key={config.id} animate="hover" onClick={() => onAcpSessionConfig(config.id, !config.currentValue)} spacing>
             <input type="checkbox" checked={config.currentValue} readOnly />
             {config.name}
           </FlexComponent>
         );
       case "select":
         const renderConfigSelectOption = (option: AcpSDK.SessionConfigSelectOption) => (
-          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => onSetSessionConfigOption(config.id, option.value)} spacing>
+          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => onAcpSessionConfig(config.id, option.value)} spacing>
             {option.name}
           </FlexComponent>
         );
@@ -535,7 +535,7 @@ export function AcpComponent() {
 
   return (
     <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
-      <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("envim:focused")} tabIndex={-1} />
+      <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("ui:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
           <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
@@ -548,7 +548,7 @@ export function AcpComponent() {
             <span style={{ marginBottom: 8 }}>Authentication Required</span>
             {state.status.initialize?.authMethods?.map(method => (
               <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
-                onClick={() => emit.send("acp:authenticate", method.id)}
+                onClick={() => emit.send("acp:auth:authenticate", method.id)}
               >
                 <IconComponent font="󰌆" text={method.name} />
               </FlexComponent>
@@ -615,8 +615,8 @@ export function AcpComponent() {
           </CollapseComponent>
         )}
         <FlexComponent overflow="visible">
-          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onStopAgent} />}
-          {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onLogout} />}
+          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onAcpAgentStop} />}
+          {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
@@ -635,11 +635,11 @@ export function AcpComponent() {
           <div className="space" />
           {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
           {(checkAcpStatus("connected")) && (
-            <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onCreateSession} />}>
+            <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>
               {state.sessions.filter(({ status }) => status === "show").map(session => (
-                <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onSwitchSession(session.id)} spacing >
+                <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)} spacing >
                   {session.name}
-                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onDeleteSession(session.id) } hover />}
+                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onAcpSessionDelete(session.id) } hover />}
                 </FlexComponent>
               ))}
             </MenuComponent>
@@ -652,7 +652,7 @@ export function AcpComponent() {
           onChange={e => setState(state => ({ ...state, input: e.target.value }))}
           onKeyDown={onInputKeyDown}
           onPaste={onPaste}
-          onFocus={() => emit.share("envim:focused")}
+          onFocus={() => emit.share("ui:focused")}
           rows={8}
         />
         <FlexComponent overflow="visible" vertical="center" padding={[4, 0, 0]}>
@@ -668,7 +668,7 @@ export function AcpComponent() {
           {state.session?.configOptions?.map(renderConfigOption)}
           <div className="space" />
           {checkAcpStatus("processing") && <div className="animate loading inline" />}
-          <IconComponent font="" color="red-fg" onClick={onCancelPrompt} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
+          <IconComponent font="" color="red-fg" onClick={onAcpPromptCancel} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
           <IconComponent font="󰒊" color="blue-fg" onClick={onConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
         </FlexComponent>
       </FlexComponent>

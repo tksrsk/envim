@@ -29,18 +29,18 @@ export function CmdlineComponent() {
   const [state, setState] = React.useState<States>({ cmdline: [], contents: [], pos: 0, prompt: "", indent: 0, enabled: options.ext_cmdline });
 
   React.useEffect(() => {
-    emit.on("cmdline:show", onCmdline);
-    emit.on("cmdline:cursor", onCursor);
-    emit.on("cmdline:special", onSpecial);
-    emit.on("cmdline:blockshow", onBlock);
-    emit.on("cmdline:blockhide", offBlock);
+    emit.on("neovim:ui:cmdline:show", onNeovimUiCmdlineShow);
+    emit.on("neovim:ui:cmdline:cursor", onNeovimUiCmdlineCursor);
+    emit.on("neovim:ui:cmdline:special", onNeovimUiCmdlineSpecial);
+    emit.on("neovim:ui:cmdline:blockshow", onNeovimUiCmdlineBlockShow);
+    emit.on("neovim:ui:cmdline:blockhide", onNeovimUiCmdlineBlockHide);
 
     return () => {
-      emit.off("cmdline:show", onCmdline);
-      emit.off("cmdline:cursor", onCursor);
-      emit.off("cmdline:special", onSpecial);
-      emit.off("cmdline:blockshow", onBlock);
-      emit.off("cmdline:blockhide", offBlock);
+      emit.off("neovim:ui:cmdline:show", onNeovimUiCmdlineShow);
+      emit.off("neovim:ui:cmdline:cursor", onNeovimUiCmdlineCursor);
+      emit.off("neovim:ui:cmdline:special", onNeovimUiCmdlineSpecial);
+      emit.off("neovim:ui:cmdline:blockshow", onNeovimUiCmdlineBlockShow);
+      emit.off("neovim:ui:cmdline:blockhide", onNeovimUiCmdlineBlockHide);
     };
   }, []);
 
@@ -67,7 +67,7 @@ export function CmdlineComponent() {
     return result;
   }
 
-  function onCmdline(cmd: string[][], pos: number, prompt: string, indent: number) {
+  function onNeovimUiCmdlineShow(cmd: string[][], pos: number, prompt: string, indent: number) {
     setState(state => {
       const cmdline = convertContent(cmd, indent);
 
@@ -79,7 +79,7 @@ export function CmdlineComponent() {
     });
   }
 
-  function onCursor(pos: number) {
+  function onNeovimUiCmdlineCursor(pos: number) {
     setState(state => {
       if (pos < state.cmdline.length) {
         pos = getPos(state.cmdline, pos + state.indent);
@@ -88,7 +88,7 @@ export function CmdlineComponent() {
     });
   }
 
-  function onSpecial(c: string, shift: boolean) {
+  function onNeovimUiCmdlineSpecial(c: string, shift: boolean) {
     setState(state => {
       const cmdline = state.cmdline;
       const pos = shift ? state.pos + 1 : state.pos;
@@ -99,7 +99,7 @@ export function CmdlineComponent() {
     });
   }
 
-  function onBlock(lines: string[][][]) {
+  function onNeovimUiCmdlineBlockShow(lines: string[][][]) {
     setState(state => ({
       ...state,
       contents: [
@@ -109,7 +109,7 @@ export function CmdlineComponent() {
     }));
   }
 
-  function offBlock() {
+  function onNeovimUiCmdlineBlockHide() {
     setState(state => ({ ...state, contents: [], cmdline: [] }));
   }
 

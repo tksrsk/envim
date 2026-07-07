@@ -105,7 +105,7 @@ export class Connection {
     if (!setting?.presets[`[${type}]:${bookmark}`]) return;
     if (Electron.dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0) {
       Setting.remove(type, bookmark);
-      Emit.share("envim:init");
+      Emit.share("app:init");
     }
   }
 
@@ -119,7 +119,7 @@ export class Connection {
       Connection.current = workspace;
       Connection.workspaces = [ ...Connection.workspaces.filter(w => w !== workspace), workspace ];
       Connection.emitWorkspace();
-      Emit.share("envim:native:theme");
+      Emit.share("app:theme:native");
     };
 
     if (next) return attach(next.nvim);

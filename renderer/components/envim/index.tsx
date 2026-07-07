@@ -61,29 +61,33 @@ export function EnvimComponent(props: Props) {
 
   React.useEffect(() => {
     highlights.setHighlight("0", true, {  });
-    emit.on("highlight:set", onHighlight);
-    emit.on("win:pos", onWin);
-    Emit.on("envim:pause", onPause);
-    emit.send("envim:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options);
+    Emit.on("app:pause", onAppPause);
+    emit.on("neovim:ui:highlight:set", onNeovimUiHighlightSet);
+    emit.on("neovim:ui:window:position", onNeovimUiWindowPosition);
+    emit.send("neovim:ui:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options);
 
     return () => {
-      emit.off("highlight:set", onHighlight);
-      emit.off("win:pos", onWin);
-      Emit.off("envim:pause", onPause);
+      Emit.off("app:pause", onAppPause);
+      emit.off("neovim:ui:highlight:set", onNeovimUiHighlightSet);
+      emit.off("neovim:ui:window:position", onNeovimUiWindowPosition);
     };
   }, []);
 
   React.useEffect(() => {
-    emit.send("envim:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
+    emit.send("neovim:ui:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
   }, [props.main.width, props.main.height]);
 
-  function onHighlight(hls: {id: string, ui: boolean, hl: IHighlight}[]) {
+  function onAppPause(pause: boolean) {
+    setState(state => ({ ...state, pause }));
+  }
+
+  function onNeovimUiHighlightSet(hls: {id: string, ui: boolean, hl: IHighlight}[]) {
     hls.forEach(({id, ui, hl}) => {
       highlights.setHighlight(id, ui, hl);
     });
   }
 
-  function onWin(wins: IWindow[]) {
+  function onNeovimUiWindowPosition(wins: IWindow[]) {
     setState(({ grids, ...state }) => {
       const nextOrder = Object.values(grids).reduce((order, grid) => Math.max(order, grid.order), 1);
       const refresh = wins.reverse().filter(({ gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
@@ -107,19 +111,15 @@ export function EnvimComponent(props: Props) {
       }).length > 0;
 
       clearTimeout(timer.current);
-      timer.current = refresh ? +setTimeout(() => emit.send("envim:command", "mode"), 100) : 0;
+      timer.current = refresh ? +setTimeout(() => emit.send("neovim:command", "mode"), 100) : 0;
 
       return { ...state, grids };
     });
   }
 
-  function onPause(pause: boolean) {
-    setState(state => ({ ...state, pause }));
-  }
-
   function onMouseUp() {
-    emit.share("envim:drag", "");
-    emit.share("envim:focus");
+    emit.share("ui:drag", "");
+    emit.share("ui:focus");
   }
 
   return (

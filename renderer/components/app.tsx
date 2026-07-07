@@ -41,24 +41,24 @@ export function AppComponent() {
     document.fonts.load("10px Alt Bold").then();
     document.fonts.load("10px Icon").then();
     document.fonts.load("10px Git").then();
-    Emit.on("app:resize", onResize);
-    Emit.on("app:theme", onTheme);
-    Emit.on("app:workspace", onWorkspace);
+    Emit.on("app:resize", onAppResize);
+    Emit.on("app:theme", onAppTheme);
+    Emit.on("app:workspace", onAppWorkspace);
   }, []);
 
-  function onResize (width: number, height: number) {
+  function onAppResize (width: number, height: number) {
     setState(state => ({ ...state, window: { width, height } }));
   }
 
-  function onTheme (theme: "dark" | "light") {
+  function onAppTheme (theme: "dark" | "light") {
     setState(state => ({ ...state, theme }));
     Cache.set<"dark" | "light">("common", "theme", theme);
   }
 
-  function onWorkspace(workspaces: { [id: string]: string }, selected: string) {
+  function onAppWorkspace(workspaces: { [id: string]: string }, selected: string) {
     const init = Object.keys(workspaces).length > 0;
 
-    init || Emit.send("envim:setting", Setting.get());
+    init || Emit.send("app:setting", Setting.get());
     setState(state => ({ ...state, workspaces, selected, init }));
   }
 

@@ -83,15 +83,15 @@ const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; ses
       { hostContext: getHostContext(iframe.current!) }
     );
     activeBridge.current = nextBridge;
-    nextBridge.oncalltool = params => emit.send(`mcp-apps:call-tool:${app.upstreamId}`, params);
-    nextBridge.onlistresources = params => emit.send(`mcp-apps:list-resources:${app.upstreamId}`, params);
-    nextBridge.onlistresourcetemplates = params => emit.send(`mcp-apps:list-resource-templates:${app.upstreamId}`, params);
-    nextBridge.onreadresource = params => emit.send(`mcp-apps:read-resource:${app.upstreamId}`, params);
+    nextBridge.oncalltool = params => emit.send(`mcp:tool:call:${app.upstreamId}`, params);
+    nextBridge.onlistresources = params => emit.send(`mcp:resources:list:${app.upstreamId}`, params);
+    nextBridge.onlistresourcetemplates = params => emit.send(`mcp:resource:templates:list:${app.upstreamId}`, params);
+    nextBridge.onreadresource = params => emit.send(`mcp:resource:read:${app.upstreamId}`, params);
     nextBridge.onmessage = async (params: McpAppBridge.McpUiMessageRequest["params"]) => {
       const text = params.content.filter(c  => c.type === "text").map(c => c.text).join("\n");
 
       if (text) {
-        emit.send("acp:send-prompt", sessionId, text, [], []);
+        emit.send("acp:prompt:send", sessionId, text, [], []);
         onClose();
       }
 
@@ -105,15 +105,15 @@ const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; ses
   }, [app.resource.text, app.upstreamId, sessionId, onClose, emit]);
 
   React.useEffect(() => {
-    const onToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
-    const onResourcesChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendResourceListChanged();
+    const onMcpResourcesChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendResourceListChanged();
+    const onMcpToolsChanged = (upstreamId: string) => upstreamId === app.upstreamId && activeBridge.current?.sendToolListChanged();
 
-    emit.on("mcp-apps:tools-changed", onToolsChanged);
-    emit.on("mcp-apps:resources-changed", onResourcesChanged);
+    emit.on("mcp:resources:changed", onMcpResourcesChanged);
+    emit.on("mcp:tools:changed", onMcpToolsChanged);
 
     return () => {
-      emit.off("mcp-apps:tools-changed", onToolsChanged);
-      emit.off("mcp-apps:resources-changed", onResourcesChanged);
+      emit.off("mcp:resources:changed", onMcpResourcesChanged);
+      emit.off("mcp:tools:changed", onMcpToolsChanged);
       const closingBridge = activeBridge.current;
 
       activeBridge.current = null;
@@ -157,14 +157,14 @@ export function McpAppsComponent({ sessionId }: { sessionId: string }) {
   const onClose = React.useCallback(() => setActiveId(null), []);
 
   React.useEffect(() => {
-    emit.on("mcp-apps:render", onRender);
+    emit.on("mcp:render", onMcpRender);
 
     return () => {
-      emit.off("mcp-apps:render", onRender);
+      emit.off("mcp:render", onMcpRender);
     };
   }, [sessionId]);
 
-  function onRender(app: IMcpApp) {
+  function onMcpRender(app: IMcpApp) {
     setApps(apps => {
       const id = `${sessionId}_${app.upstreamId}_${app.resource.uri}`
       setActiveId(id);

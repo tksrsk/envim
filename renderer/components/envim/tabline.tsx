@@ -43,33 +43,33 @@ export function TablineComponent(props: Props) {
   const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
 
   React.useEffect(() => {
-    emit.on("envim:cwd", onCwd);
+    emit.on("neovim:cwd", onNeovimCwd);
 
     return () => {
-      emit.off("envim:cwd", onCwd);
+      emit.off("neovim:cwd", onNeovimCwd);
     };
   }, []);
 
-  function onCwd(cwd: string) {
+  function onNeovimCwd(cwd: string) {
     setState(state => ({ ...state, cwd, bookmarks: Setting.bookmarks }));
   }
 
   async function saveBookmark(path: string) {
     if (path !== state.cwd) {
-      path = await emit.send<string>("envim:readline", "Bookmark Path", state.cwd, "dir") || path;
+      path = await emit.send<string>("neovim:readline", "Bookmark Path", state.cwd, "dir") || path;
     }
 
     const bookmark = state.bookmarks.find(bookmark => bookmark.path === path);
     const bookmarks = state.bookmarks
       .filter(bookmark => bookmark.path !== path)
       .map(bookmark => ({ ...bookmark, selected: false }));
-    const name = await emit.send<string>("envim:readline", "Bookmark Name", bookmark?.name || state.cwd);
+    const name = await emit.send<string>("neovim:readline", "Bookmark Name", bookmark?.name || state.cwd);
 
     if (name) {
       bookmarks.push({ name: name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path, selected: false });
       Setting.bookmarks = bookmarks.sort((a, b) => a.name > b.name ? 1 : -1);
 
-      Emit.send("envim:setting", Setting.get());
+      Emit.send("app:setting", Setting.get());
       setState(state => ({ ...state, bookmarks }));
     }
   }
@@ -81,7 +81,7 @@ export function TablineComponent(props: Props) {
     e.preventDefault();
 
     Setting.bookmarks = bookmarks;
-    Emit.send("envim:setting", Setting.get());
+    Emit.send("app:setting", Setting.get());
     setState(state => ({ ...state, bookmarks }));
   }
 
@@ -89,7 +89,7 @@ export function TablineComponent(props: Props) {
     e.stopPropagation();
     e.preventDefault();
 
-    emit.send("envim:command", command);
+    emit.send("neovim:command", command);
   }
 
   React.useEffect(() => {

@@ -64,14 +64,14 @@ export function WebviewComponent(props: Props) {
   const color = { command: "green", visual: "purple", browser: "blue" }[state.mode] || "default";
 
   React.useEffect(() => {
-    emit.on("envim:focused", onFocused);
-    Emit.on("webview:action", onAction);
-    Emit.on("webview:searchengines", onSearchengines);
+    Emit.on("browser:action", onBrowserAction);
+    Emit.on("browser:searchengines", onBrowserSearchengines);
+    emit.on("ui:focused", onUiFocused);
 
     return () => {
-      emit.off("envim:focused", onFocused);
-      Emit.off("webview:action", onAction);
-      Emit.off("webview:searchengines", onSearchengines);
+      Emit.off("browser:action", onBrowserAction);
+      Emit.off("browser:searchengines", onBrowserSearchengines);
+      emit.off("ui:focused", onUiFocused);
     };
   }, []);
 
@@ -139,14 +139,14 @@ export function WebviewComponent(props: Props) {
   }
 
   function onFocus () {
-    emit.share("envim:focused");
+    emit.share("ui:focused");
   }
 
   function onClose() {
     webview.current = null;
   }
 
-  function onFocused () {
+  function onUiFocused () {
     setState(state => {
       const mode = (() => {
         switch (document.activeElement) {
@@ -158,7 +158,7 @@ export function WebviewComponent(props: Props) {
         }
       })();
 
-      webview.current && Emit.send(`webview:mode:${webview.current.getWebContentsId()}`, mode);
+      webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
       state.mode !== mode && ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
 
       return { ...state, mode };
@@ -191,7 +191,7 @@ export function WebviewComponent(props: Props) {
     if (!webview.current || !container.current) return;
     if (state.selection?.line === line) mode = "command";
     if (mode === "visual-line") mode = "visual";
-    if (capture && state.selection) Emit.send(`webview:capture:${webview.current.getWebContentsId()}`, { selected: state.selection.rect }[capture]);
+    if (capture && state.selection) Emit.send(`browser:capture:${webview.current.getWebContentsId()}`, { selected: state.selection.rect }[capture]);
 
     const rect = line ? { ...state.pointer, x: 0, width: container.current.offsetWidth } : state.pointer;
     const anchor = { ...state.pointer }
@@ -214,7 +214,7 @@ export function WebviewComponent(props: Props) {
 
     webview.current.sendInputEvent({ type: "mouseDown", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
     webview.current.sendInputEvent({ type: "mouseUp", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
-    emit.once("envim:focused", () => runAction("mode-command"));
+    emit.once("ui:focused", () => runAction("mode-command"));
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -235,9 +235,9 @@ export function WebviewComponent(props: Props) {
       case "l": return webview.current.sendInputEvent({ type: "mouseWheel", x: state.pointer.x, y: state.pointer.y, deltaX: -100, deltaY: 0 });
       case "u": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageUp" });
       case "d": return webview.current.sendInputEvent({ type: "keyDown", keyCode: "PageDown" });
-      case "s": return emit.send("envim:browser", "", "new");
-      case "v": return emit.send("envim:browser", "", "vnew");
-      case "t": return emit.send("envim:browser", "", "tabnew");
+      case "s": return emit.send("browser:open", "", "new");
+      case "v": return emit.send("browser:open", "", "vnew");
+      case "t": return emit.send("browser:open", "", "tabnew");
     }
 
     switch (e.key) {
@@ -270,7 +270,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onSearchengines () {
+  function onBrowserSearchengines () {
     setState(state => ({ ...state, searchengines: Setting.searchengines }));
   }
 
@@ -330,7 +330,7 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onAction (id: number, action: string) {
+  function onBrowserAction (id: number, action: string) {
     webview.current?.getWebContentsId() === id && runAction(action);
   }
 
@@ -348,7 +348,7 @@ export function WebviewComponent(props: Props) {
         case "reload": return webview.current.reloadIgnoringCache();
         case "zoom-out": return setZoom(state.zoom - 10);
         case "zoom-in": return setZoom(state.zoom + 10);
-        case "devtool": return Emit.send(`webview:devtool:${webview.current.getWebContentsId()}`);
+        case "devtool": return Emit.send(`browser:devtool:${webview.current.getWebContentsId()}`);
         case "mode-browser": return webview.current.focus();
         case "mode-input": return input.current?.focus();
         case "mode-search": return search.current?.focus();
@@ -373,7 +373,7 @@ export function WebviewComponent(props: Props) {
 
     if (webview.current && selected && selected.uri.indexOf("${query}") < 0) {
       if (e.ctrlKey || e.metaKey) {
-        emit.send("envim:browser", selected.uri);
+        emit.send("browser:open", selected.uri);
       } else {
         webview.current.src = selected.uri;
       }
@@ -390,14 +390,14 @@ export function WebviewComponent(props: Props) {
     const selected = state.searchengines.find(engine => engine.name === name);
 
     Setting.searchengines = state.searchengines.filter(engine => selected !== engine);
-    Emit.share("webview:searchengines");
+    Emit.share("browser:searchengines");
   }
 
   const saveEngine = async () => {
     if (webview.current) {
-      const uri = await emit.send<string>("envim:readline", "URI", webview.current.getURL());
+      const uri = await emit.send<string>("neovim:readline", "URI", webview.current.getURL());
       const selected = state.searchengines.find(engine => engine.uri === uri);
-      const name = uri && await emit.send<string>("envim:readline", "Name", selected?.name || "");
+      const name = uri && await emit.send<string>("neovim:readline", "Name", selected?.name || "");
       const hasquery = uri.indexOf("${query}") >= 0;
 
       if (uri && name) {
@@ -406,7 +406,7 @@ export function WebviewComponent(props: Props) {
           { name, uri, selected: hasquery }
         ].sort((a, b) => a.name > b.name ? 1 : -1);
 
-        Emit.share("webview:searchengines");
+        Emit.share("browser:searchengines");
       }
     }
 

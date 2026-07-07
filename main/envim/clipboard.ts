@@ -7,7 +7,7 @@ export class Clipboard {
   private type: "v" | "V" | "b" = "v";
 
   constructor(private readonly workspace: Workspace) {
-    this.workspace.emit.share("envim:luafile", "clipboard.lua");
+    this.workspace.emit.share("neovim:luafile", "clipboard.lua");
   }
 
   copy(lines: string[], type: "v" | "V" | "b") {

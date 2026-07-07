@@ -260,7 +260,7 @@ export class Grids {
     const cursor = this.get(this.active.gid, false).getCursorPos(this.active.row, this.active.col);
 
     if (cursor && cursor.x >= 0 && cursor.y >= 0) {
-      this.workspace.emit.update("grid:cursor", false, cursor);
+      this.workspace.emit.update("neovim:ui:grid:cursor", false, cursor);
     }
 
     const wins: IWindow[] = Object.values(this.changes).map(grid => {
@@ -274,22 +274,22 @@ export class Grids {
       }
 
       if (info.status === "show" && winsize.width < info.width || winsize.height < info.height) {
-        this.workspace.emit.share("envim:resize", grid, Math.min(winsize.width - 2, info.width), Math.min(winsize.height - 2, info.height));
+        this.workspace.emit.share("neovim:ui:resize", grid, Math.min(winsize.width - 2, info.width), Math.min(winsize.height - 2, info.height));
       }
 
       return info;
     });
 
     this.changes = {};
-    wins.length && this.workspace.emit.update("win:pos", false, wins);
+    wins.length && this.workspace.emit.update("neovim:ui:window:position", false, wins);
 
     Object.values(this.grids).map(grid => {
       const { gid } = grid.getInfo();
       const { flush, viewport } = grid.getFlush();
-      flush && flush.length && this.workspace.emit.send(`flush:${gid}`, flush);
-      viewport && this.workspace.emit.update(`viewport:${gid}`, false, viewport.top, viewport.bottom, viewport.total);
+      flush && flush.length && this.workspace.emit.send(`neovim:ui:grid:flush:${gid}`, flush);
+      viewport && this.workspace.emit.update(`neovim:ui:grid:viewport:${gid}`, false, viewport.top, viewport.bottom, viewport.total);
     });
 
-    this.workspace.emit.update("mode:change", true, this.mode);
+    this.workspace.emit.update("neovim:ui:mode:change", true, this.mode);
   }
 }

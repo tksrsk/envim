@@ -22,74 +22,30 @@ export class Acp {
   private stdoutPush?: (data: string) => void;
 
   constructor(private readonly workspace: Workspace) {
-    this.workspace.emit.share("envim:luafile", "acp.lua");
-    this.workspace.emit.on("acp:stdout", this.onAcpStdout);
-    this.workspace.emit.on("acp:exited", this.onAcpExited);
+    this.workspace.emit.share("neovim:luafile", "acp.lua");
+    this.workspace.emit.on("acp:agent:start", this.onAcpAgentStart);
+    this.workspace.emit.on("acp:agent:stop", this.onAcpAgentStop);
+    this.workspace.emit.on("acp:auth:authenticate", this.onAcpAuthAuthenticate);
+    this.workspace.emit.on("acp:auth:logout", this.onAcpAuthLogout);
     this.workspace.emit.on("acp:error", this.onAcpError);
-    this.workspace.emit.on("acp:terminal-output", this.onAcpTerminalOutput);
-    this.workspace.emit.on("acp:terminal-exit", this.onAcpTerminalExit);
-    this.workspace.emit.on("acp:toggle", this.onToggle);
-    this.workspace.emit.on("acp:start-agent", this.onStartAgent);
-    this.workspace.emit.on("acp:stop-agent", this.onStopAgent);
-    this.workspace.emit.on("acp:create-session", this.onCreateSession);
-    this.workspace.emit.on("acp:switch-session", this.onSwitchSession);
-    this.workspace.emit.on("acp:delete-session", this.onDeleteSession);
-    this.workspace.emit.on("acp:send-prompt", this.onSendPrompt);
-    this.workspace.emit.on("acp:cancel-prompt", this.onCancelPrompt);
-    this.workspace.emit.on("acp:permission-response", this.onPermissionResponse);
-    this.workspace.emit.on("acp:authenticate", this.onAuthenticate);
-    this.workspace.emit.on("acp:logout", this.onLogout);
-    this.workspace.emit.on("acp:config-session", this.onSetSessionConfigOption);
-  }
-
-  private onSetSessionConfigOption = (configId: string, value: string | boolean) => {
-    if (!this.connection || !this.state.sessionId) return;
-
-    const sessionId = this.state.sessionId;
-    const params = typeof value === "boolean"
-      ? { sessionId, configId, type: "boolean" as const, value }
-      : { sessionId, configId, value };
-
-    this.callAgent(AcpSDK.methods.agent.session.setConfigOption, params).then(response => {
-      if (!response) return;
-
-      const session = this.sessions[sessionId];
-      if (session) {
-        session.configOptions = response.configOptions;
-        this.notifySessionUpdate();
-      }
-    });
-  }
-
-  private onAcpTerminalOutput = (data: { terminalId: string; output: string }) => {
-    const terminal = this.terminal[data.terminalId];
-
-    if (terminal) {
-      terminal.output = [terminal.output, data.output].filter(output => output).join("\n");
-    }
-  }
-
-  private onAcpTerminalExit = (data: { terminalId: string; exitCode: number; signal: string }) => {
-    const terminal = this.terminal[data.terminalId];
-
-    if (terminal?.resolve) {
-      terminal.pid = 0;
-      terminal.resolve(data);
-    }
-  }
-
-  private onAcpStdout = (data: string) => {
-    this.stdoutPush?.(data);
-  }
-
-  private onAcpError = (error: string) => {
-    this.setState({ ...this.state, error });
+    this.workspace.emit.on("acp:exited", this.onAcpExited);
+    this.workspace.emit.on("acp:permission:response", this.onAcpPermissionResponse);
+    this.workspace.emit.on("acp:prompt:cancel", this.onAcpPromptCancel);
+    this.workspace.emit.on("acp:prompt:send", this.onAcpPromptSend);
+    this.workspace.emit.on("acp:session:config", this.onAcpSessionConfig);
+    this.workspace.emit.on("acp:session:create", this.onAcpSessionCreate);
+    this.workspace.emit.on("acp:session:delete", this.onAcpSessionDelete);
+    this.workspace.emit.on("acp:session:switch", this.onAcpSessionSwitch);
+    this.workspace.emit.on("acp:stdout", this.onAcpStdout);
+    this.workspace.emit.on("acp:terminal:exit", this.onAcpTerminalExit);
+    this.workspace.emit.on("acp:terminal:output", this.onAcpTerminalOutput);
+    this.workspace.emit.on("acp:toggle", this.onAcpToggle);
   }
 
   private setState(state: IAcpStatus) {
     this.state = state;
 
-    this.workspace.emit.update("acp:status-changed", false, this.state);
+    this.workspace.emit.update("acp:status:changed", false, this.state);
   }
 
   private async loadRegistry() {
@@ -103,7 +59,7 @@ export class Acp {
 
         Acp.registry = {
           npx: {
-            available: await this.workspace.emit.share("envim:function", "executable", ["npx"]) === 1,
+            available: await this.workspace.emit.share("neovim:function", "executable", ["npx"]) === 1,
             agent: agents.flatMap(agent => agent.distribution?.npx ? [{
               ...agent,
               package: {
@@ -113,7 +69,7 @@ export class Acp {
             }] : [])
           },
           uvx: {
-            available: await this.workspace.emit.share("envim:function", "executable", ["uvx"]) === 1,
+            available: await this.workspace.emit.share("neovim:function", "executable", ["uvx"]) === 1,
             agent: agents.flatMap(agent => agent.distribution?.uvx ? [{
               ...agent,
               package: {
@@ -128,10 +84,6 @@ export class Acp {
     }
 
     return Acp.registry;
-  }
-
-  private onToggle = async (): Promise<void> => {
-    this.workspace.emit.send("acp:toggle", await this.loadRegistry());
   }
 
   private onSessionUpdate(params: AcpSDK.SessionNotification): void {
@@ -203,10 +155,10 @@ export class Acp {
     });
   }
 
-  private onStartAgent = async (agent: IAcpRegistryAgent) => {
+  private onAcpAgentStart = async (agent: IAcpRegistryAgent) => {
     this.setState({ status: "connecting" });
 
-    const result = await this.workspace.emit.share("envim:function", "EnvimAcpStart", [agent.package]);
+    const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent.package]);
 
     if (result == "executed") {
       if (!this.connection) {
@@ -238,35 +190,125 @@ export class Acp {
     }
   }
 
-  listSession() {
+  private onAcpAgentStop = () => {
+    this.setState({ status: "disconnected" });
+
+    this.workspace.emit.share("neovim:function", "EnvimAcpStop", []);
+  }
+
+  private onAcpAuthAuthenticate = (methodId: string) => {
     if (!this.connection) return;
 
-    if (this.state.initialize?.agentCapabilities?.sessionCapabilities?.list) {
-      this.setState({ ...this.state, status: "processing" });
-      this.callAgent(AcpSDK.methods.agent.session.list, { cwd: this.workspace.cwd }).then(response => {
-        if (!response) return;
+    this.setState({ ...this.state, status: "connecting" });
+    this.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(() => {
+      this.setState({ ...this.state, status: "connected" });
+      this.listSession();
+    });
+  }
 
-        response.sessions.forEach(session => {
-          if (!this.sessions[session.sessionId]) {
-            this.sessions[session.sessionId] = {
-              id: session.sessionId,
-              name: session.title || session.updatedAt || session.sessionId,
-              loaded: false,
-              status: "show",
-              commands: [],
-              configOptions: [],
-              plan: [],
-            };
-          }
-        });
+  private onAcpAuthLogout = () => {
+    if (!this.connection) return;
 
-        this.notifySessionUpdate();
-        this.setState({ ...this.state, status: "connected" });
-      });
+    this.callAgent(AcpSDK.methods.agent.logout, {}).then(() => {
+      this.setState({ ...this.state, status: "auth_required" });
+    });
+  }
+
+  private onAcpError = (error: string) => {
+    this.setState({ ...this.state, error });
+  }
+
+  private onAcpExited = () => {
+    this.cancelAllPermissions();
+    this.tool = {};
+    this.sessions = {};
+
+    this.setState({ status: "disconnected" });
+    this.notifySessionUpdate();
+  }
+
+  private onAcpPermissionResponse = (requestId: string, optionId: string): void => {
+    const resolver = this.permission[requestId];
+    const outcome = optionId ? "selected" : "cancelled";
+
+    if (!resolver) {
+      return;
+    }
+
+    resolver({ outcome: { outcome, optionId } });
+    delete(this.permission[requestId]);
+
+    const tool = Object.values(this.tool).find(t => {
+      const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
+      return permissionRequest?.requestId === requestId;
+    });
+
+    if (tool) {
+      delete(this.tool[tool.toolCallId]._meta!.permissionRequest);
+      this.processToolUpdate(this.state.sessionId!, tool);
     }
   }
 
-  private onCreateSession = async () => {
+  private onAcpPromptCancel = (sessionId: string) => {
+    if (!this.connection) return;
+
+    this.cancelAllPermissions();
+
+    this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
+      this.setState({ ...this.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
+    });
+  }
+
+  private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) => {
+    this.lastMessageId = {};
+
+    if (!sessionId) {
+      this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images));
+      return;
+    }
+
+    if (!this.connection || !this.sessions[sessionId]) return;
+
+    const prompt: AcpSDK.ContentBlock[] = [
+      ...(text ? [{ type: "text" as "text", text }] : []),
+      ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
+      ...(this.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
+    ];
+
+    prompt.forEach(content => this.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
+    this.setState({ ...this.state, status: "processing" });
+    this.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
+      if (!result) return;
+
+      if (result && result.stopReason !== "end_turn") {
+        this.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
+      }
+      this.tool = {};
+      this.cancelAllPermissions();
+      this.setState({ ...this.state, status: "connected" });
+    });
+  }
+
+  private onAcpSessionConfig = (configId: string, value: string | boolean) => {
+    if (!this.connection || !this.state.sessionId) return;
+
+    const sessionId = this.state.sessionId;
+    const params = typeof value === "boolean"
+      ? { sessionId, configId, type: "boolean" as const, value }
+      : { sessionId, configId, value };
+
+    this.callAgent(AcpSDK.methods.agent.session.setConfigOption, params).then(response => {
+      if (!response) return;
+
+      const session = this.sessions[sessionId];
+      if (session) {
+        session.configOptions = response.configOptions;
+        this.notifySessionUpdate();
+      }
+    });
+  }
+
+  private onAcpSessionCreate = async () => {
     if (!this.connection) return;
 
     this.setState({ ...this.state, status: "processing" });
@@ -297,40 +339,7 @@ export class Acp {
     });
   }
 
-  private onStopAgent = () => {
-    this.setState({ status: "disconnected" });
-
-    this.workspace.emit.share("envim:function", "EnvimAcpStop", []);
-  }
-
-  private onAuthenticate = (methodId: string) => {
-    if (!this.connection) return;
-
-    this.setState({ ...this.state, status: "connecting" });
-    this.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(() => {
-      this.setState({ ...this.state, status: "connected" });
-      this.listSession();
-    });
-  }
-
-  private onLogout = () => {
-    if (!this.connection) return;
-
-    this.callAgent(AcpSDK.methods.agent.logout, {}).then(() => {
-      this.setState({ ...this.state, status: "auth_required" });
-    });
-  }
-
-  private onAcpExited = () => {
-    this.cancelAllPermissions();
-    this.tool = {};
-    this.sessions = {};
-
-    this.setState({ status: "disconnected" });
-    this.notifySessionUpdate();
-  }
-
-  private onDeleteSession = (sessionId: string) => {
+  private onAcpSessionDelete = (sessionId: string) => {
     if (!this.connection) return;
 
     this.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
@@ -344,7 +353,7 @@ export class Acp {
     this.notifySessionUpdate();
   }
 
-  private onSwitchSession = async (sessionId: string) => {
+  private onAcpSessionSwitch = async (sessionId: string) => {
     const session = this.sessions[sessionId];
 
     if (!session || !this.connection) return;
@@ -378,6 +387,31 @@ export class Acp {
     }
   }
 
+  private onAcpStdout = (data: string) => {
+    this.stdoutPush?.(data);
+  }
+
+  private onAcpTerminalExit = (data: { terminalId: string; exitCode: number; signal: string }) => {
+    const terminal = this.terminal[data.terminalId];
+
+    if (terminal?.resolve) {
+      terminal.pid = 0;
+      terminal.resolve(data);
+    }
+  }
+
+  private onAcpTerminalOutput = (data: { terminalId: string; output: string }) => {
+    const terminal = this.terminal[data.terminalId];
+
+    if (terminal) {
+      terminal.output = [terminal.output, data.output].filter(output => output).join("\n");
+    }
+  }
+
+  private onAcpToggle = async (): Promise<void> => {
+    this.workspace.emit.send("acp:toggle", await this.loadRegistry());
+  }
+
   addMessage(notification: AcpSDK.SessionNotification) {
     const update = notification.update;
     const isChunk = update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_message_chunk" || update.sessionUpdate === "agent_thought_chunk";
@@ -391,51 +425,39 @@ export class Acp {
       }
     }
 
-    this.workspace.emit.send("acp:message-added", notification);
-  }
-
-  private onSendPrompt = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) => {
-    this.lastMessageId = {};
-
-    if (!sessionId) {
-      this.onCreateSession()?.then(() => this.onSendPrompt(this.state.sessionId!, text, files, images));
-      return;
-    }
-
-    if (!this.connection || !this.sessions[sessionId]) return;
-
-    const prompt: AcpSDK.ContentBlock[] = [
-      ...(text ? [{ type: "text" as "text", text }] : []),
-      ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
-      ...(this.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
-    ];
-
-    prompt.forEach(content => this.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
-    this.setState({ ...this.state, status: "processing" });
-    this.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
-      if (!result) return;
-
-      if (result && result.stopReason !== "end_turn") {
-        this.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
-      }
-      this.tool = {};
-      this.cancelAllPermissions();
-      this.setState({ ...this.state, status: "connected" });
-    });
-  }
-
-  private onCancelPrompt = (sessionId: string) => {
-    if (!this.connection) return;
-
-    this.cancelAllPermissions();
-
-    this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
-      this.setState({ ...this.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
-    });
+    this.workspace.emit.send("acp:message:added", notification);
   }
 
   private notifySessionUpdate(): void {
-    this.workspace.emit.update("acp:session-update", false, this.state.sessionId, Object.values(this.sessions));
+    this.workspace.emit.update("acp:session:update", false, this.state.sessionId, Object.values(this.sessions));
+  }
+
+  listSession() {
+    if (!this.connection) return;
+
+    if (this.state.initialize?.agentCapabilities?.sessionCapabilities?.list) {
+      this.setState({ ...this.state, status: "processing" });
+      this.callAgent(AcpSDK.methods.agent.session.list, { cwd: this.workspace.cwd }).then(response => {
+        if (!response) return;
+
+        response.sessions.forEach(session => {
+          if (!this.sessions[session.sessionId]) {
+            this.sessions[session.sessionId] = {
+              id: session.sessionId,
+              name: session.title || session.updatedAt || session.sessionId,
+              loaded: false,
+              status: "show",
+              commands: [],
+              configOptions: [],
+              plan: [],
+            };
+          }
+        });
+
+        this.notifySessionUpdate();
+        this.setState({ ...this.state, status: "connected" });
+      });
+    }
   }
 
   private onPlanUpdate(params: AcpSDK.SessionNotification): boolean {
@@ -514,13 +536,13 @@ export class Acp {
   }
 
   private async onReadTextFile(params: AcpSDK.ReadTextFileRequest): Promise<AcpSDK.ReadTextFileResponse> {
-    const lines = await this.workspace.emit.share("envim:function", "readfile", [params.path]);
+    const lines = await this.workspace.emit.share("neovim:function", "readfile", [params.path]);
 
     return { content: Array.isArray(lines) ? lines.join("\n") : "" };
   }
 
   private async onWriteTextFile(params: AcpSDK.WriteTextFileRequest): Promise<AcpSDK.WriteTextFileResponse> {
-    await this.workspace.emit.share("envim:function", "writefile", [params.content.split("\n"), params.path]);
+    await this.workspace.emit.share("neovim:function", "writefile", [params.content.split("\n"), params.path]);
 
     return {};
   }
@@ -531,7 +553,7 @@ export class Acp {
     const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
     const opts = { cwd: params.cwd || undefined, env };
 
-    const pid = await this.workspace.emit.share("envim:function", "EnvimAcpTerminalStart", [terminalId, command, opts]) as number | null;
+    const pid = await this.workspace.emit.share("neovim:function", "EnvimAcpTerminalStart", [terminalId, command, opts]) as number | null;
 
     if (pid) {
       this.terminal[terminalId] = {
@@ -545,7 +567,7 @@ export class Acp {
     return { terminalId };
   }
 
-  private async onTerminalOutputRequest(params: AcpSDK.TerminalOutputRequest): Promise<AcpSDK.TerminalOutputResponse> {
+  private async onAcpTerminalOutputRequest(params: AcpSDK.TerminalOutputRequest): Promise<AcpSDK.TerminalOutputResponse> {
     const terminal = this.terminal[params.terminalId]!;
 
     return {
@@ -562,7 +584,7 @@ export class Acp {
   private async onKillTerminal(params: AcpSDK.KillTerminalRequest): Promise<AcpSDK.KillTerminalResponse> {
     const { pid } = this.terminal[params.terminalId];
 
-    this.workspace.emit.share("envim:function", "jobstop", [pid]);
+    this.workspace.emit.share("neovim:function", "jobstop", [pid]);
 
     return {};
   }
@@ -570,7 +592,7 @@ export class Acp {
   private async onReleaseTerminal(params: AcpSDK.ReleaseTerminalRequest): Promise<AcpSDK.ReleaseTerminalResponse> {
     const { pid } = this.terminal[params.terminalId];
 
-    await this.workspace.emit.share("envim:function", "jobstop", [pid]);
+    await this.workspace.emit.share("neovim:function", "jobstop", [pid]);
     delete(this.terminal[params.terminalId]);
 
     return {};
@@ -582,7 +604,7 @@ export class Acp {
     const nodeReadable = new Readable({ read() {} });
     const nodeWritable = new Writable({
       write: (chunk: any, _encoding: any, callback: any) => {
-        this.workspace.emit.share("envim:function", "EnvimAcpSend", [chunk.toString()]);
+        this.workspace.emit.share("neovim:function", "EnvimAcpSend", [chunk.toString()]);
         callback();
       }
     });
@@ -613,7 +635,7 @@ export class Acp {
       .onRequest(AcpSDK.methods.client.fs.readTextFile, ctx => this.onReadTextFile(ctx.params))
       .onRequest(AcpSDK.methods.client.fs.writeTextFile, ctx => this.onWriteTextFile(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.create, ctx => this.onCreateTerminal(ctx.params))
-      .onRequest(AcpSDK.methods.client.terminal.output, ctx => this.onTerminalOutputRequest(ctx.params))
+      .onRequest(AcpSDK.methods.client.terminal.output, ctx => this.onAcpTerminalOutputRequest(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.waitForExit, ctx => this.onWaitForTerminalExit(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.kill, ctx => this.onKillTerminal(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.release, ctx => this.onReleaseTerminal(ctx.params))
@@ -631,31 +653,9 @@ export class Acp {
     return new Promise((resolve) => this.permission[requestId] = resolve);
   }
 
-  private onPermissionResponse = (requestId: string, optionId: string): void => {
-    const resolver = this.permission[requestId];
-    const outcome = optionId ? "selected" : "cancelled";
-
-    if (!resolver) {
-      return;
-    }
-
-    resolver({ outcome: { outcome, optionId } });
-    delete(this.permission[requestId]);
-
-    const tool = Object.values(this.tool).find(t => {
-      const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
-      return permissionRequest?.requestId === requestId;
-    });
-
-    if (tool) {
-      delete(this.tool[tool.toolCallId]._meta!.permissionRequest);
-      this.processToolUpdate(this.state.sessionId!, tool);
-    }
-  }
-
   private cancelAllPermissions() {
     Object.keys(this.permission).forEach(requestId => {
-      this.onPermissionResponse(requestId, "");
+      this.onAcpPermissionResponse(requestId, "");
     });
   }
 }

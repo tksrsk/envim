@@ -29,11 +29,11 @@ export class McpAppService {
 
   onToolsChanged(upstreamId: string): void {
     this.toolUiUris.delete(upstreamId);
-    this.workspace.emit.send("mcp-apps:tools-changed", upstreamId);
+    this.workspace.emit.send("mcp:tools:changed", upstreamId);
   }
 
   onResourcesChanged(upstreamId: string): void {
-    this.workspace.emit.send("mcp-apps:resources-changed", upstreamId)
+    this.workspace.emit.send("mcp:resources:changed", upstreamId)
   }
 
   onUpstreamsChanged(upstreamIds: Iterable<string>): void {

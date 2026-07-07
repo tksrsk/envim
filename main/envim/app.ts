@@ -1,7 +1,7 @@
 import { Response } from "neovim/lib/host";
 import { Tabpage, Buffer, Window } from "neovim/lib/api";
 
-import { ITab, IBuffer, IMode, IMenu } from "common/interface";
+import { ITab, IBuffer, IMode, IMenu, ISetting } from "common/interface";
 
 import { Emit } from "main/emit";
 import { Workspace } from "main/envim/workspace";
@@ -27,15 +27,15 @@ export class App {
       case "redraw": return this.redraw(args);
       case "envim_clipboard": return this.workspace.clipboard.copy(args[0], args[1]);
       case "envim_dirchanged": return this.workspace.autocmd.dirchanged(args[0]);
-      case "envim_setbackground": return Emit.share("envim:theme", args[0]);
-      case "envim_openurl": return args.length && this.workspace.emit.share("envim:browser", args[0], args[1] || "");
-      case "envim_webview": return args.length === 3 && this.workspace.emit.share("envim:webview", args[0], args[1], args[2]);
+      case "envim_setbackground": return Emit.share("neovim:theme", args[0]);
+      case "envim_openurl": return args.length && this.workspace.emit.share("browser:open", args[0], args[1] || "");
+      case "envim_webview": return args.length === 3 && this.workspace.emit.share("browser:view", args[0], args[1], args[2]);
       case "envim_acp_stdout": return this.workspace.emit.share("acp:stdout", args[0]);
       case "envim_acp_exited": return this.workspace.emit.share("acp:exited");
       case "envim_acp_error": return this.workspace.emit.share("acp:error", args[0]);
-      case "envim_acp_file_add": return this.workspace.emit.send("acp:file-add", args[0]);
-      case "envim_acp_terminal_output": return this.workspace.emit.share("acp:terminal-output", args[0]);
-      case "envim_acp_terminal_exit": return this.workspace.emit.share("acp:terminal-exit", args[0]);
+      case "envim_acp_file_add": return this.workspace.emit.send("acp:file:add", args[0]);
+      case "envim_acp_terminal_output": return this.workspace.emit.share("acp:terminal:output", args[0]);
+      case "envim_acp_terminal_exit": return this.workspace.emit.share("acp:terminal:exit", args[0]);
       case "envim_mcp_open": return this.workspace.mcpGateway.onOpen(args[0]);
       case "envim_mcp_data": return this.workspace.mcpGateway.onData(args[0], args[1]);
       case "envim_mcp_close": return this.workspace.mcpGateway.onClose(args[0]);
@@ -192,7 +192,7 @@ export class App {
 
     this.workspace.highlights.set("0", { foreground, background, special }, true);
     this.workspace.grids.refresh();
-    this.workspace.emit.update("highlight:set", false, [{id: "0", ui: true, hl: { foreground, background, special }}]);
+    this.workspace.emit.update("neovim:ui:highlight:set", false, [{id: "0", ui: true, hl: { foreground, background, special }}]);
   }
 
   private hlAttrDefine(highlights: any[]) {
@@ -201,7 +201,7 @@ export class App {
 
       return { id, ui, hl };
     }).filter(({ id, hl, ui }) => this.workspace.highlights.set(id, hl, ui));
-    this.workspace.emit.update("highlight:set", false, highlights);
+    this.workspace.emit.update("neovim:ui:highlight:set", false, highlights);
   }
 
   private gridLine(gid: number, row: number, col: number, cells: string[][]) {
@@ -218,7 +218,7 @@ export class App {
     const { width, height } = this.workspace.grids.get(gid).getInfo();
 
     this.workspace.grids.get(gid).resize(width, height, true);
-    this.workspace.emit.send(`clear:${gid}`);
+    this.workspace.emit.send(`neovim:ui:grid:clear:${gid}`);
   }
 
   private gridDestory(gid: number) {
@@ -315,31 +315,31 @@ export class App {
       buffer.data && next.bufs.push({ name, buffer: +buffer.data, active });
     }
 
-    this.workspace.emit.update("tabline:update", true, next.tabs, next.bufs);
+    this.workspace.emit.update("neovim:ui:tabline:update", true, next.tabs, next.bufs);
   }
 
   private cmdlineShow(content: string[][], pos: number, prompt: string, indent: number) {
-    this.workspace.emit.update("cmdline:show", true, content, pos, prompt, indent);
+    this.workspace.emit.update("neovim:ui:cmdline:show", true, content, pos, prompt, indent);
   }
 
   private cmdlinePos(pos: number) {
-    this.workspace.emit.update("cmdline:cursor", true, pos);
+    this.workspace.emit.update("neovim:ui:cmdline:cursor", true, pos);
   }
 
   private cmdlineSpecialChar(c: string, shift: boolean) {
-    this.workspace.emit.send("cmdline:special", c, shift);
+    this.workspace.emit.send("neovim:ui:cmdline:special", c, shift);
   }
 
   private cmdlineBlockShow(lines: string[][][]) {
-    this.workspace.emit.update("cmdline:blockshow", true, lines);
+    this.workspace.emit.update("neovim:ui:cmdline:blockshow", true, lines);
   }
 
   private cmdlineBlockAppend(line: string[][]) {
-    this.workspace.emit.update("cmdline:blockshow", true, [line]);
+    this.workspace.emit.update("neovim:ui:cmdline:blockshow", true, [line]);
   }
 
   private cmdlineBlockHide() {
-    this.workspace.emit.update("cmdline:blockhide", true);
+    this.workspace.emit.update("neovim:ui:cmdline:blockhide", true);
   }
 
   private popupmenuShow(items: string[][], selected: number, row: number, col: number, gid: number) {
@@ -352,7 +352,7 @@ export class App {
     row = y + height >= parent.height ? y - height : y + 1;
     col = Math.min(x, parent.width - 10);
 
-    this.workspace.emit.send("popupmenu:show", {
+    this.workspace.emit.send("neovim:ui:popupmenu:show", {
       items: items.map(([ word, kind, menu ]) => ({ word, kind, menu })),
       selected,
       start: 0,
@@ -364,11 +364,11 @@ export class App {
   }
 
   private popupmenuSelect(selected: number) {
-    this.workspace.emit.send("popupmenu:select", selected);
+    this.workspace.emit.send("neovim:ui:popupmenu:select", selected);
   }
 
   private popupmenuHide() {
-    this.workspace.emit.send("popupmenu:hide");
+    this.workspace.emit.send("neovim:ui:popupmenu:hide");
   }
 
   private msgShow(messages: [string, [string, string][], boolean][]) {
@@ -377,23 +377,23 @@ export class App {
       .map(message => this.convertMessage(message[0], message[1]))
       .filter(({ contents }) => contents.length);
 
-    this.workspace.emit.update("messages:show", true, entries, replace);
+    this.workspace.emit.update("neovim:ui:messages:show", true, entries, replace);
   }
 
   private msgClear() {
-    this.workspace.emit.update("messages:show", true, [], true);
+    this.workspace.emit.update("neovim:ui:messages:show", true, [], true);
   }
 
   private msgShowmode(contents: [string, string][]) {
-    this.workspace.emit.update("messages:mode", true, this.convertMessage("mode", contents));
+    this.workspace.emit.update("neovim:ui:messages:mode", true, this.convertMessage("mode", contents));
   }
 
   private msgShowcmd(contents: [string, string][]) {
-    this.workspace.emit.update("messages:command", true, this.convertMessage("command", contents));
+    this.workspace.emit.update("neovim:ui:messages:command", true, this.convertMessage("command", contents));
   }
 
   private msgRuler(contents: [string, string][]) {
-    this.workspace.emit.update("messages:ruler", true, this.convertMessage("ruler", contents));
+    this.workspace.emit.update("neovim:ui:messages:ruler", true, this.convertMessage("ruler", contents));
   }
 
   private msgHistoryShow(entries: [string, [string, string][]][]) {
@@ -403,7 +403,7 @@ export class App {
 
     if (history.length) {
       this.workspace.nvim.command("messages clear");
-      this.workspace.emit.send("messages:history", history);
+      this.workspace.emit.send("neovim:ui:messages:history", history);
     }
   }
 
@@ -424,21 +424,21 @@ export class App {
     this.workspace.grids.setMode(this.modes[index]);
   }
 
-  private optionsSet(options: string[][]) {
-    this.workspace.emit.send("option:set", options.reduce((obj: { [k: string]: string }, [name, value]) => {
+  private optionsSet(options: [string, boolean][]) {
+    this.workspace.emit.send("neovim:ui:option:set", options.reduce((obj: ISetting["options"], [name, value]) => {
       obj[name] = value;
       return obj;
     }, {}));
   }
 
   private busy(busy: boolean) {
-    this.workspace.emit.update("app:busy", true, busy);
+    this.workspace.emit.update("neovim:ui:busy", true, busy);
   }
 
   private async menu() {
     const menus: IMenu[] = await this.workspace.nvim.call("menu_get", [""]);
 
-    this.workspace.emit.send("menu:update", menus.filter(({ name }) => !name.match(/^(PopUp)|\]/)));
+    this.workspace.emit.send("neovim:ui:menu:update", menus.filter(({ name }) => !name.match(/^(PopUp)|\]/)));
   }
 
   private flush() {

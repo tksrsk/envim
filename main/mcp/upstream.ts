@@ -24,10 +24,10 @@ export class McpUpstream {
     client.setNotificationHandler(McpTypes.ToolListChangedNotificationSchema, () => app.onToolsChanged(id));
     client.setNotificationHandler(McpTypes.ResourceListChangedNotificationSchema, () => app.onResourcesChanged(id));
 
-    emit.on(`mcp-apps:call-tool:${id}`, params => client.callTool(params));
-    emit.on(`mcp-apps:list-resources:${id}`, params => client.listResources(params));
-    emit.on(`mcp-apps:list-resource-templates:${id}`, params => client.listResourceTemplates(params));
-    emit.on(`mcp-apps:read-resource:${id}`, params => client.readResource(params));
+    emit.on(`mcp:resource:read:${id}`, params => client.readResource(params));
+    emit.on(`mcp:resource:templates:list:${id}`, params => client.listResourceTemplates(params));
+    emit.on(`mcp:resources:list:${id}`, params => client.listResources(params));
+    emit.on(`mcp:tool:call:${id}`, params => client.callTool(params));
   }
 
   static async connect(id: string, server: HttpMcpServer, app: McpAppService, emit: WorkspaceEmit): Promise<McpUpstream | null> {
@@ -48,10 +48,10 @@ export class McpUpstream {
   }
 
   async close(): Promise<void> {
-    this.emit.off(`mcp-apps:call-tool:${this.id}`);
-    this.emit.off(`mcp-apps:list-resources:${this.id}`);
-    this.emit.off(`mcp-apps:list-resource-templates:${this.id}`);
-    this.emit.off(`mcp-apps:read-resource:${this.id}`);
+    this.emit.off(`mcp:resource:read:${this.id}`);
+    this.emit.off(`mcp:resource:templates:list:${this.id}`);
+    this.emit.off(`mcp:resources:list:${this.id}`);
+    this.emit.off(`mcp:tool:call:${this.id}`);
 
     await this.client.close().catch(() => {});
   }

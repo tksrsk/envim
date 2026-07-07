@@ -18,9 +18,9 @@ export class Browser {
     webContents.on("context-menu", this.onContextMenu);
     webContents.on("before-input-event", this.onInput);
     webContents.on("destroyed", this.onDestroy);
-    Emit.on(`webview:capture:${webContents.id}`, this.onCapture);
-    Emit.on(`webview:devtool:${webContents.id}`, this.onDevtool);
-    Emit.on(`webview:mode:${webContents.id}`, this.onMode);
+    Emit.on(`browser:capture:${webContents.id}`, this.onBrowserCapture);
+    Emit.on(`browser:devtool:${webContents.id}`, this.onBrowserDevtool);
+    Emit.on(`browser:mode:${webContents.id}`, this.onBrowserMode);
   }
 
   private confirm = (message: string) => {
@@ -30,13 +30,13 @@ export class Browser {
   private onOpenWindow = (details: Electron.HandlerDetails) => {
     const action: "allow" | "deny" = !details.url.match(/^https?\/\//) || details.postBody ? "allow" : "deny";
 
-    action === "deny" && Emit.share("envim:browser", details.url);
+    action === "deny" && Emit.share("browser:open", details.url);
     action === "allow" && Electron.app.once("browser-window-created", (_, browserWindow) => (
       browserWindow.webContents.on("did-navigate", () => {
         const url = browserWindow.webContents.getURL();
 
         if (url.match(/^https?:\/\//)) {
-          Emit.share("envim:browser", url);
+          Emit.share("browser:open", url);
           browserWindow.close();
         } else if (browserWindow.isVisible() === false) {
           browserWindow.show();
@@ -49,14 +49,14 @@ export class Browser {
 
   private onOpenUrl = (_: Electron.Event, url: string) => {
     Bootstrap.win?.focus();
-    Emit.share("envim:browser", url);
+    Emit.share("browser:open", url);
   }
 
   private onLogin = async (e: Electron.Event, _: Electron.LoginAuthenticationResponseDetails, __: Electron.AuthInfo, callback: Function) => {
     e.preventDefault();
 
-    const user = await Emit.share("envim:readline", "User");
-    const password = await Emit.share("envim:readline", "Password");
+    const user = await Emit.share("neovim:readline", "User");
+    const password = await Emit.share("neovim:readline", "Password");
 
     user && callback(user, password);
   }
@@ -91,7 +91,7 @@ export class Browser {
     if (params.srcURL === this.webContents.getURL()) {
       this.webContents.downloadURL(contents);
     } else if (contents) {
-      Emit.share("envim:browser", contents);
+      Emit.share("browser:open", contents);
     }
   }
 
@@ -100,13 +100,13 @@ export class Browser {
       case "Escape":
         if (this.currentMode === "browser") {
           e.preventDefault();
-          Emit.send("webview:action", this.webContents.id, "mode-command");
+          Emit.send("browser:action", this.webContents.id, "mode-command");
         }
         break;
     }
   }
 
-  private onDevtool = () => {
+  private onBrowserDevtool = () => {
     if (!this.devtoolWindow || this.devtoolWindow.isDestroyed()) {
       this.devtoolWindow = new Electron.BrowserWindow();
       this.devtoolWindow.setMenu(null);
@@ -115,7 +115,7 @@ export class Browser {
     }
   }
 
-  private onMode = (mode: string) => {
+  private onBrowserMode = (mode: string) => {
     this.currentMode = mode;
   }
 
@@ -123,7 +123,7 @@ export class Browser {
     this.devtoolWindow?.destroy();
   }
 
-  private onCapture = async (rect?: Electron.Rectangle) => {
+  private onBrowserCapture = async (rect?: Electron.Rectangle) => {
     Electron.clipboard.writeImage(await this.webContents.capturePage(rect));
   }
 }

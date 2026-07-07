@@ -33,18 +33,22 @@ export function InputComponent () {
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    emit.on("envim:focus", onFocus);
-    emit.on("envim:focusable", onFocusable);
-    emit.on("grid:cursor", onCursor);
+    emit.on("neovim:ui:grid:cursor", onNeovimUiGridCursor);
+    emit.on("ui:focus", onUiFocus);
+    emit.on("ui:focusable", onUiFocusable);
 
     return () => {
-      emit.off("envim:focus", onFocus);
-      emit.off("envim:focusable", onFocusable);
-      emit.off("grid:cursor", onCursor);
+      emit.off("neovim:ui:grid:cursor", onNeovimUiGridCursor);
+      emit.off("ui:focus", onUiFocus);
+      emit.off("ui:focusable", onUiFocusable);
     };
   }, []);
 
-  function onFocus () {
+  function onNeovimUiGridCursor (cursor: { x: number, y: number, width: number, hl: string, zIndex: number }) {
+    setState(state => ({ ...state, cursor: { ...state.cursor, ...cursor }}));
+  }
+
+  function onUiFocus () {
     setState(state => {
       if (state.focusable) {
         const active = document.activeElement;
@@ -61,13 +65,9 @@ export function InputComponent () {
     });
   }
 
-  function onFocusable (focusable: boolean) {
+  function onUiFocusable (focusable: boolean) {
     focusable ? input.current?.focus() : input.current?.blur();
     setState(state => ({ ...state, focusable }));
-  }
-
-  function onCursor (cursor: { x: number, y: number, width: number, hl: string, zIndex: number }) {
-    setState(state => ({ ...state, cursor: { ...state.cursor, ...cursor }}));
   }
 
   React.useEffect(() => {
@@ -106,7 +106,7 @@ export function InputComponent () {
       () => (document.activeElement === input.current) === focus && setState(state => ({ ...state, focus })),
       200
     );
-    focus && emit.share("envim:focused");
+    focus && emit.share("ui:focused");
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -116,12 +116,12 @@ export function InputComponent () {
     e.stopPropagation();
     e.preventDefault();
 
-    code && emit.send("envim:input", code);
+    code && emit.send("neovim:input", code);
   }
 
   function onKeyUp (e: React.KeyboardEvent) {
     if (!e.nativeEvent.isComposing && input.current?.value) {
-      emit.send("envim:input", input.current.value);
+      emit.send("neovim:input", input.current.value);
       input.current.value = "";
     }
 

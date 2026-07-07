@@ -51,15 +51,15 @@ export function SettingComponent (props: Props) {
   const [state, setState] = React.useState<ISetting>({...Setting.get() });
 
   React.useEffect(() => {
-    Emit.on("envim:setting", onSetting);
-    Emit.send("envim:init");
+    Emit.on("app:setting", onAppSetting);
+    Emit.send("app:init");
 
     return () => {
-      Emit.off("envim:setting", onSetting);
+      Emit.off("app:setting", onAppSetting);
     };
   }, []);
 
-  function onSetting (state: ISetting) {
+  function onAppSetting (state: ISetting) {
     setState(() => state);
   }
 
@@ -129,7 +129,7 @@ export function SettingComponent (props: Props) {
     Setting.searchengines = searchengines;
     Setting.acp = acp;
 
-    Emit.send("envim:connect", Setting.get(), bookmarks.find(({ selected }) => selected)?.path);
+    Emit.send("neovim:connect", Setting.get(), bookmarks.find(({ selected }) => selected)?.path);
   }
 
   function getStyle() {

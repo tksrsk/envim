@@ -30,7 +30,7 @@ export class McpGateway {
   constructor(public readonly workspace: Workspace) {
     this.app = new McpAppService(this.workspace);
     this.upstreams = new McpUpstreamRegistry(this.app, this.workspace.emit);
-    this.workspace.emit.share("envim:luafile", "mcp.lua");
+    this.workspace.emit.share("neovim:luafile", "mcp.lua");
   }
 
   start(): Promise<string> {
@@ -89,7 +89,7 @@ export class McpGateway {
 
   private async startGateway(): Promise<string> {
     this.proxyPort = await this.startHttpServer();
-    const port = await this.workspace.emit.share("envim:function", "EnvimMcpTunnelStart", []);
+    const port = await this.workspace.emit.share("neovim:function", "EnvimMcpTunnelStart", []);
 
     if (typeof port !== "number" || port <= 0) {
       throw new Error("Neovim did not return a valid MCP tunnel port");
@@ -166,7 +166,7 @@ export class McpGateway {
 
       if (appResult.success) {
         this.app.getToolResource(upstream, request.params.name).then(resource => {
-          resource && this.workspace.emit.send("mcp-apps:render", {
+          resource && this.workspace.emit.send("mcp:render", {
             upstreamId: upstream.id, server: upstream.name, tool: request.params.name,
             request: request.params, resource, result: appResult.data,
           });
@@ -236,14 +236,14 @@ export class McpGateway {
   }
 
   private sendData(connectionId: string, data: Buffer): void {
-    this.workspace.emit.share("envim:function", "EnvimMcpTunnelWrite", [connectionId, data.toString("base64")]);
+    this.workspace.emit.share("neovim:function", "EnvimMcpTunnelWrite", [connectionId, data.toString("base64")]);
   }
 
   private closeRemote(connectionId: string): void {
     delete(this.sockets[connectionId]);
     delete(this.pending[connectionId]);
 
-    this.workspace.emit.share("envim:function", "EnvimMcpTunnelClose", [connectionId]);
+    this.workspace.emit.share("neovim:function", "EnvimMcpTunnelClose", [connectionId]);
   }
 
   dispose(): void {

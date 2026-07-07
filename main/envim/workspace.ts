@@ -34,22 +34,22 @@ export class Workspace {
   ) {
     const emit = new WorkspaceEmit(this.id);
 
-    emit.on("envim:attach", this.onAttach);
-    emit.on("envim:resize", this.onResize);
-    emit.on("envim:position", this.onPosition);
-    emit.on("envim:option", this.onOption);
-    emit.on("envim:api", this.onApi);
-    emit.on("envim:mouse", this.onMouse);
-    emit.on("envim:input", this.onInput);
-    emit.on("envim:command", this.onCommand);
-    emit.on("envim:readline", this.onReadline);
-    emit.on("envim:luafile", this.onLuafile);
-    emit.on("envim:ready", this.onReady);
-    emit.on("envim:resized", this.onResized);
-    emit.on("envim:browser", this.onBrowser);
-    emit.on("envim:webview", this.onWebview);
-    emit.on("envim:function", this.onFunction);
-    emit.on("envim:cwd", this.onCwd);
+    emit.on("browser:open", this.onBrowserOpen);
+    emit.on("browser:view", this.onBrowserView);
+    emit.on("neovim:api", this.onNeovimApi);
+    emit.on("neovim:command", this.onNeovimCommand);
+    emit.on("neovim:cwd", this.onNeovimCwd);
+    emit.on("neovim:function", this.onNeovimFunction);
+    emit.on("neovim:input", this.onNeovimInput);
+    emit.on("neovim:luafile", this.onNeovimLuafile);
+    emit.on("neovim:mouse", this.onNeovimMouse);
+    emit.on("neovim:readline", this.onNeovimReadline);
+    emit.on("neovim:ui:attach", this.onNeovimUiAttach);
+    emit.on("neovim:ui:option", this.onNeovimUiOption);
+    emit.on("neovim:ui:position", this.onNeovimUiPosition);
+    emit.on("neovim:ui:ready", this.onNeovimUiReady);
+    emit.on("neovim:ui:resize", this.onNeovimUiResize);
+    emit.on("neovim:ui:resized", this.onNeovimUiResized);
 
     this.emit = emit;
     this.app = new App(this);
@@ -62,91 +62,91 @@ export class Workspace {
     this.mcpGateway = new McpGateway(this);
   }
 
-  private onAttach = async (width: number, height: number, options: UiAttachOptions) => {
-    await this.nvim.uiAttach(width, height, { ...{ ext_linegrid: true }, ...options });
-    await this.nvim.command("doautocmd envim DirChanged");
-  }
-
-  private onResize = (gid: number, width: number, height: number) => {
-    gid
-      ? this.nvim.uiTryResizeGrid(gid, width, height).catch(() => this.grids.setStatus(gid, "delete", true))
-      : this.nvim.uiTryResize(width, height);
-  }
-
-  private onPosition = (gid: number, x: number, y: number) => {
-    this.grids.get(gid).setInfo({ x, y });
-    this.grids.setStatus(gid, "show", true);
-    this.grids.flush();
-  }
-
-  private onOption = async (name: string, value: boolean) => {
-    return await this.nvim.uiSetOption(name, value);
-  }
-
-  private onApi = async (fname: string, args: any[]) => {
-    return await this.nvim.request(fname, args);
-  }
-
-  private onMouse = async (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
-    return await this.nvim.inputMouse(button, action, modifier, gid, row, col);
-  }
-
-  private onInput =  async(input: string) => {
-    return await this.nvim.input(input);
-  }
-
-  private onCommand = async (command: string) => {
-    return await this.nvim.command(command);
-  }
-
-  private onReadline = async (prompt: string, value: string = "") => {
-    return await this.emit.share("envim:function", "EnvimInput", [prompt, value]);
-  }
-
-  private onLuafile = (path: string) => {
-    readFile(join(__dirname, "../../lua", path), { encoding: "utf8" }).then(file => {
-      this.nvim.lua(file);
-    });
-  }
-
-  private onReady = (gid: number) => {
-    this.onResized(gid);
-  }
-
-  private onResized = (gid: number) => {
-    this.grids.get(gid).onReady();
-    this.grids.flush();
-  }
-
-  private onBrowser = (src: string, command?: string) => {
+  private onBrowserOpen = (src: string, command?: string) => {
     command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
     const encoded = encodeURIComponent(src).replace(/%/g, "\\%");
 
     this.nvim.command(`${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${encoded}`);
   }
 
-  private onWebview = (winid: number, active: boolean, src: string) => {
+  private onBrowserView = (winid: number, active: boolean, src: string) => {
     const timer = setInterval(() => {
       const { gid } = this.grids.findByWinId(winid)?.getInfo() || {};
 
       if (gid) {
-        this.emit.update(`webview:${gid}`, false, decodeURIComponent(src), active);
+        this.emit.update(`browser:view:${gid}`, false, decodeURIComponent(src), active);
         clearInterval(timer);
       }
     }, 200);
   }
 
-  private onFunction = (name: string, args: any[] = []) => {
-    return this.nvim.request("nvim_call_function", [name, args]);
+  private onNeovimApi = async (fname: string, args: any[]) => {
+    return await this.nvim.request(fname, args);
   }
 
-  private onCwd = (cwd: string) => {
+  private onNeovimCommand = async (command: string) => {
+    return await this.nvim.command(command);
+  }
+
+  private onNeovimCwd = (cwd: string) => {
     const setting = Setting.get();
     const selected = setting?.bookmarks.findLast(({ path }) => cwd === path || cwd.indexOf(`${path}/`) === 0);
 
     this.cwd = cwd;
 
-    if (selected && selected.path !== this.bookmark) Emit.share("envim:connect", setting, selected.path);
+    if (selected && selected.path !== this.bookmark) Emit.share("neovim:connect", setting, selected.path);
+  }
+
+  private onNeovimFunction = (name: string, args: any[] = []) => {
+    return this.nvim.request("nvim_call_function", [name, args]);
+  }
+
+  private onNeovimInput =  async(input: string) => {
+    return await this.nvim.input(input);
+  }
+
+  private onNeovimLuafile = (path: string) => {
+    readFile(join(__dirname, "../../lua", path), { encoding: "utf8" }).then(file => {
+      this.nvim.lua(file);
+    });
+  }
+
+  private onNeovimMouse = async (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
+    return await this.nvim.inputMouse(button, action, modifier, gid, row, col);
+  }
+
+  private onNeovimReadline = async (prompt: string, value: string = "") => {
+    return await this.emit.share("neovim:function", "EnvimInput", [prompt, value]);
+  }
+
+  private onNeovimUiAttach = async (width: number, height: number, options: UiAttachOptions) => {
+    await this.nvim.uiAttach(width, height, { ...{ ext_linegrid: true }, ...options });
+    await this.nvim.command("doautocmd envim DirChanged");
+  }
+
+  private onNeovimUiOption = async (name: string, value: boolean) => {
+    return await this.nvim.uiSetOption(name, value);
+  }
+
+  private onNeovimUiPosition = (gid: number, x: number, y: number) => {
+    this.grids.get(gid).setInfo({ x, y });
+    this.grids.setStatus(gid, "show", true);
+    this.grids.flush();
+  }
+
+  private onNeovimUiReady = (gid: number) => {
+    this.onNeovimUiResized(gid);
+  }
+
+  private onNeovimUiResize = (gid: number, width: number, height: number) => {
+    gid
+      ? this.nvim.uiTryResizeGrid(gid, width, height).catch(() => this.grids.setStatus(gid, "delete", true))
+      : this.nvim.uiTryResize(width, height);
+  }
+
+  private onNeovimUiResized = (gid: number) => {
+    this.grids.get(gid).onReady();
+    this.grids.flush();
   }
 
   dispose() {

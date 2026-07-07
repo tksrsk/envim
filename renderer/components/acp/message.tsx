@@ -37,8 +37,8 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     }
   }
 
-  function onPermissionChoice(requestId: string, optionId: string) {
-    emit.send("acp:permission-response", requestId, optionId);
+  function onAcpPermissionChoice(requestId: string, optionId: string) {
+    emit.send("acp:permission:response", requestId, optionId);
   }
 
   function getPermissionIcon(kind: string, suffix: string = "") {
@@ -164,7 +164,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
             <FlexComponent color="default" horizontal="center">
               {permissionRequest.options.map(option => (
                 <FlexComponent key={option.optionId} border={[1]} color={getPermissionIcon(option.kind).color} margin={[4]} padding={[4]} rounded={[4]} shrink={1} title={option.name} style={styles.permission}
-                  onClick={() => onPermissionChoice(permissionRequest!.requestId, option.optionId)}
+                  onClick={() => onAcpPermissionChoice(permissionRequest!.requestId, option.optionId)}
                 >
                   <IconComponent {...getPermissionIcon(option.kind, "-fg")} text={option.name} />
                 </FlexComponent>

@@ -25,7 +25,7 @@ const invoke = async (event: string, ...args: any[]) => {
     if (e instanceof Error) {
       const reg = /^Error invoking remote method '[^']+': /;
       const contents = [{ hl: "red", content: e.message.replace(reg, "") }];
-      share("messages:show", [{ kind: "debug", contents }], true);
+      share("neovim:ui:messages:show", [{ kind: "debug", contents }], true);
     }
   }
 };
@@ -34,14 +34,14 @@ const release = (timer: number) => {
   clearTimeout(timer);
   pending.delete(timer);
   paused.delete(timer);
-  paused.size === 0 && share("envim:pause", false);
+  paused.size === 0 && share("app:pause", false);
 };
 
 const send = async (event: string, ...args: any[]) => {
   const timer = +setTimeout(() => {
     if (!pending.has(timer)) return;
     paused.set(timer, event);
-    share("envim:pause", true);
+    share("app:pause", true);
   }, 100);
   pending.set(timer, event);
 

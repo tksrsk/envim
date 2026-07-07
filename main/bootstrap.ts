@@ -55,15 +55,15 @@ export class Bootstrap {
     Bootstrap.win.on("closed", this.onQuit);
     Bootstrap.win.on("resize", () => Bootstrap.win && Emit.update("app:resize", true, ...Bootstrap.win.getSize()));
     Bootstrap.win.on("leave-full-screen", () => Bootstrap.win && Emit.send("app:resize", ...Bootstrap.win.getSize()));
-    Bootstrap.win.once("ready-to-show", () => Emit.share("envim:theme"));
+    Bootstrap.win.once("ready-to-show", () => Emit.share("neovim:theme"));
     Bootstrap.win.webContents.on("did-attach-webview", (_, webContents) => new Browser(webContents));
     Bootstrap.win.webContents.on("will-navigate", (e, url) => {
       const { protocol, pathname } = new URL(url);
 
       e.preventDefault();
 
-      if (["file:"].includes(protocol)) Emit.share("envim:command", `edit ${pathname}`);
-      if (["http:", "https:"].includes(protocol)) Emit.share("envim:browser", url);
+      if (["file:"].includes(protocol)) Emit.share("neovim:command", `edit ${pathname}`);
+      if (["http:", "https:"].includes(protocol)) Emit.share("browser:open", url);
     });
     Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences) => {
       delete(webPreferences.preload);
@@ -79,7 +79,7 @@ export class Bootstrap {
       }
 
       try {
-        const list = await Emit.share("envim:function", "EnvimReadBlob", [filePath]) as number[] | null;
+        const list = await Emit.share("neovim:function", "EnvimReadBlob", [filePath]) as number[] | null;
         if (list) {
           return new Response(new Uint8Array(Buffer.from(list)), { headers: { "Content-Type": lookup(filePath) || "application/octet-stream" } });
         }
