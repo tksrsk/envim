@@ -6,7 +6,7 @@ import { Canvas } from "renderer/utils/canvas";
 
 interface WorkspaceContextType {
   workspace: string;
-  workspaces: { [key: string]: boolean };
+  workspaces: { [id: string]: string };
   active: boolean;
   emit: WorkspaceEmit;
   highlights: Highlights;
@@ -15,8 +15,8 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = React.createContext<WorkspaceContextType | null>(null);
 
-export const WorkspaceProvider: React.FC<{ workspace: string; workspaces: { [key: string]: boolean }; active: boolean; emit: WorkspaceEmit; children: React.ReactNode }> = ({ workspace, workspaces, active, emit, children }) => {
-  const highlights = React.useMemo(() => new Highlights(), [workspace]);
+export const WorkspaceProvider: React.FC<{ workspace: string; workspaces: { [id: string]: string }; active: boolean; emit: WorkspaceEmit; children: React.ReactNode }> = ({ workspace, workspaces, active, emit, children }) => {
+  const highlights = React.useMemo(() => new Highlights(), []);
   const canvas = React.useMemo(() => new Canvas(highlights), [highlights]);
 
   React.useEffect(() => () => emit.dispose(), []);

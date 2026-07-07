@@ -191,7 +191,7 @@ export function TablineComponent(props: Props) {
         ) }
         { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path }, i) =>
           <FlexComponent animate="hover" direction="column" active={path === workspace} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
-            <FlexComponent>{ path in workspaces && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
+            <FlexComponent>{ Object.values(workspaces).includes(path) && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
             <div className="color-gray-fg small">{ path }</div>
             <IconComponent color="gray" font="" float="right" onClick={e => deleteBookmark(e, path)} hover />
           </FlexComponent>

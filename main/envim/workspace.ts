@@ -1,5 +1,6 @@
 import { NeovimClient } from "neovim";
 import { UiAttachOptions } from "neovim/lib/api/Neovim";
+import { randomUUID } from "crypto";
 import { readFile } from "fs/promises";
 import { join } from "path";
 
@@ -15,6 +16,7 @@ import { Highlights } from "main/envim/highlight";
 import { McpGateway } from "main/mcp/gateway";
 
 export class Workspace {
+  public readonly id = randomUUID();
   public readonly emit: WorkspaceEmit;
   public readonly highlights: Highlights;
   public readonly grids: Grids;
@@ -28,9 +30,9 @@ export class Workspace {
 
   constructor(
     public readonly nvim: NeovimClient,
-    public readonly bookmark: string,
+    public bookmark: string,
   ) {
-    const emit = new WorkspaceEmit(this.bookmark);
+    const emit = new WorkspaceEmit(this.id);
 
     emit.on("envim:attach", this.onAttach);
     emit.on("envim:resize", this.onResize);

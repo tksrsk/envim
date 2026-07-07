@@ -14,11 +14,12 @@ interface States {
   init: boolean;
   theme: "dark" | "light";
   window: { width: number; height: number; };
-  workspaces: { [key: string]: boolean };
+  workspaces: { [id: string]: string };
+  selected: string;
 }
 
 export function AppComponent() {
-  const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight }, workspaces: {} });
+  const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight }, workspaces: {}, selected: "" });
   const titlebar = navigator.windowControlsOverlay.getTitlebarAreaRect
     ? navigator.windowControlsOverlay.getTitlebarAreaRect()
     : { x: 0, y: 0, width: 0, height: 0, left: 0, right: 0 };
@@ -54,18 +55,18 @@ export function AppComponent() {
     Cache.set<"dark" | "light">("common", "theme", theme);
   }
 
-  function onWorkspace(workspaces: { [key: string]: boolean }) {
+  function onWorkspace(workspaces: { [id: string]: string }, selected: string) {
     const init = Object.keys(workspaces).length > 0;
 
     init || Emit.send("envim:setting", Setting.get());
-    setState(state => ({ ...state, workspaces, init }));
+    setState(state => ({ ...state, workspaces, selected, init }));
   }
 
   return (
     <div className={`theme-${state.theme}`}>
       {state.init
-        ? Object.entries(state.workspaces).map(([key, active]) => (
-          <WorkspaceProvider key={key} workspace={key} workspaces={state.workspaces} active={active} emit={new WorkspaceEmit(key)}>
+        ? Object.entries(state.workspaces).map(([id, bookmark]) => (
+          <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} emit={new WorkspaceEmit(id)}>
             <EnvimComponent { ...{ header, main, footer } } />
           </WorkspaceProvider>
         ))

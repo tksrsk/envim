@@ -81,13 +81,16 @@ export class Emit {
 
   static off(event: string) {
     Emit.events[event] = [];
+
+    if (Emit.cache[event]) {
+      clearTimeout(Emit.cache[event].timer);
+      delete(Emit.cache[event]);
+    }
   }
 
   static offByPrefix(prefix: string) {
-    for (const event of Object.keys(Emit.events)) {
-      if (event.startsWith(`${prefix}:`)) {
-        Emit.events[event] = [];
-      }
-    }
+    [...Object.keys(Emit.events), ...Object.keys(Emit.cache)].forEach(event => {
+      event.startsWith(`${prefix}:`) && Emit.off(event);
+    });
   }
 }

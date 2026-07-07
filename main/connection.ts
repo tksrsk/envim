@@ -14,15 +14,15 @@ import { Setting } from "main/setting";
 import { Workspace } from "main/envim/workspace";
 
 export class Connection {
-  private static workspaces = new Map<string, Workspace>();
+  private static workspaces: Workspace[] = [];
   private static current?: Workspace;
 
-  private static attach(reader: Readable, writer: Writable, bookmark: string) {
+  private static attach(reader: Readable, writer: Writable) {
     const nvim = new NeovimClient;
 
     nvim.attach({ reader, writer });
     nvim.setClientInfo("Envim", { major: 0, minor: 0, patch: 1, prerelease: "dev" }, "ui", {}, {});
-    nvim.on("disconnect", () => Connection.disconnect(bookmark));
+    nvim.on("disconnect", () => Connection.disconnect(nvim));
     nvim.channelId.then(id => nvim.setVar("envim_id", id));
 
     return nvim;
@@ -32,7 +32,7 @@ export class Connection {
     try {
       const { stdout, stdin } = spawn(command || "nvim", ["--embed"]);
 
-      callback(Connection.attach(stdout, stdin, bookmark));
+      callback(Connection.attach(stdout, stdin));
     } catch (e) {
       Connection.error("command", bookmark);
     }
@@ -44,7 +44,7 @@ export class Connection {
       const socket = createConnection({ port: +port, host });
 
       socket.setNoDelay();
-      callback(Connection.attach(socket, socket, bookmark));
+      callback(Connection.attach(socket, socket));
     } catch (e) {
       Connection.error("network", bookmark);
     }
@@ -67,7 +67,7 @@ export class Connection {
           if (e) return Connection.error("docker", bookmark);
           if (!stream) return Connection.error("docker", bookmark);
 
-          callback(Connection.attach(stream, stream, bookmark));
+          callback(Connection.attach(stream, stream));
         });
       });
     });
@@ -82,7 +82,7 @@ export class Connection {
         ssh.exec("nvim --embed", {}, (e, stream) => {
           if (e) return Connection.error("ssh", bookmark);
 
-          callback(Connection.attach(stream, stream, bookmark));
+          callback(Connection.attach(stream, stream));
           stream.on("exit", ssh.end);
         });
       })
@@ -110,12 +110,14 @@ export class Connection {
   }
 
   static connect(setting: ISetting, bookmark: string) {
-    const next = Connection.workspaces.get(bookmark);
+    const next = Connection.workspaces.find(workspace => workspace.bookmark === bookmark || !workspace.bookmark);
     const attach = (nvim: NeovimClient) => {
       const workspace = next || new Workspace(nvim, bookmark);
 
+      workspace.bookmark = bookmark;
+      Setting.set(setting);
       Connection.current = workspace;
-      Connection.workspaces.set(bookmark, workspace);
+      Connection.workspaces = [ ...Connection.workspaces.filter(w => w !== workspace), workspace ];
       Connection.emitWorkspace();
       Emit.share("envim:native:theme");
     };
@@ -130,27 +132,27 @@ export class Connection {
     }
   }
 
-  static disconnect(bookmark: string) {
-    const workspace = Connection.workspaces.get(bookmark);
+  static disconnect(nvim?: NeovimClient) {
+    const workspace = nvim ? Connection.workspaces.find(workspace => workspace.nvim === nvim) : Connection.current;
 
     workspace && workspace.dispose();
 
-    Connection.workspaces.delete(bookmark);
-    Connection.current = Connection.current === workspace ? [ ...Connection.workspaces.values() ][0] : Connection.current;
+    Connection.workspaces = Connection.workspaces.filter(w => w !== workspace);
+    Connection.current = Connection.current === workspace ? Connection.workspaces[Connection.workspaces.length - 1] : Connection.current;
     Connection.emitWorkspace();
   }
 
   private static async emitWorkspace() {
-    const state: { [key: string]: boolean } = {};
+    const workspaces: { [id: string]: string } = {};
     const setting = Setting.get();
     const current = Connection.current
 
-    Connection.workspaces.forEach((workspace, key) => {
-      state[key] = workspace === current;
+    Connection.workspaces.forEach(workspace => {
+      workspaces[workspace.id] = workspace.bookmark;
     });
 
     Setting.set({ ...setting, bookmarks: setting.bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark.path === current?.bookmark })) });
-    Emit.update("app:workspace", false, state);
+    Emit.update("app:workspace", false, workspaces, current?.id || "");
     current?.bookmark && await current.nvim.command(`cd ${current.bookmark}`);
   }
 

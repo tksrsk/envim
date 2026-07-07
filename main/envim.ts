@@ -59,7 +59,7 @@ export class Envim {
     } else if (e instanceof String) {
       Electron.dialog.showErrorBox("Error", e.toString());
     }
-    Connection.disconnect("");
+    Connection.disconnect();
   }
 
   private onTheme = (theme?: "dark" | "light") => {
