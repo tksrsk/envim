@@ -70,7 +70,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
 
     return (
       <>
-        <a href={`file://${path}`}>{path}</a>;
+        <a href={`file://${path}`}>{path}</a>
         <FlexComponent>
           {added > 0 && <span className="color-green-fg" style={{padding: "0 2px"}}>+{added}</span>}
           {removed > 0 && <span className="color-red-fg" style={{padding: "0 2px"}}>-{removed}</span>}
