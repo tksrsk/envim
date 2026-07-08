@@ -127,11 +127,13 @@ export interface IAcpStatus {
   sessionId?: string;
   error?: string;
   initialize?: AcpSDK.InitializeResponse;
+  agent?: IAcpRegistryAgent;
 }
 
 export interface IAcpRegistryAgent {
   name: string;
   description?: string;
+  icon?: string;
   package: { command: string[]; env?: { [key: string]: string } };
   distribution?: {
     npx?: { package: string; args?: string[]; env?: { [key: string]: string } };

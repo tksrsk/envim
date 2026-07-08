@@ -497,7 +497,7 @@ export function AcpComponent() {
       <MenuComponent key={kind} side label={kind}>
         {registry.agent.map((agent, i) => (
           <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => onSelectPackage(kind, agent)} spacing>
-            {agent.name}
+            {<IconComponent font={agent.icon || ""} mark={!!agent.icon} text={agent.name} /> }
             {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
           </FlexComponent>
         ))}
@@ -615,6 +615,7 @@ export function AcpComponent() {
           </CollapseComponent>
         )}
         <FlexComponent overflow="visible">
+          {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onAcpAgentStop} />}
           {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}

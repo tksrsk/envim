@@ -156,7 +156,7 @@ export class Acp {
   }
 
   private onAcpAgentStart = async (agent: IAcpRegistryAgent) => {
-    this.setState({ status: "connecting" });
+    this.setState({ status: "connecting", agent });
 
     const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent.package]);
 

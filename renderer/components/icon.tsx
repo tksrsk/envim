@@ -12,6 +12,7 @@ interface Props {
   hover?: boolean;
   active?: boolean;
   float?: "left" | "right";
+  mark?: boolean;
   onClick?: (...args: any[]) => void;
 }
 
@@ -22,6 +23,14 @@ const styles: { [k: string]: React.CSSProperties } = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  mark: {
+    display: "inline-block",
+    height: "100%",
+    background: "var(--color-fg)",
+    maskPosition: "center",
+    maskSize: "contain",
+    maskRepeat: "no-repeat",
   },
 };
 
@@ -37,9 +46,15 @@ export function IconComponent(props: Props) {
     style[float] = 2;
   }
 
+  const icon = (() => {
+    if (props.mark) return <i style={{ ...styles.mark, maskImage: `url(${props.font})` }} />;
+    if (url) return <img src={props.font} height={Setting.font.size} />;
+    return <i>{ props.font }</i>;
+  })();
+
   return (
     <FlexComponent vertical="center" position={float && "absolute"} rounded={float && [4]} padding={[4]} spacing={!float} shrink={1} style={style} { ...props }>
-      { url ? <img src={props.font} height={Setting.font.size} /> : <i>{ props.font }</i> }
+      { icon }
       { props.text && <div style={styles.text}>{ props.text }</div> }
     </FlexComponent>
   );
