@@ -115,10 +115,9 @@ export class Connection {
       const workspace = next || new Workspace(nvim, bookmark);
 
       workspace.bookmark = bookmark;
-      Setting.set(setting);
       Connection.current = workspace;
       Connection.workspaces = [ ...Connection.workspaces.filter(w => w !== workspace), workspace ];
-      Connection.emitWorkspace();
+      Connection.emitWorkspace(setting);
       Emit.share("app:theme:native");
     };
 
@@ -142,9 +141,8 @@ export class Connection {
     Connection.emitWorkspace();
   }
 
-  private static async emitWorkspace() {
+  private static async emitWorkspace(setting: ISetting = Setting.get()) {
     const workspaces: { [id: string]: string } = {};
-    const setting = Setting.get();
     const current = Connection.current
 
     Connection.workspaces.forEach(workspace => {
