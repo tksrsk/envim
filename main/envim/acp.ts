@@ -345,11 +345,7 @@ export class Acp {
     this.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
     delete(this.sessions[sessionId]);
 
-    if (this.state.sessionId === sessionId) {
-      delete(this.state.sessionId);
-    }
-
-    this.setState({ status: "connected" });
+    this.setState({ ...this.state, status: "connected", ...(this.state.sessionId === sessionId ? { sessionId: undefined } : {}) });
     this.notifySessionUpdate();
   }
 
