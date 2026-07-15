@@ -17,6 +17,7 @@ import { McpGateway } from "main/mcp/gateway";
 
 export class Workspace {
   public readonly id = randomUUID();
+  private readonly timers = new Map<number, ReturnType<typeof setInterval>>();
   public readonly emit: WorkspaceEmit;
   public readonly highlights: Highlights;
   public readonly grids: Grids;
@@ -70,14 +71,19 @@ export class Workspace {
   }
 
   private onBrowserView = (winid: number, active: boolean, src: string) => {
+    if (this.timers.has(winid)) clearInterval(this.timers.get(winid));
+
     const timer = setInterval(() => {
       const { gid } = this.grids.findByWinId(winid)?.getInfo() || {};
 
       if (gid) {
         this.emit.update(`browser:view:${gid}`, false, decodeURIComponent(src), active);
         clearInterval(timer);
+        this.timers.delete(winid);
       }
     }, 200);
+
+    this.timers.set(winid, timer);
   }
 
   private onNeovimApi = async (fname: string, args: any[]) => {
@@ -150,6 +156,7 @@ export class Workspace {
   }
 
   dispose() {
+    this.timers.forEach(timer => clearInterval(timer));
     this.emit.dispose();
     this.mcpGateway.dispose();
   }
