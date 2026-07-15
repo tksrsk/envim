@@ -4,9 +4,9 @@
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"],
-    "baseUrl": ".",
     "paths": {
-      "common/*": ["common/*"]
+      "common/*": ["./common/*"],
+      "main/*": ["./main/*"]
     }
   }
 }

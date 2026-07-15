@@ -59,7 +59,7 @@ function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
         "--border-radius-sm": "4px",
       },
     },
-  };
+  } as McpAppBridge.McpUiHostContext;
 }
 
 const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; sessionId: string; onClose: () => void }) => {

@@ -218,7 +218,7 @@ export class Grids {
     }
 
     const exists = this.layer[zIndex].some(layer => {
-      if (layer.parent === gid) return;
+      if (layer.parent === gid) return false;
 
       const current = this.get(gid).getInfo();
       const parent = this.get(layer.parent).getInfo();
@@ -234,6 +234,7 @@ export class Grids {
         this.get(gid).setInfo({ shadow: true });
         layer.children = [ layer.parent, ...layer.children.filter(child => child !== gid) ];
         layer.parent = gid;
+
         return true;
       }
       if (
@@ -244,8 +245,11 @@ export class Grids {
         this.changes[gid] = gid;
         this.get(gid).setInfo({ shadow: false });
         layer.children = [ gid, ...layer.children.filter(child => child !== gid) ];
+
         return true;
       }
+
+      return false;
     });
 
     exists || this.layer[zIndex].push({ parent: gid, children: [] });

@@ -12,7 +12,7 @@ interface EditorContextType {
   mode?: IMode;
   tabs: ITab[];
   bufs: IBuffer[];
-  drag: string;
+  drag: "" | number;
   menus: IMenu[];
 }
 
@@ -84,7 +84,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setState(state => ({ ...state, menus }));
   }
 
-  function onUiDrag (drag: string) {
+  function onUiDrag (drag: "" | number) {
     setState(state => ({ ...state, drag }));
   }
 

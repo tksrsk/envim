@@ -95,6 +95,8 @@ export function WebviewComponent(props: Props) {
         webview.removeEventListener("focus", onFocus);
       };
     }
+
+    return;
   }, [container.current]);
 
   React.useEffect(() => {

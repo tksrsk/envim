@@ -181,7 +181,7 @@ export class Acp {
       }).then(initialize => {
         if (!initialize) return;
 
-        initialize.authMethods = initialize.authMethods?.filter(m => m.type !== "env_var");
+        initialize.authMethods = initialize.authMethods?.filter(m => !("type" in m) || m.type !== "env_var");
         this.setState({ ...this.state, initialize, status: "connected" });
         this.listSession();
       });

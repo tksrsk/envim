@@ -10,7 +10,7 @@ export class Canvas {
   constructor(private highlights: Highlights) {}
 
   create(
-    id: string,
+    id: number,
     canvas: HTMLCanvasElement,
     ctx: CanvasRenderingContext2D,
     lighten: boolean,
@@ -18,27 +18,27 @@ export class Canvas {
     this.renderers[id] = new Context2D(canvas, ctx, lighten, this.highlights);
   }
 
-  update(id: string, lighten: boolean) {
+  update(id: number, lighten: boolean) {
     this.renderers[id]?.update(lighten);
     this.render();
   }
 
-  delete(id: string) {
+  delete(id: number) {
     delete this.renderers[id];
     this.render();
   }
 
-  clear(id: string, width: number, height: number) {
+  clear(id: number, width: number, height: number) {
     this.renderers[id]?.clear(0, 0, width, height);
     this.render();
   }
 
-  push(id: string, cells: ICell[], scroll: IScroll | undefined) {
+  push(id: number, cells: ICell[], scroll: IScroll | undefined) {
     this.renderers[id]?.push(cells, scroll);
     this.render();
   }
 
-  link(id: string, row: number, col: number) {
+  link(id: number, row: number, col: number) {
     return this.renderers[id]?.link(row, col);
   }
 
