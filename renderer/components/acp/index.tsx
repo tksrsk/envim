@@ -62,7 +62,7 @@ export function AcpComponent() {
     scroll: false,
     files: [],
     images: [],
-    registry: { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } },
+    registry: { npx: [], uvx: [], binary: [] },
   });
 
   const scroll = React.useRef<HTMLDivElement>(null);
@@ -493,9 +493,9 @@ export function AcpComponent() {
   }
 
   function renderRegistryProvider([kind, registry]: [string, IAcpRegistry[keyof IAcpRegistry]]) {
-    return !registry.available || registry.agent.length === 0 ? null : (
+    return registry.length === 0 ? null : (
       <MenuComponent key={kind} side label={kind}>
-        {registry.agent.map((agent, i) => (
+        {registry.map((agent, i) => (
           <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => onSelectPackage(kind, agent)} spacing>
             {<IconComponent font={agent.icon || ""} mark={!!agent.icon} text={agent.name} /> }
             {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
@@ -621,7 +621,7 @@ export function AcpComponent() {
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
-              {Object.entries({ ...state.registry, custom: { available: true, agent: Setting.acp.customs } }).map(renderRegistryProvider)}
+              {Object.entries({ ...state.registry, custom: Setting.acp.customs }).map(renderRegistryProvider)}
             </MenuComponent>
           )}
           <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "mcp" } }))} />}>

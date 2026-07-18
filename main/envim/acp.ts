@@ -9,7 +9,7 @@ import { Workspace } from "main/envim/workspace";
 const ACP_REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
 export class Acp {
-  private static registry: IAcpRegistry = { npx: { available: false, agent: [] }, uvx: { available: false, agent: [] } };
+  private static registry: IAcpRegistry = { npx: [], uvx: [], binary: [] };
   private static registryLoaded = false;
 
   private state: IAcpStatus = { status: "disconnected" };
@@ -53,32 +53,52 @@ export class Acp {
       const response = await fetch(ACP_REGISTRY_URL);
 
       if (response.ok) {
-        const agents = ((await response.json() as { agents: IAcpRegistryAgent[] }).agents)
-          .filter(agent => !!(agent.name && agent.distribution && (agent.distribution.npx || agent.distribution.uvx)))
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-        Acp.registry = {
-          npx: {
-            available: await this.workspace.emit.share("neovim:function", "executable", ["npx"]) === 1,
-            agent: agents.flatMap(agent => agent.distribution?.npx ? [{
-              ...agent,
-              package: {
-                command: ["npx", "--yes", agent.distribution.npx.package, ...(agent.distribution.npx.args || [])],
-                ...(agent.distribution.npx.env ? { env: agent.distribution.npx.env } : {})
-              }
-            }] : [])
-          },
-          uvx: {
-            available: await this.workspace.emit.share("neovim:function", "executable", ["uvx"]) === 1,
-            agent: agents.flatMap(agent => agent.distribution?.uvx ? [{
-              ...agent,
-              package: {
-                command: ["uvx", agent.distribution.uvx.package, ...(agent.distribution.uvx.args || [])],
-                ...(agent.distribution.uvx.env ? { env: agent.distribution.uvx.env } : {})
-              }
-            }] : [])
-          }
+        const support = await this.workspace.emit.share("neovim:function", "EnvimAcpBinarySupport", []) as {
+          npx?: boolean;
+          uvx?: boolean;
+          platform?: string;
+          tar?: boolean;
+          unzip?: boolean;
         };
+        Acp.registry = ((await response.json() as { agents: IAcpRegistryAgent[] }).agents)
+          .reduce<IAcpRegistry>((registry, agent) => {
+            if (!agent.name || !agent.distribution) return registry;
+
+            const { npx, uvx, binary: binaries } = agent.distribution;
+            const binary = support.platform ? binaries?.[support.platform] : undefined;
+            const extension = binary?.archive.replace(/[?#].*$/, "").replace(/\.(?:tar\.[a-z0-9]+|tgz)$/i, ".tar").match(/\.([a-z0-9]+)$/i)?.pop()?.toLowerCase();
+            const format = extension === "tar" || extension === "zip" ? extension : "binary";
+
+            if (support.npx && npx) {
+              registry.npx.push({
+                ...agent,
+                package: {
+                  command: ["npx", "--yes", npx.package, ...(npx.args || [])],
+                  ...(npx.env ? { env: npx.env } : {})
+                }
+              });
+            } else if (support.uvx && uvx) {
+              registry.uvx.push({
+                ...agent,
+                package: {
+                  command: ["uvx", uvx.package, ...(uvx.args || [])],
+                  ...(uvx.env ? { env: uvx.env } : {})
+                }
+              });
+            } else if (binary && (format === "binary" || (format === "tar" && support.tar) || (format === "zip" && support.unzip))) {
+              registry.binary.push({
+                ...agent,
+                package: {
+                  command: [binary.cmd, ...(binary.args || [])],
+                  ...(binary.env ? { env: binary.env } : {}),
+                  archive: binary.archive
+                }
+              });
+            }
+
+            return registry;
+          }, { npx: [], uvx: [], binary: [] });
+        Object.values(Acp.registry).forEach(agents => agents.sort((a, b) => a.name.localeCompare(b.name)));
         Acp.registryLoaded = true;
       }
     }
@@ -158,7 +178,7 @@ export class Acp {
   private onAcpAgentStart = async (agent: IAcpRegistryAgent) => {
     this.setState({ status: "connecting", agent });
 
-    const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent.package]);
+    const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent.package, agent.name, agent.version]);
 
     if (result == "executed") {
       if (!this.connection) {

@@ -132,18 +132,17 @@ export interface IAcpStatus {
 
 export interface IAcpRegistryAgent {
   name: string;
+  version?: string;
   description?: string;
   icon?: string;
-  package: { command: string[]; env?: { [key: string]: string } };
+  package: { command: string[]; env?: { [key: string]: string }; archive?: string };
   distribution?: {
     npx?: { package: string; args?: string[]; env?: { [key: string]: string } };
     uvx?: { package: string; args?: string[]; env?: { [key: string]: string } };
+    binary?: { [platform: string]: { archive: string; cmd: string; args?: string[]; env?: { [key: string]: string } } };
   };
 }
 
 export type IAcpRegistry = {
-  [key in "npx" | "uvx"]: {
-    available: boolean;
-    agent: IAcpRegistryAgent[];
-  };
+  [key in "npx" | "uvx" | "binary"]: IAcpRegistryAgent[];
 };
