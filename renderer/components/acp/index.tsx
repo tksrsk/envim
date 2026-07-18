@@ -247,6 +247,7 @@ export function AcpComponent() {
     e.stopPropagation();
 
     Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
+    setState(state => ({ ...state }));
   }
 
   function onAcpAgentStart(agent: IAcpRegistryAgent) {

@@ -7,7 +7,7 @@ export class Structure<T> {
 
   private deepcopy(s: any, t: any) {
     if (s instanceof Array) {
-      s = t instanceof Array && t.length > 0 ? t : s;
+      s = t instanceof Array ? t : s;
     } else if (s instanceof Object) {
       Object.keys(s).forEach(k => {
         s[k] = t instanceof Object && k in t ? this.deepcopy(s[k], t[k]) : s[k];
