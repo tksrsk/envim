@@ -118,6 +118,21 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     }
   }
 
+  function formatToolData(data?: unknown) {
+    const json = (() => {
+      try {
+        if (data !== null && typeof data === "object") return data;
+        if (typeof data === "string") return JSON.parse(data);
+      } catch {
+        return;
+      }
+    })();
+
+    if (json && Object.keys(json).length) return `\`\`\`json\n${JSON.stringify(json, null, 2)}\n\`\`\``;
+
+    return !json && data && typeof data === "string" ? `\`\`\`\n${data}\n\`\`\`` : "";
+  }
+
   switch (message.update.sessionUpdate) {
     case "user_message_chunk":
       const content = renderContent(message.update.content);
@@ -132,20 +147,8 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     case "tool_call_update":
       const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
       const icon = getStatusIcon(message.update.status);
-      const input = ((input?: unknown) => {
-        const json = (() => {
-          try {
-            if (typeof input === "object") return input;
-            if (typeof input === "string") return JSON.parse(input);
-          } catch {
-            return;
-          }
-        })();
-
-        if (json && Object.keys(json).length) return `\`\`\`json\n${JSON.stringify(json, null, 2)}\n\`\`\``;
-
-        return !json && input && typeof input === "string" ? `\`\`\`\n${input}\n\`\`\`` : "";
-      })(message.update.rawInput);
+      const input = formatToolData(message.update.rawInput);
+      const output = formatToolData(message.update.rawOutput);
 
       return (
         <>
@@ -156,6 +159,11 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
             {input && (
               <CollapseComponent label=" INPUT" style={{marginBottom: 4}}>
                 <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{input}</Markdown></div>
+              </CollapseComponent>
+            )}
+            {output && (
+              <CollapseComponent label=" OUTPUT" style={{marginBottom: 4}}>
+                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{output}</Markdown></div>
               </CollapseComponent>
             )}
             {message.update.content?.map(renderToolCallContent)}
