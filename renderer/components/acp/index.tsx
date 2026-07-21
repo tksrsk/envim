@@ -643,7 +643,7 @@ export function AcpComponent() {
           {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>
-              {state.sessions.filter(({ status }) => status === "show").map(session => (
+              {state.sessions.map(session => (
                 <FlexComponent key={session.id} active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)} spacing>
                   {session.name}
                   <div className="space" />

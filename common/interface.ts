@@ -115,7 +115,6 @@ export interface IAcpSession {
   id: string;
   name: string;
   loaded: boolean;
-  status: "show" | "hide";
   commands: AcpSDK.AvailableCommand[];
   configOptions: AcpSDK.SessionConfigOption[];
   usage?: AcpSDK.UsageUpdate;
