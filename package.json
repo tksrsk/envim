@@ -5,7 +5,7 @@
   "description": "Neovim app build by electron",
   "scripts": {
     "dev": "vite",
-    "lint": "tslint -c tslint.json -p tsconfig.json",
+    "lint": "eslint .",
     "build": "tsc && electron-vite build",
     "release": "electron-builder",
     "start": "electron-vite dev"
@@ -32,8 +32,9 @@
     "npmRebuild": false
   },
   "devDependencies": {
-    "@agentclientprotocol/sdk": "^0.29.0",
+    "@agentclientprotocol/sdk": "^1.2.1",
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/diff": "^7.0.2",
@@ -41,21 +42,22 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/ssh2": "^1.15.5",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "^6.0.3",
     "diff": "^9.0.0",
-    "electron": "^42.3.3",
-    "electron-builder": "^26.15.2",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.7",
     "electron-vite": "^6.0.0-beta.1",
+    "eslint": "^10.7.0",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "sass": "^1.100.0",
-    "tslint": "^6.1.3",
+    "sass": "^1.101.3",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16"
+    "typescript-eslint": "^8.65.0",
+    "vite": "^8.1.5"
   },
   "dependencies": {
-    "dockerode": "^5.0.0",
+    "dockerode": "^5.0.1",
     "neovim": "^5.4.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
