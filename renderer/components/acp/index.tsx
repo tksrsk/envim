@@ -88,7 +88,6 @@ export function AcpComponent() {
     };
   }, []);
 
-
   React.useEffect(() => {
     state.messages.length && !state.scroll && scrollTo("bottom");
   }, [state.messages]);
@@ -213,7 +212,7 @@ export function AcpComponent() {
 
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
       const toolCallId = update.toolCallId;
-      messages = messages.filter(msg => !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
+      messages = messages.filter(msg => msg.sessionId !== curr.sessionId || !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
     }
     return [...messages, curr];
   }

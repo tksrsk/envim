@@ -124,16 +124,15 @@ export class Acp {
   }
 
   private processToolUpdate(sessionId: string, toolCall: AcpSDK.ToolCallUpdate) {
-    toolCall._meta = toolCall._meta || {};
+    const prev = this.tool[toolCall.toolCallId] || { _meta: {} };
 
-    Object.keys(this.tool[toolCall.toolCallId] || {}).forEach(k => toolCall[k] = toolCall[k] || this.tool[toolCall.toolCallId][k]);
-    Object.keys((this.tool[toolCall.toolCallId]?._meta) || {}).forEach(k => toolCall._meta![k] = toolCall._meta![k] || this.tool[toolCall.toolCallId]._meta![k]);
+    toolCall = { ...prev, ...toolCall, _meta: { ...prev._meta, ...(toolCall._meta || {}) } };
 
-    if (!toolCall._meta.start && toolCall.status !== "pending") {
-      toolCall._meta.start = Date.now();
+    if (!toolCall._meta!.start && toolCall.status !== "pending") {
+      toolCall._meta!.start = Date.now();
     }
-    if (toolCall.status !== "pending" && toolCall._meta.start) {
-      toolCall._meta.executionTime = ((Date.now() - (toolCall._meta.start as number)) / 1000).toFixed(1);
+    if (toolCall.status !== "pending" && toolCall._meta!.start) {
+      toolCall._meta!.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
     }
 
     this.tool[toolCall.toolCallId] = toolCall;
