@@ -35,6 +35,7 @@ export class Acp {
     this.workspace.emit.on("acp:session:config", this.onAcpSessionConfig);
     this.workspace.emit.on("acp:session:create", this.onAcpSessionCreate);
     this.workspace.emit.on("acp:session:delete", this.onAcpSessionDelete);
+    this.workspace.emit.on("acp:session:fork", this.onAcpSessionFork);
     this.workspace.emit.on("acp:session:switch", this.onAcpSessionSwitch);
     this.workspace.emit.on("acp:stdout", this.onAcpStdout);
     this.workspace.emit.on("acp:terminal:exit", this.onAcpTerminalExit);
@@ -366,6 +367,35 @@ export class Acp {
 
     this.setState({ ...this.state, status: "connected", ...(this.state.sessionId === sessionId ? { sessionId: undefined } : {}) });
     this.notifySessionUpdate();
+  }
+
+  private onAcpSessionFork = async (sessionId: string) => {
+    if (!this.connection || !this.sessions[sessionId]) return;
+
+    this.setState({ ...this.state, status: "processing" });
+
+    return this.callAgent(AcpSDK.methods.agent.session.fork, {
+      sessionId,
+      cwd: this.workspace.cwd,
+      mcpServers: await Mcp.servers(this.workspace),
+    }).then(response => {
+      if (!response) return;
+
+      const session: IAcpSession = {
+        id: response.sessionId,
+        name: `Fork of ${this.sessions[sessionId].name}`,
+        loaded: false,
+        status: "show",
+        configOptions: response.configOptions || [],
+        commands: [],
+        plan: [],
+      };
+
+      this.sessions[session.id] = session;
+      this.setState({ ...this.state, status: "connected" });
+      this.notifySessionUpdate();
+      this.onAcpSessionSwitch(session.id);
+    });
   }
 
   private onAcpSessionSwitch = async (sessionId: string) => {

@@ -271,8 +271,14 @@ export function AcpComponent() {
     }
   }
 
-  function onAcpSessionDelete(sessionId: string) {
+  function onAcpSessionDelete(e: React.MouseEvent, sessionId: string) {
+    e.stopPropagation();
     emit.send("acp:session:delete", sessionId);
+  }
+
+  function onAcpSessionFork(e: React.MouseEvent, sessionId: string) {
+    e.stopPropagation();
+    checkAcpStatus("processing") || emit.send("acp:session:fork", sessionId);
   }
 
   function onAcpSessionConfig(configId: string, value: string | boolean) {
@@ -638,9 +644,11 @@ export function AcpComponent() {
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>
               {state.sessions.filter(({ status }) => status === "show").map(session => (
-                <FlexComponent key={session.id} animate="hover" active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)} spacing >
+                <FlexComponent key={session.id} active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)} spacing>
                   {session.name}
-                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray" font="󰅖" float="right" onClick={() => onAcpSessionDelete(session.id) } hover />}
+                  <div className="space" />
+                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.fork && <IconComponent color="pink-fg" font="󰘬" onClick={e => onAcpSessionFork(e, session.id)} />}
+                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray-fg" font="󰅖" onClick={e => onAcpSessionDelete(e, session.id)} />}
                 </FlexComponent>
               ))}
             </MenuComponent>
