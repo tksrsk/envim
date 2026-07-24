@@ -63,7 +63,7 @@ export function AppComponent() {
   }
 
   return (
-    <div className={`theme-${state.theme}`}>
+    <div id="theme" className={`theme-${state.theme}`} style={state.init ? { fontSize: Setting.font.size, lineHeight: `${Setting.font.height}px` } : undefined}>
       {state.init
         ? Object.entries(state.workspaces).map(([id, bookmark]) => (
           <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} emit={new WorkspaceEmit(id)}>

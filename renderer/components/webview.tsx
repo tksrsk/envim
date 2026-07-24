@@ -439,7 +439,7 @@ export function WebviewComponent(props: Props) {
   }
 
   return (
-    <FlexComponent animate="fade-in" direction="column" position="absolute" color="default" overflow="visible" inset={[0]} style={props.style} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
+    <FlexComponent animate="fade-in" direction="column" position="absolute" color="default" inset={[0]} style={props.style} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
       <input style={styles.command} type="text" ref={command} onChange={onChange} onFocus={onFocus} onKeyDown={onKeyDown} tabIndex={-1} />
       <FlexComponent color="gray-fg" vertical="center" horizontal="center">
         { state.loading
@@ -447,7 +447,7 @@ export function WebviewComponent(props: Props) {
           : <IconComponent font={state.favicon || ""} text={state.title} style={styles.title} />
         }
       </FlexComponent>
-      <FlexComponent vertical="center" overflow="visible" >
+      <FlexComponent vertical="center">
         <IconComponent font="" onClick={() => runAction("navigate-backward")} />
         <IconComponent font="" onClick={() => runAction("navigate-forward")} />
         <IconComponent font={ state.loading ? "" : "󰑓" } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />

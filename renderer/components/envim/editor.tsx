@@ -297,7 +297,7 @@ export function EditorComponent(props: Props) {
           <FlexComponent color="default" grow={1} position="absolute" inset={[0, -3, 0, "auto"]} onMouseDown={onScroll} hover={state.scrolling === 0}>
             <FlexComponent animate="fade-in" color="blue" border={[0, 1.5]} rounded={[2]} style={state.scroll} shadow nomouse></FlexComponent>
           </FlexComponent>
-          <FlexComponent color={state.hidden ? "orange" : "default"} position="absolute" overflow="visible" inset={[-height, -4, "auto", "auto"]} rounded={state.hidden ? [4] : [4, 4, 0, 0]} hover={!state.hidden} spacing
+          <FlexComponent color={state.hidden ? "orange" : "default"} position="absolute" inset={[-height, -4, "auto", "auto"]} rounded={state.hidden ? [4] : [4, 4, 0, 0]} hover={!state.hidden} spacing
             onMouseDown={e => runCommand(e, "")}
           >
             { props.type === "normal" && renderMenu("", "buffer ") }

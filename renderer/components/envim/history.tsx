@@ -139,7 +139,7 @@ export function HistoryComponent(props: Props) {
 
   return (
     <FlexComponent animate="hover" direction="column-reverse" position="absolute" overflow="visible" style={styles.scope}>
-      <FlexComponent color="default" overflow="visible" style={props}>
+      <FlexComponent color="default" style={props}>
         { state.mode && <FlexComponent animate="fade-in" margin={["auto", 4]} rounded={[4]} shadow><MessageComponent message={state.mode} open /></FlexComponent> }
         { state.command && <FlexComponent animate="fade-in" margin={["auto", 4]} rounded={[4]} shadow><MessageComponent message={state.command} open /></FlexComponent> }
         { state.ruler && <FlexComponent animate="fade-in" margin={["auto", 4]} rounded={[4]} shadow><MessageComponent message={state.ruler} open /></FlexComponent> }

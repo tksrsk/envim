@@ -56,7 +56,6 @@ const styles: { [k: string]: React.CSSProperties } = {
 export function EnvimComponent(props: Props) {
   const [state, setState] = React.useState<States>({ pause: false, grids: {} });
   const { active, emit, highlights } = useWorkspace();
-  const { size, height } = Setting.font;
   const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
@@ -124,7 +123,7 @@ export function EnvimComponent(props: Props) {
 
   return (
     <EditorProvider>
-      <div style={{fontSize: size, lineHeight: `${height}px`, display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
+      <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
         <TablineComponent {...props.header} />
         <FlexComponent zIndex={0}>
           <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />

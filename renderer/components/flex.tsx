@@ -34,7 +34,7 @@ interface Props {
   padding?: number[];
   border?: number[];
   rounded?: number[];
-  position?: "relative" | "absolute" | "sticky";
+  position?: "relative" | "absolute" | "sticky" | "fixed";
   overflow?: "hidden" | "auto" | "visible";
   wordBreak?: "break-all";
   whiteSpace?: "nowrap" | "pre-wrap";

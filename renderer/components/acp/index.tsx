@@ -540,7 +540,7 @@ export function AcpComponent() {
   }
 
   return (
-    <FlexComponent color="default" animate="fade-in" overflow="visible" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
+    <FlexComponent color="default" animate="fade-in" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
       <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("ui:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.sessionId ? (
@@ -567,7 +567,7 @@ export function AcpComponent() {
         )}
       </FlexComponent>
 
-      <FlexComponent direction="column" overflow="visible" padding={[4]}>
+      <FlexComponent direction="column" padding={[4]}>
         {state.status.error &&
           <FlexComponent color="red" padding={[4]} rounded={[4]}>
             <IconComponent font="" />
@@ -620,7 +620,7 @@ export function AcpComponent() {
             ))}
           </CollapseComponent>
         )}
-        <FlexComponent overflow="visible">
+        <FlexComponent>
           {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
           {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onAcpAgentStop} />}
           {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
@@ -664,7 +664,7 @@ export function AcpComponent() {
           onFocus={() => emit.share("ui:focused")}
           rows={8}
         />
-        <FlexComponent overflow="visible" vertical="center" padding={[4, 0, 0]}>
+        <FlexComponent vertical="center" padding={[4, 0, 0]}>
           {state.session && state.session.commands.length > 0 && (
             <MenuComponent label="" color="green-fg">
               {state.session.commands.map((command) => (
