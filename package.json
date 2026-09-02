@@ -36,7 +36,7 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/diff": "^7.0.2",
     "@types/dockerode": "^4.0.1",
     "@types/react": "^19.2.17",
