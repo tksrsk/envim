@@ -1,4 +1,4 @@
-import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
+import * as McpTypes from "@modelcontextprotocol/client";
 
 import { Workspace } from "main/envim/workspace";
 import { McpUpstream } from "main/mcp/upstream";

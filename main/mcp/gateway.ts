@@ -2,9 +2,9 @@ import { randomUUID } from "crypto";
 import { createServer, IncomingMessage, ServerResponse, Server as HttpServer } from "http";
 import { AddressInfo, createConnection, Socket } from "net";
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
+import { CallToolResultSchema, ResultSchema } from "@modelcontextprotocol/core";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
+import { isInitializeRequest, Server } from "@modelcontextprotocol/server";
 
 import { McpAppService } from "main/mcp/app";
 import { McpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
@@ -12,7 +12,7 @@ import { Workspace } from "main/envim/workspace";
 
 interface IMcpGatewaySession {
   upstreamId: string;
-  transport: StreamableHTTPServerTransport;
+  transport: NodeStreamableHTTPServerTransport;
 }
 
 const GATEWAY_HOST = "127.0.0.1";
@@ -143,7 +143,7 @@ export class McpGateway {
       return McpGateway.writeError(res, 400, "Invalid session endpoint");
     }
 
-    if (!session && req.method === "POST" && McpTypes.isInitializeRequest(body)) {
+    if (!session && req.method === "POST" && isInitializeRequest(body)) {
       session = { upstreamId, transport: await this.createSession(upstream) };
     }
 
@@ -154,15 +154,15 @@ export class McpGateway {
     await session.transport.handleRequest(req, res, body);
   }
 
-  private async createSession(upstream: McpUpstream): Promise<StreamableHTTPServerTransport> {
+  private async createSession(upstream: McpUpstream): Promise<NodeStreamableHTTPServerTransport> {
     const capabilities = upstream.client.getServerCapabilities() || {};
     const server = new Server({ name: `envim-proxy:${upstream.name}`, version: "1.0.0" }, { capabilities });
-    let transport: StreamableHTTPServerTransport;
+    let transport: NodeStreamableHTTPServerTransport;
 
-    server.setRequestHandler(McpTypes.ListToolsRequestSchema, request => upstream.client.listTools(request.params));
-    server.setRequestHandler(McpTypes.CallToolRequestSchema, async request => {
+    server.setRequestHandler("tools/list", request => upstream.client.listTools(request.params));
+    server.setRequestHandler("tools/call", async request => {
       const result = await upstream.client.callTool(request.params);
-      const appResult = McpTypes.CallToolResultSchema.safeParse(result);
+      const appResult = CallToolResultSchema.safeParse(result);
 
       if (appResult.success) {
         this.app.getToolResource(upstream, request.params.name).then(resource => {
@@ -176,10 +176,10 @@ export class McpGateway {
       return result;
     });
     server.fallbackRequestHandler = request =>
-      upstream.client.request({ method: request.method, params: request.params }, McpTypes.ResultSchema);
+      upstream.client.request({ method: request.method, params: request.params }, ResultSchema);
     server.fallbackNotificationHandler = notification => upstream.client.notification(notification);
 
-    transport = new StreamableHTTPServerTransport({
+    transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: sessionId => {
         this.sessions.set(sessionId, { upstreamId: upstream.id, transport });

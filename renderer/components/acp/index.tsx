@@ -361,7 +361,7 @@ export function AcpComponent() {
         try {
           const server = JSON.parse(input);
 
-          if (!server.name || !["http", "sse", "stdio", "acp"].includes(server.type)) {
+          if (!server.name || !["http", "stdio", "acp"].includes(server.type)) {
             return;
           }
 

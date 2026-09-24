@@ -3,7 +3,7 @@ import * as AcpSDK from "@agentclientprotocol/sdk";
 import { Workspace } from "main/envim/workspace";
 import { Setting } from "main/setting";
 
-type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
+type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 
 export class Mcp {
   private static syncPromise: Promise<void> = Promise.resolve();
@@ -52,6 +52,6 @@ export class Mcp {
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {
-    return "type" in server && (server.type === "http" || server.type === "sse");
+    return "type" in server && server.type === "http";
   }
 }

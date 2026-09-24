@@ -1,5 +1,5 @@
 import * as AcpSDK from "@agentclientprotocol/sdk";
-import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
+import * as McpTypes from "@modelcontextprotocol/client";
 
 export interface ISetting {
   type: "command" | "address" | "docker" | "ssh";

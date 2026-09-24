@@ -1,15 +1,12 @@
 import { createHash } from "crypto";
 
 import * as AcpSDK from "@agentclientprotocol/sdk";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import * as McpTypes from "@modelcontextprotocol/sdk/types.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { WorkspaceEmit } from "main/emit";
 import { McpAppService } from "main/mcp/app";
 
-type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" | "sse" }>;
+type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 
 const MCP_APP_MIME = "text/html;profile=mcp-app";
 
@@ -21,8 +18,8 @@ export class McpUpstream {
     private readonly emit: WorkspaceEmit,
     app: McpAppService,
   ) {
-    client.setNotificationHandler(McpTypes.ToolListChangedNotificationSchema, () => app.onToolsChanged(id));
-    client.setNotificationHandler(McpTypes.ResourceListChangedNotificationSchema, () => app.onResourcesChanged(id));
+    client.setNotificationHandler("notifications/tools/list_changed", () => app.onToolsChanged(id));
+    client.setNotificationHandler("notifications/resources/list_changed", () => app.onResourcesChanged(id));
 
     emit.on(`mcp:resource:read:${id}`, params => client.readResource(params));
     emit.on(`mcp:resource:templates:list:${id}`, params => client.listResourceTemplates(params));
@@ -56,12 +53,10 @@ export class McpUpstream {
     await this.client.close().catch(() => {});
   }
 
-  private static createTransport(server: HttpMcpServer): StreamableHTTPClientTransport | SSEClientTransport {
+  private static createTransport(server: HttpMcpServer): StreamableHTTPClientTransport {
     const requestInit = { headers: Object.fromEntries(server.headers.map(header => [header.name, header.value])) };
 
-    return server.type === "http"
-      ? new StreamableHTTPClientTransport(new URL(server.url), { requestInit })
-      : new SSEClientTransport(new URL(server.url), { requestInit });
+    return new StreamableHTTPClientTransport(new URL(server.url), { requestInit });
   }
 }
 
@@ -120,6 +115,6 @@ export class McpUpstreamRegistry {
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {
-    return "type" in server && (server.type === "http" || server.type === "sse");
+    return "type" in server && server.type === "http";
   }
 }
