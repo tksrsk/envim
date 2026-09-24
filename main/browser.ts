@@ -52,7 +52,7 @@ export class Browser {
     Emit.share("browser:open", url);
   }
 
-  private onLogin = async (e: Electron.Event, _: Electron.LoginAuthenticationResponseDetails, __: Electron.AuthInfo, callback: Function) => {
+  private onLogin = async (e: Electron.Event, _: Electron.AuthenticationResponseDetails, __: Electron.AuthInfo, callback: Function) => {
     e.preventDefault();
 
     const user = await Emit.share("neovim:readline", "User");
@@ -124,6 +124,7 @@ export class Browser {
   }
 
   private onBrowserCapture = async (rect?: Electron.Rectangle) => {
-    Electron.clipboard.writeImage(await this.webContents.capturePage(rect));
+    const image = await this.webContents.capturePage(rect);
+    await Electron.clipboard.write([new Electron.ClipboardItem({ "image/png": new Blob([new Uint8Array(image.toPNG())], { type: "image/png" }) })]);
   }
 }

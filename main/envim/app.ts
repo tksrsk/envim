@@ -15,11 +15,12 @@ export class App {
     this.menu();
   }
 
-  private onRequest = (method: string, args: any, res: Response) => {
+  private onRequest = (method: string, _: any, res: Response) => {
     switch (method) {
       case "envim_clipboard": return this.workspace.clipboard.paste(res);
     }
-    console.log({ method, args });
+
+    return;
   }
 
   private onNotification = (method: string, args: any) => {

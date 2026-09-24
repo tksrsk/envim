@@ -10,14 +10,14 @@ export class Clipboard {
     this.workspace.emit.share("neovim:luafile", "clipboard.lua");
   }
 
-  copy(lines: string[], type: "v" | "V" | "b") {
+  async copy(lines: string[], type: "v" | "V" | "b") {
     this.lines = lines;
     this.type = type;
-    Electron.clipboard.writeText(lines.join("\n"));
+    await Electron.clipboard.writeText(lines.join("\n"));
   }
 
-  paste(res: Response) {
-    const text = Electron.clipboard.readText();
+  async paste(res: Response) {
+    const text = await Electron.clipboard.readText();
     const lines = text.split("\n");
     if (this.lines && this.lines.join("\n") === text) {
       res.send([this.lines, this.type]);
