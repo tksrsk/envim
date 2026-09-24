@@ -13,6 +13,7 @@ import { MenuComponent } from "renderer/components/menu";
 import { CollapseComponent } from "renderer/components/collapse";
 import { MessageComponent } from "renderer/components/acp/message";
 import { McpAppsComponent } from "renderer/components/acp/app";
+import { ElicitationComponent } from "renderer/components/acp/elicitation";
 
 interface State {
   visible: boolean;
@@ -461,7 +462,9 @@ export function AcpComponent() {
   function onCancel(e: React.MouseEvent) {
     e.stopPropagation();
 
-    e.type !== "mousemove" && state.mode.main === "blur" && command.current?.focus();
+    const editable = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
+    e.type !== "mousemove" && state.mode.main === "blur" && !editable && command.current?.focus();
   }
 
   function getStatusIcon(status?: string | null) {
@@ -575,6 +578,11 @@ export function AcpComponent() {
           </FlexComponent>
         }
         {state.status.error && <div className="divider color-gray" /> }
+        {state.status.elicitation && (
+          <CollapseComponent label="󰋗 Elicitation" style={{marginBottom: 4}} open>
+            <ElicitationComponent request={state.status.elicitation} />
+          </CollapseComponent>
+        )}
         {state.session?.usage &&
           <FlexComponent color="orange" padding={[4]} rounded={[4]}>
             <span>{state.session.usage.used.toLocaleString()} ({((state.session.usage.used / state.session.usage.size) * 100).toFixed(2)}%)</span>

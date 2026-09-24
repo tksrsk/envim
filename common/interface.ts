@@ -102,6 +102,11 @@ export interface IPermissionRequest {
   options: AcpSDK.PermissionOption[];
 }
 
+export interface IElicitationRequest {
+  requestId: string;
+  params: Extract<AcpSDK.CreateElicitationRequest, { mode: "form" | "url" }>;
+}
+
 export interface IMcpApp {
   upstreamId: string;
   server: string;
@@ -127,6 +132,7 @@ export interface IAcpStatus {
   error?: string;
   initialize?: AcpSDK.InitializeResponse;
   agent?: IAcpRegistryAgent;
+  elicitation?: IElicitationRequest;
 }
 
 export interface IAcpRegistryAgent {

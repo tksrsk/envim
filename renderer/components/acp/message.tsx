@@ -5,13 +5,14 @@ import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
 import { diffLines } from "diff";
 
-import { IPermissionRequest } from "common/interface";
+import { IPermissionRequest, IElicitationRequest } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
 import { CollapseComponent } from "renderer/components/collapse";
+import { ElicitationComponent } from "renderer/components/acp/elicitation";
 
 const styles: { [k: string]: React.CSSProperties } = {
   permission: {
@@ -146,6 +147,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     case "tool_call":
     case "tool_call_update":
       const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
+      const elicitationRequest = message.update._meta?.elicitationRequest as IElicitationRequest | undefined;
       const icon = getStatusIcon(message.update.status);
       const input = formatToolData(message.update.rawInput);
       const output = formatToolData(message.update.rawOutput);
@@ -153,7 +155,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
       return (
         <>
           <CollapseComponent
-            label={message.update.title || message.update.kind || message.update.toolCallId}
+            label={message.update.title || message.update.name || message.update.kind || message.update.toolCallId}
             badge={() => <>{typeof message.update._meta?.executionTime === "string" && `${message.update._meta?.executionTime}s`}{icon}</>}
           >
             {input && (
@@ -179,6 +181,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
               ))}
             </FlexComponent>
           )}
+          {elicitationRequest && <ElicitationComponent request={elicitationRequest} />}
         </>
       );
   }

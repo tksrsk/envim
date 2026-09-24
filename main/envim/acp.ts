@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import * as AcpSDK from "@agentclientprotocol/sdk";
 
-import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession } from "common/interface";
 
 import { Mcp } from "main/mcp";
 import { Workspace } from "main/envim/workspace";
@@ -18,6 +18,7 @@ export class Acp {
   private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
   private terminal: { [key: string]: { promise: Promise<AcpSDK.WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
   private permission: { [key: string]: (response: AcpSDK.RequestPermissionResponse) => void } = {};
+  private elicitation: { [key: string]: { request: IElicitationRequest, resolve: (response: AcpSDK.CreateElicitationResponse) => void } } = {};
   private lastMessageId: { [k: string]: string } = {};
   private stdoutPush?: (data: string) => void;
 
@@ -27,6 +28,7 @@ export class Acp {
     this.workspace.emit.on("acp:agent:stop", this.onAcpAgentStop);
     this.workspace.emit.on("acp:auth:authenticate", this.onAcpAuthAuthenticate);
     this.workspace.emit.on("acp:auth:logout", this.onAcpAuthLogout);
+    this.workspace.emit.on("acp:elicitation:response", this.onAcpElicitationResponse);
     this.workspace.emit.on("acp:error", this.onAcpError);
     this.workspace.emit.on("acp:exited", this.onAcpExited);
     this.workspace.emit.on("acp:permission:response", this.onAcpPermissionResponse);
@@ -191,6 +193,8 @@ export class Acp {
         protocolVersion: 1,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
+          auth: { terminal: true },
+          elicitation: { form: {}, url: {} },
           terminal: true
         },
         clientInfo: {
@@ -201,7 +205,7 @@ export class Acp {
       }).then(initialize => {
         if (!initialize) return;
 
-        initialize.authMethods = initialize.authMethods?.filter(m => !("type" in m) || m.type !== "env_var");
+        initialize.authMethods = initialize.authMethods?.filter(m => (m as { type?: string }).type !== "env_var");
         this.setState({ ...this.state, initialize, status: "connected" });
         this.listSession();
       });
@@ -234,12 +238,48 @@ export class Acp {
     });
   }
 
+  private onAcpElicitationResponse = (requestId: string, response: AcpSDK.CreateElicitationResponse): void => {
+    const elicitation = this.elicitation[requestId];
+
+    if (!elicitation) {
+      return;
+    }
+
+    const { params } = elicitation.request;
+
+    elicitation.resolve(response);
+    delete(this.elicitation[requestId]);
+
+    if (this.state.elicitation?.requestId === requestId) {
+      this.setState({ ...this.state, elicitation: undefined });
+    }
+
+    const tool = Object.values(this.tool).find(t => {
+      const elicitationRequest = t._meta?.elicitationRequest as IElicitationRequest | undefined;
+      return elicitationRequest?.requestId === requestId;
+    });
+
+    if (tool && "sessionId" in params) {
+      delete(tool._meta!.elicitationRequest);
+
+      if (tool.toolCallId === requestId) {
+        tool.status = response.action !== "accept" ? "failed" : params.mode === "url" ? "in_progress" : "completed";
+      }
+
+      this.processToolUpdate(params.sessionId, tool);
+    }
+
+    if (response.action === "accept" && params.mode === "url") {
+      this.workspace.emit.share("browser:open", params.url);
+    }
+  }
+
   private onAcpError = (error: string) => {
     this.setState({ ...this.state, error });
   }
 
   private onAcpExited = () => {
-    this.cancelAllPermissions();
+    this.cancelAllPendingRequests();
     this.tool = {};
     this.sessions = {};
 
@@ -272,7 +312,7 @@ export class Acp {
   private onAcpPromptCancel = (sessionId: string) => {
     if (!this.connection) return;
 
-    this.cancelAllPermissions();
+    this.cancelAllPendingRequests();
 
     this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
       this.setState({ ...this.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
@@ -304,7 +344,7 @@ export class Acp {
         this.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
       }
       this.tool = {};
-      this.cancelAllPermissions();
+      this.cancelAllPendingRequests();
       this.setState({ ...this.state, status: "connected" });
     });
   }
@@ -682,6 +722,8 @@ export class Acp {
       .onRequest(AcpSDK.methods.client.terminal.kill, ctx => this.onKillTerminal(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.release, ctx => this.onReleaseTerminal(ctx.params))
       .onRequest(AcpSDK.methods.client.session.requestPermission, ctx => this.onRequestPermission(ctx.params))
+      .onRequest(AcpSDK.methods.client.elicitation.create, ctx => this.onCreateElicitation(ctx.params, ctx.signal))
+      .onNotification(AcpSDK.methods.client.elicitation.complete, ctx => this.onCompleteElicitation(ctx.params))
       .onNotification(AcpSDK.methods.client.session.update, ctx => this.onSessionUpdate(ctx.params));
   }
 
@@ -695,9 +737,48 @@ export class Acp {
     return new Promise((resolve) => this.permission[requestId] = resolve);
   }
 
-  private cancelAllPermissions() {
+  private async onCreateElicitation(elicitation: AcpSDK.CreateElicitationRequest, signal: AbortSignal): Promise<AcpSDK.CreateElicitationResponse> {
+    if (elicitation.mode !== "form" && elicitation.mode !== "url") {
+      return { action: "decline" };
+    }
+
+    const requestId = `elicit_${randomBytes(16).toString("hex")}`;
+    const params = elicitation as IElicitationRequest["params"];
+    const request: IElicitationRequest = { requestId, params };
+
+    if ("sessionId" in params) {
+      const toolCall = (params.toolCallId && this.tool[params.toolCallId]) || {
+        toolCallId: requestId,
+        title: params.message,
+        kind: "other",
+        status: "pending",
+        _meta: params.mode === "url" ? { elicitationId: params.elicitationId } : {},
+      };
+
+      this.processToolUpdate(params.sessionId, { ...toolCall, _meta: { ...toolCall._meta, elicitationRequest: request } });
+    } else {
+      this.setState({ ...this.state, elicitation: request });
+    }
+
+    signal.addEventListener("abort", () => this.onAcpElicitationResponse(requestId, { action: "cancel" }), { once: true });
+
+    return new Promise((resolve) => this.elicitation[requestId] = { request, resolve });
+  }
+
+  private onCompleteElicitation(params: AcpSDK.CompleteElicitationNotification) {
+    const tool = Object.values(this.tool).find(t => t._meta?.elicitationId === params.elicitationId);
+
+    if (tool) {
+      this.processToolUpdate(this.state.sessionId!, { ...tool, status: "completed" });
+    }
+  }
+
+  private cancelAllPendingRequests() {
     Object.keys(this.permission).forEach(requestId => {
       this.onAcpPermissionResponse(requestId, "");
+    });
+    Object.keys(this.elicitation).forEach(requestId => {
+      this.onAcpElicitationResponse(requestId, { action: "cancel" });
     });
   }
 }
