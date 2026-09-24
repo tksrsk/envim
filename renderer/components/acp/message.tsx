@@ -7,6 +7,8 @@ import { diffLines } from "diff";
 
 import { IPermissionRequest, IElicitationRequest } from "common/interface";
 
+import { uiIcons } from "renderer/utils/icons";
+
 import { useWorkspace } from "renderer/context/workspace";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -30,10 +32,10 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
 
   function getStatusIcon(status?: string | null) {
     switch (status) {
-      case "pending": return <IconComponent color="gray-fg" font="󰐎" />;
+      case "pending": return <IconComponent color="gray-fg" font={uiIcons.pending} />;
       case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
-      case "completed": return <IconComponent color="green-fg" font="" />;
-      case "failed": return <IconComponent font="" color="red-fg" />;
+      case "completed": return <IconComponent color="green-fg" font={uiIcons.success} />;
+      case "failed": return <IconComponent font={uiIcons.error} color="red-fg" />;
       default: return null;
     }
   }
@@ -46,10 +48,10 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     switch (kind) {
       case "allow_once":
       case "allow_always":
-        return { color: `green${suffix}`, font: "" };
+        return { color: `green${suffix}`, font: uiIcons.accept };
       case "reject_once":
       case "reject_always":
-        return { color: `red${suffix}`, font: "" };
+        return { color: `red${suffix}`, font: uiIcons.decline };
       default:
         return { color: `blue${suffix}`, font: "" };
     }

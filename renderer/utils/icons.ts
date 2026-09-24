@@ -1,3 +1,18 @@
+export const uiIcons = {
+  close: "",
+  stop: "",
+  add: "",
+  accept: "",
+  success: "",
+  decline: "",
+  error: "",
+  pending: "",
+  search: "",
+  refresh: "󰑓",
+  save: "",
+  debug: "",
+} as const;
+
 export const icons = [
   { font: "", color: "blue", name: "C", match: /\.(c|h)$/ },
   { font: "", color: "blue", name: "C++", match: /\.(cpp|hpp)$/ },
@@ -45,5 +60,5 @@ export const notificates = [
   { font: "", kinds: ["mode", "command", "list_cmd", "number_prompt", "shell_out", "shell_ret", "shell_cmd"]},
   { font: "", kinds: ["bufwrite", "wildlist", "completion", "undo"]},
   { font: "", kinds: ["ruler"]},
-  { font: "", kinds: ["debug"]},
+  { font: "", kinds: ["debug"]},
 ];

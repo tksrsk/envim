@@ -3,6 +3,8 @@ import * as AcpSDK from "@agentclientprotocol/sdk";
 
 import { IElicitationRequest } from "common/interface";
 
+import { uiIcons } from "renderer/utils/icons";
+
 import { useWorkspace } from "renderer/context/workspace";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -11,9 +13,8 @@ import { IconComponent } from "renderer/components/icon";
 type IProperty = { type: string; title?: string | null; description?: string | null; default?: unknown; [k: string]: unknown };
 
 const actions = [
-  { action: "accept", name: "Accept", color: "green", font: "" },
-  { action: "decline", name: "Decline", color: "red", font: "" },
-  { action: "cancel", name: "Cancel", color: "blue", font: "" },
+  { action: "accept", name: "Accept", color: "green", font: uiIcons.accept },
+  { action: "decline", name: "Decline", color: "red", font: uiIcons.decline },
 ] as const;
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -91,7 +92,12 @@ export function ElicitationComponent({ request }: { request: IElicitationRequest
 
   return (
     <FlexComponent direction="column" padding={[4]} whiteSpace="pre-wrap">
-      <span>{params.message}</span>
+      <FlexComponent vertical="start">
+        <FlexComponent grow={1} shrink={1} whiteSpace="pre-wrap">{params.message}</FlexComponent>
+        <FlexComponent title="Cancel">
+          <IconComponent color="gray-fg" font={uiIcons.close} onClick={() => onResponse({ action: "cancel" })} />
+        </FlexComponent>
+      </FlexComponent>
       {url && <FlexComponent color="orange-fg" title={url}>{new URL(url).host}</FlexComponent>}
       {schema && (
         <form ref={form} onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.preventDefault()} onFocus={() => emit.share("ui:focused")}>

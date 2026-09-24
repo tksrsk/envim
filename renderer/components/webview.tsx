@@ -7,6 +7,7 @@ import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
+import { uiIcons } from "renderer/utils/icons";
 import { col2X, row2Y } from "renderer/utils/size";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -431,7 +432,7 @@ export function WebviewComponent(props: Props) {
         { searchengines.filter(({ name }) => name.split("/").length === 1).map(({ name, selected }, i) =>
           <FlexComponent  key={`${base}-${i}`} animate="hover" active={selected} onClick={e => selectEngine(e, `${base}${name}`)} spacing>
             { name }
-            <IconComponent color="gray" font="" float="right" onClick={() => deleteEngine(`${base}${name}`)} hover />
+            <IconComponent color="gray" font={uiIcons.close} float="right" onClick={() => deleteEngine(`${base}${name}`)} hover />
           </FlexComponent>
         ) }
       </>
@@ -450,7 +451,7 @@ export function WebviewComponent(props: Props) {
       <FlexComponent vertical="center">
         <IconComponent font="" onClick={() => runAction("navigate-backward")} />
         <IconComponent font="" onClick={() => runAction("navigate-forward")} />
-        <IconComponent font={ state.loading ? "" : "󰑓" } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
+        <IconComponent font={ state.loading ? uiIcons.stop : uiIcons.refresh } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
         <MenuComponent label={() => <IconComponent { ...icon } onClick={saveEngine} />}>
           { renderEngine("") }
         </MenuComponent>
@@ -459,7 +460,7 @@ export function WebviewComponent(props: Props) {
             <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} onFocus={onFocus} tabIndex={-1} />
           </form>
         </FlexComponent>
-        <IconComponent font="" />
+        <IconComponent font={uiIcons.search} />
         <FlexComponent shrink={3}>
           <form style={styles.input} onSubmit={onSubmit}>
             <input style={styles.input} type="text" ref={search} value={state.search} onChange={onChange} onFocus={onFocus} tabIndex={-1} />

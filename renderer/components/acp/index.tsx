@@ -6,6 +6,7 @@ import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common
 import { useWorkspace } from "renderer/context/workspace";
 
 import { Setting } from "renderer/utils/setting";
+import { uiIcons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
@@ -469,10 +470,10 @@ export function AcpComponent() {
 
   function getStatusIcon(status?: string | null) {
     switch (status) {
-      case "pending": return <IconComponent color="gray-fg" font="󰐎" />;
+      case "pending": return <IconComponent color="gray-fg" font={uiIcons.pending} />;
       case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
-      case "completed": return <IconComponent color="green-fg" font="" />;
-      case "failed": return <IconComponent font="" color="red-fg" />;
+      case "completed": return <IconComponent color="green-fg" font={uiIcons.success} />;
+      case "failed": return <IconComponent font={uiIcons.error} color="red-fg" />;
       default: return null;
     }
   }
@@ -507,7 +508,7 @@ export function AcpComponent() {
         {registry.map((agent, i) => (
           <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => onSelectPackage(kind, agent)} spacing>
             {<IconComponent font={agent.icon || ""} mark={!!agent.icon} text={agent.name} /> }
-            {kind === "custom" && <IconComponent color="gray" font="" float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
+            {kind === "custom" && <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
           </FlexComponent>
         ))}
       </MenuComponent>
@@ -573,7 +574,7 @@ export function AcpComponent() {
       <FlexComponent direction="column" padding={[4]}>
         {state.status.error &&
           <FlexComponent color="red" padding={[4]} rounded={[4]}>
-            <IconComponent font="" />
+            <IconComponent font={uiIcons.error} />
             {state.status.error}
           </FlexComponent>
         }
@@ -612,7 +613,7 @@ export function AcpComponent() {
                 <FlexComponent key={file}>
                   <a href={`file://${file}`}>{file}</a>
                   <div className="space" />
-                  <IconComponent font="" color="gray-fg" float="right" onClick={() => onRemoveFile(file)} />
+                  <IconComponent font={uiIcons.close} color="gray-fg" float="right" onClick={() => onRemoveFile(file)} />
                 </FlexComponent>
               ))}
           </CollapseComponent>
@@ -623,14 +624,14 @@ export function AcpComponent() {
               <FlexComponent key={index} vertical="center" padding={[2]}>
                 <img src={`data:${image.mimeType};base64,${image.data}`} style={styles.image} />
                 <div className="space" />
-                <IconComponent font="" color="gray-fg" onClick={() => onRemoveImage(index)} />
+                <IconComponent font={uiIcons.close} color="gray-fg" onClick={() => onRemoveImage(index)} />
               </FlexComponent>
             ))}
           </CollapseComponent>
         )}
         <FlexComponent>
           {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
-          {checkAcpStatus("connected") && <IconComponent font="" color="red-fg" onClick={onAcpAgentStop} />}
+          {checkAcpStatus("connected") && <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpAgentStop} />}
           {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
           {!checkAcpStatus("connected") && (
@@ -638,17 +639,17 @@ export function AcpComponent() {
               {Object.entries({ ...state.registry, custom: Setting.acp.customs }).map(renderRegistryProvider)}
             </MenuComponent>
           )}
-          <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "mcp" } }))} />}>
+          <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "mcp" } }))} />}>
             {Setting.acp.mcpServers.map((mcp, i) => (
               <FlexComponent key={i} animate="hover" onClick={() => setState(state => ({ ...state, mode: { main: "normal", sub: "mcp", mcp: i } }))} spacing>
                 <input type="checkbox" checked={mcp.enabled} onChange={e => onEditMcp(e, "toggle", i)} />
                 {mcp.server.name}
-                <IconComponent color="gray" font="" float="right" onClick={e => onEditMcp(e, "delete", i)} hover />
+                <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => onEditMcp(e, "delete", i)} hover />
               </FlexComponent>
             ))}
           </MenuComponent>
           <div className="space" />
-          {state.session && <IconComponent font="" color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
+          {state.session && <IconComponent font={uiIcons.search} color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>
               {state.sessions.map(session => (
@@ -656,7 +657,7 @@ export function AcpComponent() {
                   {session.name}
                   <div className="space" />
                   {state.status.initialize?.agentCapabilities?.sessionCapabilities?.fork && <IconComponent color="pink-fg" font="󰘬" onClick={e => onAcpSessionFork(e, session.id)} />}
-                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray-fg" font="󰅖" onClick={e => onAcpSessionDelete(e, session.id)} />}
+                  {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray-fg" font={uiIcons.close} onClick={e => onAcpSessionDelete(e, session.id)} />}
                 </FlexComponent>
               ))}
             </MenuComponent>
@@ -685,7 +686,7 @@ export function AcpComponent() {
           {state.session?.configOptions?.map(renderConfigOption)}
           <div className="space" />
           {checkAcpStatus("processing") && <div className="animate loading inline" />}
-          <IconComponent font="" color="red-fg" onClick={onAcpPromptCancel} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
+          <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpPromptCancel} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
           <IconComponent font="󰒊" color="blue-fg" onClick={onConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
         </FlexComponent>
       </FlexComponent>

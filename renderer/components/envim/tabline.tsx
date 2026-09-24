@@ -7,7 +7,7 @@ import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-import { icons } from "renderer/utils/icons";
+import { icons, uiIcons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
@@ -145,7 +145,7 @@ export function TablineComponent(props: Props) {
     return (
       <FlexComponent key={i} animate="fade-in hover" color={icon.color} active={tab.active} title={tab.name} shrink={tab.active ? 0 : 2} margin={[4, 2, 0]} padding={[0, 8]} rounded={[4, 4, 0, 0]} shadow={tab.active} style={styles.tab} onClick={e => runCommand(e, `tabnext ${i + 1}`)} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop} >
         <IconComponent font={icon.font} text={tab.name.replace(/.*\//, "…/")} />
-        { state.tabs.length > 1 && <IconComponent color="gray" font="" float="right" onClick={e => runCommand(e, `confirm tabclose ${i + 1}`)} hover /> }
+        { state.tabs.length > 1 && <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => runCommand(e, `confirm tabclose ${i + 1}`)} hover /> }
       </FlexComponent>
     );
   }
@@ -193,7 +193,7 @@ export function TablineComponent(props: Props) {
           <FlexComponent animate="hover" direction="column" active={path === workspace} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
             <FlexComponent>{ Object.values(workspaces).includes(path) && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
             <div className="color-gray-fg small">{ path }</div>
-            <IconComponent color="gray" font="" float="right" onClick={e => deleteBookmark(e, path)} hover />
+            <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => deleteBookmark(e, path)} hover />
           </FlexComponent>
         ) }
       </>
@@ -203,14 +203,14 @@ export function TablineComponent(props: Props) {
   return (
     <FlexComponent color="default" overflow="visible" zIndex={1} style={props} shadow>
       {state.enabled && state.tabs.map((tab, i) => renderTab(i, tab))}
-      <IconComponent color="green-fg" font="" onClick={e => runCommand(e, "$tab split")} />
+      <IconComponent color="green-fg" font={uiIcons.add} onClick={e => runCommand(e, "$tab split")} />
       <MenuComponent color="lightblue-fg" label="󰉋">
         { renderBookmarkMenu("") }
       </MenuComponent>
       { renderBookmark() }
       <div className="space dragable" />
       { renderSubmenu(state.menus, []) }
-      <IconComponent color="gray-fg" font="" onClick={e => runCommand(e, "confirm quitall")} />
+      <IconComponent color="gray-fg" font={uiIcons.stop} onClick={e => runCommand(e, "confirm quitall")} />
     </FlexComponent>
   );
 }

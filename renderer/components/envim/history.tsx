@@ -6,6 +6,7 @@ import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
+import { uiIcons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { MenuComponent } from "renderer/components/menu";
@@ -158,7 +159,7 @@ export function HistoryComponent(props: Props) {
         </MenuComponent>
         { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => emit.send("browser:open", "", "tabnew")} /> }
         <IconComponent color="purple-fg" font="" onClick={() => emit.send("acp:toggle")} />
-        <IconComponent color="green-fg" active={state.debug.length > 0} font="" onClick={toggleDebug} />
+        <IconComponent color="green-fg" active={state.debug.length > 0} font={uiIcons.debug} onClick={toggleDebug} />
       </FlexComponent>
       <FlexComponent overflow="visible" hover>
         <FlexComponent direction="column" position="absolute" rounded={[4, 4, 0, 0]} overflow="auto" style={styles.history} shadow>
@@ -166,9 +167,9 @@ export function HistoryComponent(props: Props) {
           { state.options.ext_messages && (
             <FlexComponent color="default" onMouseEnter={loadMessages} onMouseLeave={unloadMessages}>
               <FlexComponent grow={1} />
-              <IconComponent color="lightblue-fg" font="󰑓" text="Load more..." />
+              <IconComponent color="lightblue-fg" font={uiIcons.refresh} text="Load more..." />
               <FlexComponent grow={1} />
-              { state.messages.length === 0 ? null : <IconComponent color="red-fg" font="󰂭" onClick={onClear} /> }
+              { state.messages.length === 0 ? null : <IconComponent color="red-fg" font={uiIcons.close} onClick={onClear} /> }
             </FlexComponent>
           ) }
           <div ref={bottom} />

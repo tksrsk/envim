@@ -6,6 +6,7 @@ import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 
 import { Setting } from "renderer/utils/setting";
+import { uiIcons } from "renderer/utils/icons";
 import { y2Row, x2Col } from "renderer/utils/size";
 
 import { FlexComponent } from "renderer/components/flex";
@@ -318,7 +319,7 @@ export function EditorComponent(props: Props) {
                 { font: "󰉡", onClick: e => runCommand(e, "wincmd =") },
               ],
             ]) }
-            { !state.webview.active && props.type === "normal" && <IconComponent color="gray-fg" font="" onClick={e => runCommand(e, "write")} /> }
+            { !state.webview.active && props.type === "normal" && <IconComponent color="gray-fg" font={uiIcons.save} onClick={e => runCommand(e, "write")} /> }
             { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
             { props.type === "external" && !state.hidden && (
               <>
@@ -335,7 +336,7 @@ export function EditorComponent(props: Props) {
                 ]) }
               </>
             ) }
-            <IconComponent color="gray-fg" font="" onClick={e => runCommand(e, "confirm quit")} />
+            <IconComponent color="gray-fg" font={uiIcons.close} onClick={e => runCommand(e, "confirm quit")} />
           </FlexComponent>
         </>
       )}
