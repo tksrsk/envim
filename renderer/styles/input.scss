@@ -1,108 +1,145 @@
+.theme-dark, .theme-light {
+  --form-surface: color-mix(in srgb, var(--color-bg) 94%, var(--color-fg));
+  --form-border: color-mix(in srgb, var(--color-bg) 72%, var(--color-fg));
+  --form-muted: color-mix(in srgb, var(--color-fg) 65%, var(--color-bg));
+  --form-accent: var(--color-blue);
+}
+
+.theme-dark {
+  --form-accent: #82aaff;
+  color-scheme: dark;
+}
+
+.theme-light {
+  color-scheme: light;
+}
+
 label {
   display: inline-block;
   margin: 4px;
 }
 
-input[type=text], input[type=number], textarea {
-  width: inherit;
-  margin: auto .2em;
-  padding: .2em;
-  color: inherit;
-  background: none;
-  border: none;
-  border-bottom: solid 2px var(--color-gray);
+label:has(> input[type=radio], > input[type=checkbox]) {
+  padding: .3em .5em;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  cursor: pointer;
 
-  &:focus {
-    border-color: var(--color-blue);
-  }
-
-  &:hover {
-    border-color: var(--color-blue);
-    filter: brightness(var(--brightness-light));
+  &:hover, &:has(:checked) {
+    background: var(--form-surface);
   }
 }
 
 input, textarea {
-  outline: none;
   resize: none;
+  outline: none;
+}
 
-  &[type=radio] {
-    margin: 0 12px;
-    width: 0;
+input[type=text], input[type=number], textarea {
+  width: inherit;
+  min-width: 0;
+  max-width: calc(100% - 8px);
+  margin: 4px;
+  padding: .45em .65em;
+  color: inherit;
+  background: var(--form-surface);
+  border: 1px solid var(--form-border);
+  border-radius: 6px;
 
-    &:before {
-      display: inline-block;
-      margin: -.5em 0 0 -.5em;
-      cursor: pointer;
-      content: "󰝦";
-      color: var(--color-fg);
-    }
-
-    &:checked:before {
-      content: "󰝥";
-      color: var(--color-blue);
-    }
-
-    &:hover:before {
-      color: var(--color-blue);
-      filter: brightness(var(--brightness-light));
-    }
+  &::placeholder, &:hover:not(:disabled) {
+    color: var(--form-muted);
   }
 
-  &[type=checkbox] {
-    margin: 0 12px;
-    width: 0;
-
-    &:before {
-      display: inline-block;
-      margin: -.5em 0 0 -.5em;
-      cursor: pointer;
-      content: "󰄱";
-      color: var(--color-fg);
-    }
-
-    &:checked:before {
-      content: "󰄲";
-      color: var(--color-blue);
-    }
-
-    &:hover:before {
-      color: var(--color-blue);
-      filter: brightness(var(--brightness-light));
-    }
+  &:focus {
+    border-color: var(--form-accent);
   }
+}
 
-  &[type=range] {
+input[type=radio], input[type=checkbox] {
+  appearance: auto;
+  accent-color: var(--form-accent);
+  width: 1em;
+  height: 1em;
+  margin: 0 .55em 0 0;
+  vertical-align: -.1em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+input[type=range] {
+  appearance: none;
+  background: transparent;
+  height: 1.5em;
+  margin: .25em 0;
+  vertical-align: middle;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
     appearance: none;
-    background: transparent;
-    vertical-align: middle;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border: 2px solid var(--color-bg);
+    border-radius: 50%;
+    background: var(--form-accent);
+    box-shadow: 0 0 0 1px var(--form-accent);
+  }
 
-    &::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 12px;
-      height: 12px;
-      margin-top: -5px;
-      border: none;
-      border-radius: 6px;
-      background: var(--color-gray);
+  &::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--form-border);
+  }
+}
 
-      &:hover {
-        background: var(--color-blue);
-        filter: brightness(var(--brightness-light));
-      }
-    }
+input:disabled, textarea:disabled, button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 
-    &::-webkit-slider-runnable-track {
-      width: 100%;
-      height: 2px;
-      border: none;
-      border-radius: 2px;
-      background: var(--color-fg);
-      cursor: pointer;
+label:has(> input[type=text], > input[type=number], > input[type=range], > textarea) {
+  display: flex;
+  flex-direction: column;
+  gap: .5em;
+  margin: 0 0 1em;
 
-      &:hover {
-        background: var(--color-blue);
-      }
-    }
+  > input, > textarea {
+    width: calc(100% - 8px);
+  }
+}
+
+label > span:has(> output) {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+
+  output {
+    color: var(--form-muted); font-variant-numeric: tabular-nums;
+  }
+}
+
+button {
+  margin: 4px;
+  padding: .65em 1.25em;
+  border: 1px solid var(--form-border);
+  border-radius: 7px;
+  background: var(--form-surface);
+  color: var(--color-fg);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--form-accent);
+  }
+}
+
+button[type=submit] {
+  background: var(--form-accent);
+  border-color: var(--form-accent);
+  color: var(--color-bg);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--form-accent) 85%, var(--color-fg));
   }
 }
