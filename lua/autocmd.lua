@@ -56,11 +56,6 @@ vim.api.nvim_create_autocmd({ "BufLeave" }, {
   end,
 })
 
-vim.api.nvim_create_autocmd({ "DirChanged" }, {
-  group = group,
-  callback = function() envim_connect(0, { "envim_dirchanged", vim.fn.getcwd() }) end,
-})
-
 vim.api.nvim_create_autocmd({ "OptionSet" }, {
   group = group,
   pattern = { "background" },

@@ -12,6 +12,7 @@ import { Autocmd } from "main/envim/autocmd";
 import { Clipboard } from "main/envim/clipboard";
 import { Function } from "main/envim/function";
 import { Grids } from "main/envim/grid";
+import { Messages } from "main/envim/message";
 import { Highlights } from "main/envim/highlight";
 import { McpGateway } from "main/mcp/gateway";
 
@@ -21,6 +22,7 @@ export class Workspace {
   public readonly emit: WorkspaceEmit;
   public readonly highlights: Highlights;
   public readonly grids: Grids;
+  public readonly messages: Messages;
   public readonly acp: Acp;
   public readonly autocmd: Autocmd;
   public readonly clipboard: Clipboard;
@@ -53,6 +55,7 @@ export class Workspace {
     emit.on("neovim:ui:resized", this.onNeovimUiResized);
 
     this.emit = emit;
+    this.messages = new Messages(this);
     this.app = new App(this);
     this.autocmd = new Autocmd(this);
     this.clipboard = new Clipboard(this);
@@ -127,7 +130,6 @@ export class Workspace {
 
   private onNeovimUiAttach = async (width: number, height: number, options: UiAttachOptions) => {
     await this.nvim.uiAttach(width, height, { ...{ ext_linegrid: true }, ...options });
-    await this.nvim.command("doautocmd envim DirChanged");
   }
 
   private onNeovimUiOption = async (name: string, value: boolean) => {

@@ -44,7 +44,6 @@ export function HistoryComponent(props: Props) {
   const { emit } = useWorkspace();
   const [ state, setState ] = React.useState<States>({ messages: [], theme: "dark", options, debug: "" });
   const bottom: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
-  const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
     emit.on("neovim:ui:messages:mode", onNeovimUiMessagesMode);
@@ -69,7 +68,7 @@ export function HistoryComponent(props: Props) {
   }, [state.debug]);
 
   React.useEffect(() => {
-    state.messages.length && bottom.current?.scrollIntoView({ behavior: "smooth" });
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [state.messages]);
 
   function onNeovimUiMessagesMode(message: IMessage) {
@@ -84,8 +83,15 @@ export function HistoryComponent(props: Props) {
     setState(state => ({ ...state, ruler: message.contents.length ? message : undefined }));
   }
 
-  function onNeovimUiMessagesHistory(messages: IMessage[]) {
-    setState(state => ({ ...state, messages: [ ...state.messages, ...messages ].slice(-1000) }));
+  function onNeovimUiMessagesHistory(messages: IMessage[], replace: boolean) {
+    setState(state => {
+      const history = replace ? [] : [...state.messages];
+      for (const message of messages) {
+        const last = message.append && history.pop();
+        history.push(last ? { ...message, contents: [...last.contents, ...message.contents] } : message);
+      }
+      return { ...state, messages: history.slice(-1000) };
+    });
   }
 
   React.useEffect(() => {
@@ -95,23 +101,14 @@ export function HistoryComponent(props: Props) {
   function onDebug(direction: "send" | "receive", event: string, ...args: any[]) {
     if (`${direction} ${event}`.search(state.debug) < 0) return;
 
-    onNeovimUiMessagesHistory([{ contents: [
+    const message: IMessage = { contents: [
       direction === "send" ? { hl: "color-yellow", content: `[ 󰕒${event} ]` } : { hl: "color-blue", content: `[ 󰇚 ${event} ]` },
-      { hl: "0", content: `\n${JSON.stringify(args, null, 2)}` }], kind: "debug" }
-    ]);
+      { hl: "0", content: `\n${JSON.stringify(args, null, 2)}` }], kind: "debug" };
+    onNeovimUiMessagesHistory([message], false);
   }
 
   function onClear() {
     setState(state => ({ ...state, messages: [] }));
-  }
-
-  function loadMessages() {
-    clearInterval(timer.current);
-    timer.current = +setInterval(() => emit.send("neovim:command", "messages"), 500);
-  }
-
-  function unloadMessages() {
-    clearInterval(timer.current);
   }
 
   function toggleTheme() {
@@ -133,7 +130,7 @@ export function HistoryComponent(props: Props) {
     } catch (e: any) {
       if (e instanceof Error) {
         const contents = [{ hl: "color-red", content: e.message }];
-        emit.share("neovim:ui:messages:show", [{ kind: "debug", contents }], true);
+        onNeovimUiMessagesHistory([{ kind: "debug", contents }], false);
       }
     }
   }
@@ -164,16 +161,11 @@ export function HistoryComponent(props: Props) {
       <FlexComponent overflow="visible" hover>
         <FlexComponent direction="column" position="absolute" rounded={[4, 4, 0, 0]} overflow="auto" style={styles.history} shadow>
           { state.messages.map((message, i) => <div key={i}><MessageComponent message={message} open={message.kind !== "debug"} /></div>) }
-          { state.options.ext_messages && (
-            <FlexComponent color="default" onMouseEnter={loadMessages} onMouseLeave={unloadMessages}>
-              <FlexComponent grow={1} />
-              <IconComponent color="lightblue-fg" font={uiIcons.refresh} text="Load more..." />
-              <FlexComponent grow={1} />
-              { state.messages.length === 0 ? null : <IconComponent color="red-fg" font={uiIcons.close} onClick={onClear} /> }
-            </FlexComponent>
-          ) }
           <div ref={bottom} />
         </FlexComponent>
+        { state.messages.length > 0 && (
+          <FlexComponent grow={1} horizontal="end" padding={[0, 2]}><IconComponent color="red-fg" font={uiIcons.close} onClick={onClear} /></FlexComponent>
+        ) }
       </FlexComponent>
     </FlexComponent>
   );

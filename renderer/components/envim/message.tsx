@@ -32,7 +32,7 @@ export function MessageComponent(props: Props) {
   const { highlights } = useWorkspace();
   const [state, setState] = React.useState<States>({ open: props.open });
   const { font } = notificates.filter(icon => icon.kinds.indexOf(props.message.kind) >= 0)[0] || { font: "󱈸" };
-  const defaultHl = props.message.contents[0].hl;
+  const defaultHl = props.message.contents[0]?.hl || "0";
   const defaultStyle = highlights.style(defaultHl);
 
   function onToggleOpen() {

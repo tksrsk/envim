@@ -76,7 +76,9 @@ export interface IBuffer {
 }
 
 export interface IMessage {
+  id?: number | string;
   kind: string;
+  append?: boolean;
   contents: { hl: string, content: string }[];
 }
 

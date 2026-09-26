@@ -27,7 +27,6 @@ export class App {
     switch (method) {
       case "redraw": return this.redraw(args);
       case "envim_clipboard": return this.workspace.clipboard.copy(args[0], args[1]);
-      case "envim_dirchanged": return this.workspace.autocmd.dirchanged(args[0]);
       case "envim_setbackground": return Emit.share("neovim:theme", args[0]);
       case "envim_openurl": return args.length && this.workspace.emit.share("browser:open", args[0], args[1] || "");
       case "envim_webview": return args.length === 3 && this.workspace.emit.share("browser:view", args[0], args[1], args[2]);
@@ -137,25 +136,28 @@ export class App {
 
         /** ext_messages **/
         case "msg_show":
-          this.msgShow(r);
+          r.forEach(r => this.workspace.messages.show(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
         break;
         case "msg_showmode":
-          r.forEach(r => this.msgShowmode(r[0]));
+          r.forEach(r => this.workspace.messages.status("mode", r[0]));
         break;
         case "msg_showcmd":
-          r.forEach(r => this.msgShowcmd(r[0]));
+          r.forEach(r => this.workspace.messages.status("command", r[0]));
         break;
         case "msg_ruler":
-          r.forEach(r => this.msgRuler(r[0]));
+          r.forEach(r => this.workspace.messages.status("ruler", r[0]));
         break;
         case "msg_clear":
-          this.msgClear();
+          this.workspace.messages.clear();
         break;
         case "msg_history_show":
-          this.msgHistoryShow(r[0][0]);
+          r.forEach(r => this.workspace.messages.showHistory(r[0]));
         break;
 
         /** default **/
+        case "chdir":
+          r.forEach(r => this.chdir(r[0]));
+        break;
         case "mode_info_set":
           r.forEach(r => this.modeInfoSet(r[1]));
         break;
@@ -372,49 +374,9 @@ export class App {
     this.workspace.emit.send("neovim:ui:popupmenu:hide");
   }
 
-  private msgShow(messages: [string, [string, string][], boolean][]) {
-    const replace = messages.some(message => message[2]);
-    const entries = messages
-      .map(message => this.convertMessage(message[0], message[1]))
-      .filter(({ contents }) => contents.length);
-
-    this.workspace.emit.update("neovim:ui:messages:show", true, entries, replace);
-  }
-
-  private msgClear() {
-    this.workspace.emit.update("neovim:ui:messages:show", true, [], true);
-  }
-
-  private msgShowmode(contents: [string, string][]) {
-    this.workspace.emit.update("neovim:ui:messages:mode", true, this.convertMessage("mode", contents));
-  }
-
-  private msgShowcmd(contents: [string, string][]) {
-    this.workspace.emit.update("neovim:ui:messages:command", true, this.convertMessage("command", contents));
-  }
-
-  private msgRuler(contents: [string, string][]) {
-    this.workspace.emit.update("neovim:ui:messages:ruler", true, this.convertMessage("ruler", contents));
-  }
-
-  private msgHistoryShow(entries: [string, [string, string][]][]) {
-    const history = entries.map(
-      ([kind, contents]) => this.convertMessage(kind, contents)
-    ).filter(({ contents }) => contents.length);
-
-    if (history.length) {
-      this.workspace.nvim.command("messages clear");
-      this.workspace.emit.send("neovim:ui:messages:history", history);
-    }
-  }
-
-  private convertMessage(kind: string, contents: [string, string][]) {
-    return {
-      kind,
-      contents: contents
-        .map(([hl, content], i) => ({ hl, content: i ? content : content.replace(/^\s*\n/, "") }))
-        .filter(({ content }) => content.length)
-    };
+  private chdir(cwd: string) {
+    this.workspace.emit.share("neovim:cwd", cwd);
+    this.workspace.emit.update("neovim:cwd", false, cwd);
   }
 
   private modeInfoSet(modes: IMode[]) {
@@ -443,6 +405,7 @@ export class App {
   }
 
   private flush() {
+    this.workspace.messages.flush();
     this.workspace.grids.flush();
   }
 }

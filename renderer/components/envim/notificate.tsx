@@ -38,28 +38,8 @@ export function NotificateComponent() {
     };
   }, []);
 
-  function onNeovimUiMessagesShow(messages: IMessage[], replace: boolean) {
-    setState(state => {
-      replace && state.messages.splice(0);
-
-      return {
-        ...state,
-        messages: [ ...state.messages, ...messages ].reduce(
-          (all: IMessage[], curr: IMessage) => {
-            const last = all.pop();
-
-            if (last && last.kind === curr.kind) {
-              curr.contents = [ ...last.contents, { hl: "0", content: "\n" }, ...curr.contents ];
-            } else if (last) {
-              all.push(last);
-            }
-
-            return [ ...all, curr ];
-          },
-          []
-        )
-      };
-    });
+  function onNeovimUiMessagesShow(messages: IMessage[]) {
+    setState(state => ({ ...state, messages }));
   }
 
   React.useEffect(() => {
