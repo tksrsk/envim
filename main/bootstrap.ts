@@ -38,6 +38,7 @@ export class Bootstrap {
     if (Bootstrap.win) return;
 
     Bootstrap.win = new Electron.BrowserWindow({
+      icon: join(Electron.app.getAppPath(), "assets/envim-icon.png"),
       transparent: true,
       resizable: true,
       hasShadow: false,

@@ -5,6 +5,8 @@ import { ISetting } from "common/interface";
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 
+const envimIconUrl = new URL("../../assets/envim-icon.png", import.meta.url).href;
+
 interface Props {
   width: number;
   height: number;
@@ -27,12 +29,10 @@ const styles: { [k: string]: React.CSSProperties } = {
     zIndex: -1,
   },
   logo: {
-    fontSize: "2em",
-    lineHeight: "1em",
-    margin: "0 6px",
-  },
-  icon: {
-    margin: "0 6px",
+    width: 96,
+    height: 96,
+    objectFit: "contain",
+    flexShrink: 0,
   },
   setting: {
     padding: "1rem",
@@ -151,11 +151,7 @@ export function SettingComponent (props: Props) {
     <form className="color-inverse-fg" style={{ ...props, ...styles.scope }} onSubmit={onSubmit}>
       <div className="color-default" style={getStyle()}></div>
       <h1 className="bold">Welcome To Envim!</h1>
-      <div>
-        <i className="color-green-fg" style={styles.logo}></i>
-        <i className="color-inverse-fg" style={styles.icon}>󰅖</i>
-        <i className="color-lightblue-fg" style={styles.logo}></i>
-      </div>
+      <img src={envimIconUrl} alt="Envim logo" width={96} height={96} style={styles.logo} draggable={false} />
 
       <div style={styles.setting}>
         <h3 className="bold">Neovim path</h3>

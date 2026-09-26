@@ -1,5 +1,9 @@
 # Envim
 
+<p align="center">
+  <img src="assets/envim-icon.png" alt="Envim logo" width="160" height="160" />
+</p>
+
 Neovim frontend writen by electron.
 
 ## Requirements

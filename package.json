@@ -19,15 +19,17 @@
   "license": "CC0-1.0",
   "build": {
     "appId": "local.nvim.envim",
+    "icon": "assets/envim-icon.png",
     "win": {
-      "signAndEditExecutable": false
+      "signExecutable": false
     },
     "directories": {
       "output": "release"
     },
     "files": [
       "out",
-      "lua"
+      "lua",
+      "assets/envim-icon.png"
     ],
     "npmRebuild": false
   },
