@@ -171,18 +171,18 @@ export class Acp {
     return (this.connection.agent.request(method, params)).catch(err => {
       const error = err instanceof Error ? err.message : String(err);
       const autherror = this.state.initialize?.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
-      const status = autherror ? "auth_required" : "connected";
+      const status = autherror || this.state.agent?.auth ? "authenticating" : "connected";
 
       this.setState({ ...this.state, status, error });
     });
   }
 
   private onAcpAgentStart = async (agent: IAcpRegistryAgent) => {
-    this.setState({ status: "connecting", agent });
+    this.setState({ status: agent.auth ? "authenticating" : "connecting", agent });
 
-    const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent.package, agent.name, agent.version]);
+    const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent]);
 
-    if (result == "executed") {
+    if (result === "executed" && !agent.auth) {
       if (!this.connection) {
         const stream = this.createStream();
 
@@ -209,8 +209,8 @@ export class Acp {
         this.setState({ ...this.state, initialize, status: "connected" });
         this.listSession();
       });
-    } else {
-      this.setState({ ...this.state, status: result === "initialized" ? "connected" : "disconnected" });
+    } else if (result !== "executed") {
+      this.setState(result === "initialized" ? { ...this.state, status: "connected" } : { status: "disconnected" });
     }
   }
 
@@ -223,18 +223,26 @@ export class Acp {
   private onAcpAuthAuthenticate = (methodId: string) => {
     if (!this.connection) return;
 
-    this.setState({ ...this.state, status: "connecting" });
-    this.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(() => {
-      this.setState({ ...this.state, status: "connected" });
-      this.listSession();
-    });
+    const agent = this.state.agent!;
+    const selectedAgent = { ...agent, auth: this.state.initialize?.authMethods?.find(method => method.id === methodId) };
+    if ((selectedAgent.auth as { type?: string } | undefined)?.type === "terminal") {
+      this.workspace.emit.share("neovim:function", "EnvimAcpStop", []).then(() => {
+        this.onAcpAgentStart(selectedAgent);
+      });
+    } else {
+      this.setState({ ...this.state, agent: selectedAgent });
+      this.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(response => {
+        this.setState({ ...this.state, agent, status: response ? "connected" : "authenticating" });
+        if (response) this.listSession();
+      });
+    }
   }
 
   private onAcpAuthLogout = () => {
     if (!this.connection) return;
 
     this.callAgent(AcpSDK.methods.agent.logout, {}).then(() => {
-      this.setState({ ...this.state, status: "auth_required" });
+      this.setState({ ...this.state, status: "authenticating" });
     });
   }
 
@@ -278,12 +286,17 @@ export class Acp {
     this.setState({ ...this.state, error });
   }
 
-  private onAcpExited = () => {
+  private onAcpExited = (code: number) => {
+    if ((this.state.agent?.auth as { type?: string } | undefined)?.type === "terminal" && code === 0) {
+      const { auth, ...agent } = this.state.agent!;
+      void this.onAcpAgentStart(agent);
+      return;
+    }
     this.cancelAllPendingRequests();
     this.tool = {};
     this.sessions = {};
 
-    this.setState({ status: "disconnected" });
+    this.setState({ status: "disconnected", error: code !== 0 ? `Exited code: ${code}` : undefined });
     this.notifySessionUpdate();
   }
 

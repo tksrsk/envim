@@ -129,7 +129,7 @@ export interface IAcpSession {
 }
 
 export interface IAcpStatus {
-  status: "disconnected" | "connecting" | "connected" | "processing" | "auth_required";
+  status: "disconnected" | "connecting" | "connected" | "processing" | "authenticating";
   sessionId?: string;
   error?: string;
   initialize?: AcpSDK.InitializeResponse;
@@ -138,6 +138,7 @@ export interface IAcpStatus {
 }
 
 export interface IAcpRegistryAgent {
+  auth?: AcpSDK.AuthMethod;
   name: string;
   version?: string;
   description?: string;

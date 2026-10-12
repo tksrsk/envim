@@ -68,7 +68,9 @@ local function envim_acp_download(pkg, name, version)
   return vim.list_extend({ executable }, vim.list_slice(command, 2))
 end
 
-_G.envim_acp_start = function(pkg, name, version)
+_G.envim_acp_start = function(agent)
+  local pkg, auth = agent.package, agent.auth or {}
+
   if _G.envim_acp then
     return "initialized"
   end
@@ -77,31 +79,45 @@ _G.envim_acp_start = function(pkg, name, version)
     return nil
   end
 
-  local command = pkg.archive and envim_acp_download(pkg, name, version) or pkg.command
+  local command = pkg.archive and envim_acp_download(pkg, agent.name, agent.version) or pkg.command
   if not command then
     return nil
   end
 
-  local success, result = pcall(vim.fn.jobstart, command, {
-    env = pkg.env,
-    on_stdout = function(_, data)
+  vim.list_extend(command, auth.args or {})
+  local opts = {
+    env = (pkg.env or auth.env) and vim.tbl_extend("force", pkg.env or {}, auth.env or {}),
+    term = agent.auth ~= nil,
+    on_exit = function(_, code)
+      _G.envim_acp = nil
+      envim_connect(0, { "envim_acp_exited", code })
+    end
+  }
+  if not agent.auth then
+    opts.on_stdout = function(_, data)
       for _, line in ipairs(data) do
         if line and line ~= "" then
           envim_connect(0, { "envim_acp_stdout", line })
         end
       end
-    end,
-    on_exit = function()
-      _G.envim_acp = nil
-      envim_connect(0, { "envim_acp_exited" })
     end
-  })
+  end
+
+  if agent.auth then vim.cmd.tabnew() end
+
+  local success, result = pcall(vim.fn.jobstart, command, opts)
 
   if success and result > 0 then
     _G.envim_acp = result
+    if agent.auth then vim.cmd.startinsert() end
     return "executed"
   else
     _G.envim_acp = nil
+    if agent.auth then
+      local buffer = vim.api.nvim_get_current_buf()
+      vim.cmd.tabclose()
+      pcall(vim.api.nvim_buf_delete, buffer, { force = true })
+    end
     return nil
   end
 end
@@ -109,13 +125,9 @@ end
 _G.envim_acp_stop = function()
   if _G.envim_acp then
     vim.fn.jobstop(_G.envim_acp)
-
-    vim.defer_fn(function()
-      pcall(vim.fn.jobstop, _G.envim_acp)
-
-      _G.envim_acp = nil
-    end, 5000)
+    return vim.fn.jobwait({ _G.envim_acp })[1]
   end
+  return 0
 end
 
 _G.envim_acp_send = function(message)
@@ -168,8 +180,8 @@ vim.cmd([[
     return v:lua.envim_acp_binary_support()
   endfunction
 
-  function! EnvimAcpStart(package, name, version)
-    return v:lua.envim_acp_start(a:package, a:name, a:version)
+  function! EnvimAcpStart(agent)
+    return v:lua.envim_acp_start(a:agent)
   endfunction
 
   function! EnvimAcpStop()

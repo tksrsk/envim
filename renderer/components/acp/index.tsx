@@ -489,8 +489,8 @@ export function AcpComponent() {
 
   function checkAcpStatus(type: "connected" | "processing"): boolean {
     const status = type === "connected"
-      ? ["connected", "processing", "auth_required"]
-      : ["connecting", "processing", "auth_required"];
+      ? ["connected", "processing"]
+      : ["connecting", "processing", "authenticating"];
 
     return status.includes(state.status.status);
   }
@@ -547,22 +547,22 @@ export function AcpComponent() {
     <FlexComponent color="default" animate="fade-in" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
       <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("ui:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
-        {state.status.sessionId ? (
-          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
-            <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
-
-            <div ref={scroll} />
-          </FlexComponent>
-        ) : state.status.status === "auth_required" && state.status.initialize?.authMethods ? (
+        {state.status.status === "authenticating" ? (
           <FlexComponent color="default" direction="column" grow={1} vertical="center" horizontal="center" padding={[16]}>
-            <span style={{ marginBottom: 8 }}>Authentication Required</span>
-            {state.status.initialize?.authMethods?.map(method => (
+            <span style={{ marginBottom: 8 }}>Authentication in progress</span>
+            {!state.status.agent?.auth && state.status.initialize?.authMethods?.map(method => (
               <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
                 onClick={() => emit.send("acp:auth:authenticate", method.id)}
               >
                 <IconComponent font="󰌆" text={method.name} />
               </FlexComponent>
             ))}
+          </FlexComponent>
+        ) : state.status.sessionId ? (
+          <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
+            <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
+
+            <div ref={scroll} />
           </FlexComponent>
         ) : (
           <FlexComponent color="default" horizontal="center" vertical="center" grow={1}>
@@ -634,7 +634,7 @@ export function AcpComponent() {
           {checkAcpStatus("connected") && <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpAgentStop} />}
           {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
           {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "prompt" } }))} />}
-          {!checkAcpStatus("connected") && (
+          {!checkAcpStatus("connected") && !checkAcpStatus("processing") && (
             <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => setState(state => ({ ...state, mode: { main: "input", sub: "package" } }))} />}>
               {Object.entries({ ...state.registry, custom: Setting.acp.customs }).map(renderRegistryProvider)}
             </MenuComponent>
