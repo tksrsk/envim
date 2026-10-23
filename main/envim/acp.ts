@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import * as AcpSDK from "@agentclientprotocol/sdk";
 
-import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
 
 import { Mcp } from "main/mcp";
 import { Workspace } from "main/envim/workspace";
@@ -16,7 +16,7 @@ export class Acp {
   private connection: AcpSDK.ClientConnection | null = null;
   private sessions: { [key: string]: IAcpSession } = {};
   private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
-  private terminal: { [key: string]: { promise: Promise<AcpSDK.WaitForTerminalExitResponse>, output: string, truncated: boolean, pid: number, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
+  private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
   private permission: { [key: string]: (response: AcpSDK.RequestPermissionResponse) => void } = {};
   private elicitation: { [key: string]: { request: IElicitationRequest, resolve: (response: AcpSDK.CreateElicitationResponse) => void } } = {};
   private lastMessageId: { [k: string]: string } = {};
@@ -130,7 +130,7 @@ export class Acp {
   private processToolUpdate(sessionId: string, toolCall: AcpSDK.ToolCallUpdate) {
     const prev = this.tool[toolCall.toolCallId] || { _meta: {} };
 
-    toolCall = { ...prev, ...toolCall, _meta: { ...prev._meta, ...(toolCall._meta || {}) } };
+    toolCall = this.withTerminalOutput({ ...prev, ...toolCall, _meta: { ...prev._meta, ...(toolCall._meta || {}) } });
 
     if (!toolCall._meta!.start && toolCall.status !== "pending") {
       toolCall._meta!.start = Date.now();
@@ -151,6 +151,37 @@ export class Acp {
     if (toolCall.status === "completed" || toolCall.status === "failed") {
       delete(this.tool[toolCall.toolCallId]);
     }
+  }
+
+  private withTerminalOutput(toolCall: AcpSDK.ToolCallUpdate): AcpSDK.ToolCallUpdate {
+    const terminals = (toolCall.content || [])
+      .flatMap(content => content.type === "terminal" && this.terminal[content.terminalId] ? [content.terminalId] : [])
+      .reduce((terminals, terminalId) => {
+        const { output, truncated, exitStatus } = this.terminal[terminalId];
+        const display = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+
+        return { ...terminals, [terminalId]: { output: display, truncated, exitStatus } };
+      }, {} as Record<string, IAcpTerminalOutput>);
+
+    if (!Object.keys(terminals).length) return toolCall;
+
+    return { ...toolCall, _meta: { ...toolCall._meta, terminals: { ...(toolCall._meta?.terminals as object | undefined), ...terminals } } };
+  }
+
+  private notifyTerminalOutput(terminalId: string) {
+    const terminal = this.terminal[terminalId];
+
+    if (!terminal) return;
+
+    clearTimeout(terminal.timer);
+    terminal.timer = undefined;
+
+    Object.values(this.tool)
+      .filter(toolCall => toolCall.content?.some(content => content.type === "terminal" && content.terminalId === terminalId))
+      .forEach(toolCall => {
+        this.tool[toolCall.toolCallId] = this.withTerminalOutput(toolCall);
+        this.addMessage({ sessionId: terminal.sessionId, update: { sessionUpdate: "tool_call_update", ...this.tool[toolCall.toolCallId] } });
+      });
   }
 
   private followToolCall(toolCall: AcpSDK.ToolCallUpdate) {
@@ -507,9 +538,11 @@ export class Acp {
   private onAcpTerminalExit = (data: { terminalId: string; exitCode: number; signal: string }) => {
     const terminal = this.terminal[data.terminalId];
 
-    if (terminal?.resolve) {
+    if (terminal) {
       terminal.pid = 0;
-      terminal.resolve(data);
+      terminal.exitStatus = { exitCode: data.exitCode ?? null, signal: data.signal ?? null };
+      terminal.resolve?.(terminal.exitStatus);
+      this.notifyTerminalOutput(data.terminalId);
     }
   }
 
@@ -517,7 +550,19 @@ export class Acp {
     const terminal = this.terminal[data.terminalId];
 
     if (terminal) {
-      terminal.output = [terminal.output, data.output].filter(output => output).join("\n");
+      terminal.output += data.output;
+
+      if (terminal.outputByteLimit != null && Buffer.byteLength(terminal.output) > terminal.outputByteLimit) {
+        const bytes = Buffer.from(terminal.output);
+        let start = bytes.length - terminal.outputByteLimit;
+
+        while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+
+        terminal.output = bytes.subarray(start).toString();
+        terminal.truncated = true;
+      }
+
+      terminal.timer ??= setTimeout(() => this.notifyTerminalOutput(data.terminalId), 100);
     }
   }
 
@@ -660,51 +705,63 @@ export class Acp {
   }
 
   private async onCreateTerminal(params: AcpSDK.CreateTerminalRequest): Promise<AcpSDK.CreateTerminalResponse> {
-    const terminalId = `term__${Date.now()}`;
+    const terminalId = `term_${randomBytes(8).toString("hex")}`;
     const command = [params.command, ...(params.args || [])];
     const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
     const opts = { cwd: params.cwd || undefined, env };
 
+    this.terminal[terminalId] = {
+      sessionId: params.sessionId,
+      promise: new Promise<AcpSDK.WaitForTerminalExitResponse>((resolve) => this.terminal[terminalId].resolve = resolve),
+      output: "",
+      truncated: false,
+      pid: 0,
+      outputByteLimit: params.outputByteLimit,
+    };
+
     const pid = await this.workspace.emit.share("neovim:function", "EnvimAcpTerminalStart", [terminalId, command, opts]) as number | null;
 
-    if (pid) {
-      this.terminal[terminalId] = {
-        promise: new Promise<AcpSDK.WaitForTerminalExitResponse>((resolve) => this.terminal[terminalId].resolve = resolve),
-        output: "",
-        truncated: false,
-        pid,
-      };
+    if (!pid || pid < 0) {
+      delete(this.terminal[terminalId]);
+      throw AcpSDK.RequestError.internalError(undefined, `Failed to start command: ${command.join(" ")}`);
     }
+
+    this.terminal[terminalId].pid = pid;
 
     return { terminalId };
   }
 
-  private async onAcpTerminalOutputRequest(params: AcpSDK.TerminalOutputRequest): Promise<AcpSDK.TerminalOutputResponse> {
-    const terminal = this.terminal[params.terminalId]!;
+  private getTerminal(terminalId: string) {
+    const terminal = this.terminal[terminalId];
 
-    return {
-      output: terminal.output,
-      truncated: terminal.truncated,
-      exitStatus: terminal.pid ? undefined : { exitCode: 0 },
-    };
+    if (!terminal) throw AcpSDK.RequestError.resourceNotFound(terminalId);
+
+    return terminal;
+  }
+
+  private async onAcpTerminalOutputRequest(params: AcpSDK.TerminalOutputRequest): Promise<AcpSDK.TerminalOutputResponse> {
+    const { output, truncated, exitStatus } = this.getTerminal(params.terminalId);
+
+    return { output, truncated, exitStatus };
   }
 
   private async onWaitForTerminalExit(params: AcpSDK.WaitForTerminalExitRequest): Promise<AcpSDK.WaitForTerminalExitResponse> {
-    return this.terminal[params.terminalId].promise;
+    return this.getTerminal(params.terminalId).promise;
   }
 
   private async onKillTerminal(params: AcpSDK.KillTerminalRequest): Promise<AcpSDK.KillTerminalResponse> {
-    const { pid } = this.terminal[params.terminalId];
+    const { pid } = this.getTerminal(params.terminalId);
 
-    this.workspace.emit.share("neovim:function", "jobstop", [pid]);
+    pid && await this.workspace.emit.share("neovim:function", "jobstop", [pid]);
 
     return {};
   }
 
   private async onReleaseTerminal(params: AcpSDK.ReleaseTerminalRequest): Promise<AcpSDK.ReleaseTerminalResponse> {
-    const { pid } = this.terminal[params.terminalId];
+    const { pid } = this.getTerminal(params.terminalId);
 
-    await this.workspace.emit.share("neovim:function", "jobstop", [pid]);
+    pid && await this.workspace.emit.share("neovim:function", "jobstop", [pid]);
+    this.notifyTerminalOutput(params.terminalId);
     delete(this.terminal[params.terminalId]);
 
     return {};

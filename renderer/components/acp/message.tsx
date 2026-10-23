@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
 import { diffLines } from "diff";
 
-import { IPermissionRequest, IElicitationRequest } from "common/interface";
+import { IPermissionRequest, IElicitationRequest, IAcpTerminalOutput } from "common/interface";
 
 import { uiIcons } from "renderer/utils/icons";
 
@@ -94,6 +94,32 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     );
   }
 
+  function renderTerminal(terminal?: IAcpTerminalOutput) {
+    if (!terminal) return null;
+
+    const output = terminal.output.replace(/\n$/, "");
+    const maxRun = Math.max(0, ...(output.match(/`+/g) || []).map(m => m.length));
+    const fence = "`".repeat(Math.max(3, maxRun + 1));
+    const { exitCode, signal } = terminal.exitStatus || {};
+    const failed = !!signal || (exitCode !== undefined && exitCode !== null && exitCode !== 0);
+
+    return (
+      <>
+        <FlexComponent>
+          {terminal.truncated && <span className="color-gray-fg" style={{padding: "0 2px"}}>(truncated)</span>}
+          {failed && <span className="color-red-fg" style={{padding: "0 2px"}}>{signal ? `signal ${signal}` : `exit ${exitCode}`}</span>}
+        </FlexComponent>
+        {output && (
+          <div className="selectable">
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
+              {`${fence}\n${output}\n${fence}`}
+            </Markdown>
+          </div>
+        )}
+      </>
+    );
+  }
+
   function renderToolCallContent(content: AcpSDK.ToolCallContent) {
     switch (content.type) {
       case "content":
@@ -101,6 +127,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
       case "diff":
         return renderDiffLines(content.path, content.oldText || "", content.newText || "") ;
       case "terminal":
+        return renderTerminal(((message.update._meta?.terminals || {}) as Record<string, IAcpTerminalOutput>)[content.terminalId]);
       default:
         return null;
     }

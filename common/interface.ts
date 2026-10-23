@@ -104,6 +104,12 @@ export interface IPermissionRequest {
   options: AcpSDK.PermissionOption[];
 }
 
+export interface IAcpTerminalOutput {
+  output: string;
+  truncated: boolean;
+  exitStatus?: AcpSDK.TerminalExitStatus;
+}
+
 export interface IElicitationRequest {
   requestId: string;
   params: Extract<AcpSDK.CreateElicitationRequest, { mode: "form" | "url" }>;
