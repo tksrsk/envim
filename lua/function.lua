@@ -47,6 +47,29 @@ _G.envim_input = (function ()
   end
 end)()
 
+local open_ns = vim.api.nvim_create_namespace("envim_open")
+
+_G.envim_open_file = function (uri)
+  local line = tonumber(uri:match("#L(%d+)$"))
+
+  vim.cmd.buffer(vim.fn.bufadd(vim.uri_to_fname(uri)))
+  vim.bo.buflisted = true
+
+  if line and line > 0 then
+    local buf = vim.api.nvim_get_current_buf()
+
+    vim.api.nvim_win_set_cursor(0, { math.min(line, vim.api.nvim_buf_line_count(buf)), 0 })
+    vim.cmd("normal! zz")
+    vim.api.nvim_buf_clear_namespace(buf, open_ns, 0, -1)
+    vim.api.nvim_buf_set_extmark(buf, open_ns, vim.fn.line(".") - 1, 0, { line_hl_group = "Visual" })
+    vim.defer_fn(function()
+      if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_clear_namespace(buf, open_ns, 0, -1)
+      end
+    end, 1500)
+  end
+end
+
 vim.cmd([[
   function! EnvimConnect(sync, ...)
     return v:lua.envim_connect(a:sync, a:000)
@@ -54,6 +77,10 @@ vim.cmd([[
 
   function! EnvimInput(prompt, ...)
     return v:lua.envim_input(a:prompt, get(a:, 1, v:false), get(a:, 2, v:false))
+  endfunction
+
+  function! EnvimOpenFile(uri)
+    return v:lua.envim_open_file(a:uri)
   endfunction
 
   function! EnvimReadBlob(path)

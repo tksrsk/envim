@@ -263,6 +263,10 @@ export function AcpComponent() {
     emit.send("acp:auth:logout");
   }
 
+  function onAcpFollowToggle() {
+    emit.send("acp:follow:toggle");
+  }
+
   function onAcpSessionCreate() {
     emit.send("acp:session:create");
   }
@@ -649,6 +653,7 @@ export function AcpComponent() {
             ))}
           </MenuComponent>
           <div className="space" />
+          {checkAcpStatus("connected") && <IconComponent font={state.status.follow !== undefined ? "󰈈" : "󰈉"} color={state.status.follow !== undefined ? "yellow-fg" : "gray-fg"} onClick={onAcpFollowToggle} />}
           {state.session && <IconComponent font={uiIcons.search} color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
           {(checkAcpStatus("connected")) && (
             <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>

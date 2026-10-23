@@ -135,6 +135,7 @@ export interface IAcpStatus {
   initialize?: AcpSDK.InitializeResponse;
   agent?: IAcpRegistryAgent;
   elicitation?: IElicitationRequest;
+  follow?: string;
 }
 
 export interface IAcpRegistryAgent {

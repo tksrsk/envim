@@ -59,11 +59,11 @@ export class Bootstrap {
     Bootstrap.win.once("ready-to-show", () => Emit.share("neovim:theme"));
     Bootstrap.win.webContents.on("did-attach-webview", (_, webContents) => new Browser(webContents));
     Bootstrap.win.webContents.on("will-navigate", (e, url) => {
-      const { protocol, pathname } = new URL(url);
+      const { protocol } = new URL(url);
 
       e.preventDefault();
 
-      if (["file:"].includes(protocol)) Emit.share("neovim:command", `edit ${pathname}`);
+      if (["file:"].includes(protocol)) Emit.share("neovim:function", "EnvimOpenFile", [url]);
       if (["http:", "https:"].includes(protocol)) Emit.share("browser:open", url);
     });
     Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences) => {

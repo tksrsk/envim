@@ -31,6 +31,7 @@ export class Acp {
     this.workspace.emit.on("acp:elicitation:response", this.onAcpElicitationResponse);
     this.workspace.emit.on("acp:error", this.onAcpError);
     this.workspace.emit.on("acp:exited", this.onAcpExited);
+    this.workspace.emit.on("acp:follow:toggle", this.onAcpFollowToggle);
     this.workspace.emit.on("acp:permission:response", this.onAcpPermissionResponse);
     this.workspace.emit.on("acp:prompt:cancel", this.onAcpPromptCancel);
     this.workspace.emit.on("acp:prompt:send", this.onAcpPromptSend);
@@ -140,6 +141,8 @@ export class Acp {
 
     this.tool[toolCall.toolCallId] = toolCall;
 
+    this.followToolCall(toolCall);
+
     this.addMessage({
       sessionId,
       update: { sessionUpdate: "tool_call_update", ...toolCall }
@@ -148,6 +151,16 @@ export class Acp {
     if (toolCall.status === "completed" || toolCall.status === "failed") {
       delete(this.tool[toolCall.toolCallId]);
     }
+  }
+
+  private followToolCall(toolCall: AcpSDK.ToolCallUpdate) {
+    const location = toolCall.locations?.[0];
+    const uri = location && `file://${location.path}#L${location.line}`;
+
+    if (this.state.follow === undefined || !uri || uri === this.state.follow || ["completed", "failed"].includes(toolCall.status || "")) return;
+
+    this.state.follow = uri;
+    this.workspace.emit.share("neovim:function", "EnvimOpenFile", [uri]);
   }
 
   private onToolCallUpdate(params: AcpSDK.SessionNotification): boolean {
@@ -298,6 +311,10 @@ export class Acp {
 
     this.setState({ status: "disconnected", error: code !== 0 ? `Exited code: ${code}` : undefined });
     this.notifySessionUpdate();
+  }
+
+  private onAcpFollowToggle = () => {
+    this.setState({ ...this.state, follow: this.state.follow === undefined ? "" : undefined });
   }
 
   private onAcpPermissionResponse = (requestId: string, optionId: string): void => {
