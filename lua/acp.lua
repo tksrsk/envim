@@ -146,6 +146,75 @@ _G.envim_acp_add_file = function(file)
   end
 end
 
+local acp_read_ticks = {}
+
+local function acp_find_buf(file)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_get_name(buf) == file then
+      return buf
+    end
+  end
+end
+
+_G.envim_acp_read_text_file = function(path, line, limit)
+  local file = vim.fn.fnamemodify(path, ":p")
+  local start = math.max(line - 1, 0)
+  local buf = acp_find_buf(file)
+
+  if buf then
+    acp_read_ticks[file] = { buf = buf, tick = vim.api.nvim_buf_get_changedtick(buf) }
+    return vim.api.nvim_buf_get_lines(buf, start, limit < 0 and -1 or start + limit, false)
+  end
+
+  if vim.fn.filereadable(file) == 0 then
+    return nil
+  end
+
+  local lines = limit < 0 and vim.fn.readfile(file) or vim.fn.readfile(file, "", start + limit)
+
+  return vim.list_slice(lines, start + 1)
+end
+
+_G.envim_acp_write_text_file = function(path, content)
+  local file = vim.fn.fnamemodify(path, ":p")
+  local lines = vim.split(content, "\n", { plain = true })
+  local eol = #lines > 1 and lines[#lines] == ""
+
+  if eol then
+    table.remove(lines)
+  end
+
+  local buf = acp_find_buf(file)
+
+  if buf then
+    local read = acp_read_ticks[file]
+    local changed = vim.bo[buf].modified
+
+    if read and read.buf == buf then
+      changed = read.tick ~= vim.api.nvim_buf_get_changedtick(buf)
+    end
+
+    if changed then
+      return "The file has been modified in the editor since it was last read. Read it again before writing."
+    end
+
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+    local success, error = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent noautocmd write") end)
+
+    acp_read_ticks[file] = { buf = buf, tick = vim.api.nvim_buf_get_changedtick(buf) }
+
+    return not success and tostring(error) or nil
+  end
+
+  local success, result = pcall(function()
+    vim.fn.mkdir(vim.fn.fnamemodify(file, ":h"), "p")
+    return vim.fn.writefile(lines, file, eol and "" or "b")
+  end)
+
+  return not (success and result == 0) and ("Failed to write file: " .. path) or nil
+end
+
 _G.envim_acp_terminal_start = function(terminalId, command, opts)
   opts.on_stdout = function(_, data)
     if data then
@@ -194,6 +263,14 @@ vim.cmd([[
 
   function! EnvimAcpAddFile(file)
     return v:lua.envim_acp_add_file(a:file)
+  endfunction
+
+  function! EnvimAcpReadTextFile(path, line, limit)
+    return v:lua.envim_acp_read_text_file(a:path, a:line, a:limit)
+  endfunction
+
+  function! EnvimAcpWriteTextFile(path, content)
+    return v:lua.envim_acp_write_text_file(a:path, a:content)
   endfunction
 
   function! EnvimAcpTerminalStart(terminalId, command, opts)

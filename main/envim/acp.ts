@@ -693,13 +693,17 @@ export class Acp {
   }
 
   private async onReadTextFile(params: AcpSDK.ReadTextFileRequest): Promise<AcpSDK.ReadTextFileResponse> {
-    const lines = await this.workspace.emit.share("neovim:function", "readfile", [params.path]);
+    const lines = await this.workspace.emit.share("neovim:function", "EnvimAcpReadTextFile", [params.path, params.line ?? 1, params.limit ?? -1]);
 
-    return { content: Array.isArray(lines) ? lines.join("\n") : "" };
+    if (!Array.isArray(lines)) throw AcpSDK.RequestError.resourceNotFound(`file://${params.path}`);
+
+    return { content: lines.join("\n") };
   }
 
   private async onWriteTextFile(params: AcpSDK.WriteTextFileRequest): Promise<AcpSDK.WriteTextFileResponse> {
-    await this.workspace.emit.share("neovim:function", "writefile", [params.content.split("\n"), params.path]);
+    const error = await this.workspace.emit.share("neovim:function", "EnvimAcpWriteTextFile", [params.path, params.content]);
+
+    if (typeof error === "string") throw AcpSDK.RequestError.internalError(undefined, error);
 
     return {};
   }
