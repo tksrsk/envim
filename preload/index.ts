@@ -1,12 +1,13 @@
 import * as Electron from "electron";
-import { EventEmitter } from "events";
 
-const emit = new EventEmitter;
+const listeners = new Map<string, ((...args: any[]) => void)[]>();
 const pending = new Map<number, string>();
 const paused = new Map<number, string>();
 
 const on = (event: string, callback: (...args: any[]) => void) => {
-  emit.on(event, callback);
+  const callbacks = listeners.get(event) || [];
+  callbacks.push(callback);
+  listeners.set(event, callbacks);
   Electron.ipcRenderer.on(event, (_: Electron.IpcRendererEvent, ...args: any[]) => {
     share(event, ...args);
     share("debug", "receive", event, ...args);
@@ -14,7 +15,9 @@ const on = (event: string, callback: (...args: any[]) => void) => {
 };
 
 const share = (event: string, ...args: any[]) => {
-  emit.emit(event, ...args);
+  for (const callback of [...(listeners.get(event) || [])]) {
+    callback(...args);
+  }
 };
 
 const invoke = async (event: string, ...args: any[]) => {
