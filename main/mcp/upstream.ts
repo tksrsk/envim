@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { WorkspaceEmit } from "main/emit";

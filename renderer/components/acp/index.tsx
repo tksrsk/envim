@@ -1,5 +1,5 @@
 import React from "react";
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
@@ -201,10 +201,10 @@ export function AcpComponent() {
   function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
     const update = curr.update;
 
-    if ("messageId" in update && update.messageId && update.content.type === "text") {
+    if ((update.sessionUpdate === "agent_message_chunk" || update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_thought_chunk") && update.messageId && update.content.type === "text") {
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        if (msg.sessionId !== curr.sessionId || msg.update.sessionUpdate !== update.sessionUpdate || msg.update.messageId !== update.messageId || msg.update.content.type !== "text") continue;
+        if (msg.sessionId !== curr.sessionId || (msg.update.sessionUpdate !== "agent_message_chunk" && msg.update.sessionUpdate !== "user_message_chunk" && msg.update.sessionUpdate !== "agent_thought_chunk") || msg.update.sessionUpdate !== update.sessionUpdate || msg.update.messageId !== update.messageId || msg.update.content.type !== "text") continue;
           update.content.text = `${msg.update.content.text}${update.content.text}`;
           messages[i] = curr;
 

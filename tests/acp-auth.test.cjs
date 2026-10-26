@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const Module = require('node:module');
 const path = require('node:path');
 const ts = require('typescript');
-const sdk = require('@agentclientprotocol/sdk');
+const sdk = require('@agentclientprotocol/sdk/unstable');
 const filename = path.resolve(__dirname, '../main/envim/acp.ts');
 const loaded = new Module(filename);
 loaded.require = name => {

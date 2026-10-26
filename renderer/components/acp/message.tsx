@@ -1,5 +1,5 @@
 import React from "react";
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";

@@ -1,5 +1,5 @@
 import React from "react";
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { IElicitationRequest } from "common/interface";
 

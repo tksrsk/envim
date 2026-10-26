@@ -1,4 +1,4 @@
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { Workspace } from "main/envim/workspace";
 import { Setting } from "main/setting";

@@ -34,7 +34,7 @@
     "npmRebuild": false
   },
   "devDependencies": {
-    "@agentclientprotocol/sdk": "^1.5.0",
+    "@agentclientprotocol/sdk": "^2.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/client": "^2.4.0",

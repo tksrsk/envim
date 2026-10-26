@@ -1,4 +1,4 @@
-import * as AcpSDK from "@agentclientprotocol/sdk";
+import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import * as McpTypes from "@modelcontextprotocol/client";
 
 export interface ISetting {
