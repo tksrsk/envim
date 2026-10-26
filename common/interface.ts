@@ -137,7 +137,7 @@ export interface IAcpSession {
 export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing" | "authenticating";
   sessionId?: string;
-  error?: string;
+  notice?: AcpSDK.Notice;
   initialize?: AcpSDK.InitializeResponse;
   agent?: IAcpRegistryAgent;
   elicitation?: IElicitationRequest;

@@ -89,7 +89,7 @@ test('failed or interrupted authentication disconnects without restarting either
     await flush();
     assert.equal(h.acp.state.status, 'disconnected');
     assert.equal(h.acp.state.agent, undefined);
-    assert.match(h.acp.state.error, new RegExp(String(code)));
+    assert.match(h.acp.state.notice.title, new RegExp(String(code)));
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 1);
     assert.equal(h.requests.length, 0);
     assert.equal(cancelled, 1);
@@ -104,7 +104,7 @@ test('terminal startup failure disconnects without reinitializing', async () => 
   h.handlers['acp:auth:authenticate']('terminal');
   await flush();
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.error, undefined);
+  assert.equal(h.acp.state.notice, undefined);
   assert.equal(h.acp.state.agent, undefined);
   assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 1);
   assert.equal(h.requests.length, 0);
@@ -177,7 +177,7 @@ test('Neovim + real SDK: failure, cancellation, retry and authenticated session'
     assert.equal(await nvim.executeLua('return _G.envim_acp == nil', []), true);
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 2);
     assert.equal(await nvim.call('bufexists', [failedBuffer]), 1);
-    assert.match(h.acp.state.error, /7/);
+    assert.match(h.acp.state.notice.title, /7/);
     // A new attempt begins only after an explicit user start.
     await h.handlers['acp:agent:start'](fixture);
     await wait(() => h.acp.state.status === 'authenticating' && h.acp.state.initialize);
@@ -188,7 +188,7 @@ test('Neovim + real SDK: failure, cancellation, retry and authenticated session'
     await wait(() => h.acp.state.status === 'disconnected');
     assert.equal(await nvim.executeLua('return _G.envim_acp == nil', []), true);
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 4);
-    assert.match(h.acp.state.error, /Exited code/);
+    assert.match(h.acp.state.notice.title, /Exited code/);
     await h.handlers['acp:agent:start'](fixture);
     await wait(() => h.acp.state.status === 'authenticating' && h.acp.state.initialize);
     h.handlers['acp:auth:authenticate']('fixture-login');
@@ -247,7 +247,7 @@ test('UI start resolves after process launch while initialization is still pendi
   initialized(structuredClone(initialize));
   await flush();
   assert.equal(h.acp.state.status, 'connected');
-  assert.equal(h.acp.state.error, 'existing startup warning');
+  assert.equal(h.acp.state.notice.title, 'existing startup warning');
 });
 
 test('normal process failure disconnects and reports its exit code', async () => {
@@ -256,7 +256,7 @@ test('normal process failure disconnects and reports its exit code', async () =>
   h.acp.state = { status: 'connecting', agent };
   await h.handlers['acp:exited'](1);
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.error, 'Exited code: 1');
+  assert.equal(h.acp.state.notice.title, 'Exited code: 1');
 });
 
 
@@ -274,7 +274,7 @@ test('normal process successful exit disconnects without an error', () => {
   h.acp.state.status = 'connected';
   h.handlers['acp:exited'](0);
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.error, undefined);
+  assert.equal(h.acp.state.notice, undefined);
 });
 
 test('agent authentication records selection while pending and clears it after success', async () => {
@@ -300,7 +300,7 @@ test('failed agent authentication clears selection and stays at authentication c
     assert.equal(h.acp.state.status, 'authenticating');
     assert.equal(h.acp.state.agent.auth, undefined);
     assert.equal(h.acp.state.agent, agent);
-    assert.equal(h.acp.state.error, error.message);
+    assert.equal(h.acp.state.notice.title, error.message);
     assert.equal(h.calls.length, 0);
     assert.equal(h.requests.length, 1);
     h.setRequest(async () => ({}));
@@ -319,4 +319,56 @@ test('normal startup failure clears state, while initialized keeps the existing 
     assert.equal(h.acp.state.status, result === 'initialized' ? 'connected' : 'disconnected');
     assert.equal(h.acp.state.agent, result === 'initialized' ? agent : undefined);
   }
+});
+
+test('initialization advertises notices and compaction support', async () => {
+  const h = setup();
+  await h.handlers['acp:agent:start'](agent);
+  await flush();
+  const initialize = h.requests.find(([method]) => method === sdk.methods.agent.initialize);
+  assert.deepEqual(initialize[1].clientCapabilities.session, { notices: {}, compaction: {} });
+});
+
+test('session notices update status while compaction updates reach message history', () => {
+  const h = setup();
+  h.acp.state.sessionId = 'active';
+  const updates = [
+    { sessionUpdate: 'notice', severity: 'warning', title: 'Configuration warning' },
+    { sessionUpdate: 'compaction_update', compactionId: 'a', status: 'in_progress' },
+    { sessionUpdate: 'compaction_summary_chunk', compactionId: 'a', content: { type: 'text', text: 'Summary' } },
+    { sessionUpdate: 'compaction_update', compactionId: 'a', status: 'completed' }
+  ];
+  for (const update of updates) h.acp.onSessionUpdate({ sessionId: 'active', update });
+  h.acp.onSessionUpdate({ sessionId: 'other', update: updates[0] });
+  assert.deepEqual(h.sent.filter(([event]) => event === 'acp:message:added').map(([, value]) => value.update), updates.slice(1));
+  assert.deepEqual(h.acp.state.notice, updates[0]);
+});
+
+test('application errors and agent notices replace the same status without entering history', () => {
+  const h = setup();
+  h.acp.state.sessionId = 'active';
+  h.handlers['acp:error'](new Error('Prompt failed'));
+  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Prompt failed' });
+  const notice = { sessionUpdate: 'notice', severity: 'warning', title: 'Warning', description: 'Details' };
+  h.acp.onSessionUpdate({ sessionId: 'active', update: notice });
+  assert.deepEqual(h.acp.state.notice, notice);
+  h.handlers['acp:error']('Latest error');
+  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Latest error' });
+  assert.equal(h.sent.filter(([event]) => event === 'acp:message:added').length, 0);
+});
+
+test('startup and exit errors use status without requiring a session', () => {
+  const h = setup();
+  h.handlers['acp:error']('Startup failed');
+  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Startup failed' });
+  h.handlers['acp:exited'](1);
+  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Exited code: 1' });
+  assert.equal(h.sent.filter(([event]) => event === 'acp:message:added').length, 0);
+});
+
+test('the next agent request clears the current notice as it did for errors', async () => {
+  const h = setup();
+  h.handlers['acp:error']('Previous error');
+  await h.acp.callAgent(sdk.methods.agent.authenticate, { methodId: 'agent' });
+  assert.equal(h.acp.state.notice, undefined);
 });

@@ -113,6 +113,11 @@ export class Acp {
   private onSessionUpdate(params: AcpSDK.SessionNotification): void {
     if (!params.sessionId || params.sessionId !== this.state.sessionId) return;
 
+    if (params.update.sessionUpdate === "notice") {
+      this.setState({ ...this.state, notice: params.update });
+      return;
+    }
+
     if (
       !this.onToolCallUpdate(params) &&
       !this.onPlanUpdate(params) &&
@@ -210,14 +215,14 @@ export class Acp {
   ): Promise<AcpSDK.AgentRequestResponsesByMethod[M] | void> {
     if (!this.connection) return Promise.resolve();
 
-    this.setState({ ...this.state, error: undefined });
+    this.setState({ ...this.state, notice: undefined });
 
     return (this.connection.agent.request(method, params)).catch(err => {
-      const error = err instanceof Error ? err.message : String(err);
       const autherror = this.state.initialize?.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
       const status = autherror || this.state.agent?.auth ? "authenticating" : "connected";
 
-      this.setState({ ...this.state, status, error });
+      this.setState({ ...this.state, status });
+      this.onAcpError(err);
     });
   }
 
@@ -239,6 +244,7 @@ export class Acp {
           fs: { readTextFile: true, writeTextFile: true },
           auth: { terminal: true },
           elicitation: { form: {}, url: {} },
+          session: { notices: {}, compaction: {} },
           terminal: true
         },
         clientInfo: {
@@ -326,8 +332,8 @@ export class Acp {
     }
   }
 
-  private onAcpError = (error: string) => {
-    this.setState({ ...this.state, error });
+  private onAcpError = (error: unknown) => {
+    this.setState({ ...this.state, notice: { severity: "error", title: error instanceof Error ? error.message : String(error) } });
   }
 
   private onAcpExited = (code: number) => {
@@ -340,7 +346,8 @@ export class Acp {
     this.tool = {};
     this.sessions = {};
 
-    this.setState({ status: "disconnected", error: code !== 0 ? `Exited code: ${code}` : undefined });
+    this.setState({ status: "disconnected" });
+    if (code !== 0) this.onAcpError(`Exited code: ${code}`);
     this.notifySessionUpdate();
   }
 
@@ -376,7 +383,8 @@ export class Acp {
     this.cancelAllPendingRequests();
 
     this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
-      this.setState({ ...this.state, status: "connected", error: err instanceof Error ? err.message : String(err) });
+      this.setState({ ...this.state, status: "connected" });
+      this.onAcpError(err);
     });
   }
 

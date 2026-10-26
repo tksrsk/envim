@@ -35,6 +35,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
       case "pending": return <IconComponent color="gray-fg" font={uiIcons.pending} />;
       case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
       case "completed": return <IconComponent color="green-fg" font={uiIcons.success} />;
+      case "cancelled": return <IconComponent color="gray-fg" font={uiIcons.decline} />;
       case "failed": return <IconComponent font={uiIcons.error} color="red-fg" />;
       default: return null;
     }
@@ -164,6 +165,23 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   }
 
   switch (message.update.sessionUpdate) {
+    case "compaction_update":
+      const compaction = message.update;
+      const compactionLabel = compaction.status === "in_progress" ? "Compacting context…"
+        : compaction.status === "completed" ? "Context compacted"
+        : compaction.status === "failed" ? "Context compaction failed"
+        : compaction.status === "cancelled" ? "Context compaction cancelled"
+        : `Context compaction: ${compaction.status}`;
+      return (
+        <CollapseComponent label={compactionLabel} badge={() => getStatusIcon(compaction.status)}>
+          {compaction.error && (
+            <FlexComponent color="red" padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
+              <span>{compaction.error}</span>
+            </FlexComponent>
+          )}
+          {compaction.summary?.map((content, i) => <React.Fragment key={i}>{renderContent(content)}</React.Fragment>)}
+        </CollapseComponent>
+      );
     case "user_message_chunk":
       const content = renderContent(message.update.content);
       return message.update.content.type !== "text" ? content : (

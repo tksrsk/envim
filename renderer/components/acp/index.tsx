@@ -201,6 +201,18 @@ export function AcpComponent() {
   function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
     const update = curr.update;
 
+    if (update.sessionUpdate === "compaction_update" || update.sessionUpdate === "compaction_summary_chunk") {
+      const index = messages.findIndex(msg => msg.sessionId === curr.sessionId && msg.update.sessionUpdate === "compaction_update" && msg.update.compactionId === update.compactionId);
+      const previous = index < 0 ? undefined : messages[index].update as AcpSDK.CompactionUpdate & { sessionUpdate: "compaction_update" };
+      const merged: AcpSDK.CompactionUpdate & { sessionUpdate: "compaction_update" } = update.sessionUpdate === "compaction_summary_chunk"
+        ? { ...previous, sessionUpdate: "compaction_update", compactionId: update.compactionId, status: previous?.status || "in_progress", summary: [...(previous?.summary || []), update.content] }
+        : { ...previous, ...update };
+      const notification = { ...curr, update: merged };
+
+      if (index < 0) return [...messages, notification];
+      return messages.map((msg, i) => i === index ? notification : msg);
+    }
+
     if ((update.sessionUpdate === "agent_message_chunk" || update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_thought_chunk") && update.messageId && update.content.type === "text") {
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
@@ -576,13 +588,16 @@ export function AcpComponent() {
       </FlexComponent>
 
       <FlexComponent direction="column" padding={[4]}>
-        {state.status.error &&
-          <FlexComponent color="red" padding={[4]} rounded={[4]}>
-            <IconComponent font={uiIcons.error} />
-            {state.status.error}
+        {state.status.notice && (
+          <FlexComponent color={({ error: "red", warning: "yellow" } as Record<string, string>)[state.status.notice.severity] ?? "blue"} padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
+            <IconComponent font={({ error: uiIcons.error, warning: uiIcons.warning } as Record<string, string>)[state.status.notice.severity] ?? uiIcons.info} />
+            <div role={state.status.notice.severity === "error" ? "alert" : "status"}>
+              <strong>{state.status.notice.title}</strong>
+              {state.status.notice.description && <div>{state.status.notice.description}</div>}
+            </div>
           </FlexComponent>
-        }
-        {state.status.error && <div className="divider color-gray" /> }
+        )}
+        {state.status.notice && <div className="divider color-gray" /> }
         {state.status.elicitation && (
           <CollapseComponent label="󰋗 Elicitation" style={{marginBottom: 4}} open>
             <ElicitationComponent request={state.status.elicitation} />
