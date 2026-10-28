@@ -718,13 +718,17 @@ export class Acp {
 
   private async onCreateTerminal(params: AcpSDK.CreateTerminalRequest): Promise<AcpSDK.CreateTerminalResponse> {
     const terminalId = `term_${randomBytes(8).toString("hex")}`;
-    const command = [params.command, ...(params.args || [])];
+    const command = params.args?.length ? [params.command, ...params.args] : params.command;
     const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
     const opts = { cwd: params.cwd || undefined, env };
 
+    let resolve!: (response: AcpSDK.WaitForTerminalExitResponse) => void;
+    const promise = new Promise<AcpSDK.WaitForTerminalExitResponse>((res) => { resolve = res; });
+
     this.terminal[terminalId] = {
       sessionId: params.sessionId,
-      promise: new Promise<AcpSDK.WaitForTerminalExitResponse>((resolve) => this.terminal[terminalId].resolve = resolve),
+      promise,
+      resolve,
       output: "",
       truncated: false,
       pid: 0,
@@ -735,7 +739,7 @@ export class Acp {
 
     if (!pid || pid < 0) {
       delete(this.terminal[terminalId]);
-      throw AcpSDK.RequestError.internalError(undefined, `Failed to start command: ${command.join(" ")}`);
+      throw AcpSDK.RequestError.internalError(undefined, `Failed to start command: ${Array.isArray(command) ? command.join(" ") : command}`);
     }
 
     this.terminal[terminalId].pid = pid;
