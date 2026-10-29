@@ -20,6 +20,9 @@ const styles: { [k: string]: React.CSSProperties } = {
   input: {
     position: "absolute",
     width: "100%",
+    border: 0,
+    background: "transparent",
+    color: "transparent",
     padding: 0,
     margin: 0,
     caretColor: "transparent",
@@ -87,7 +90,6 @@ export function InputComponent () {
     const offset = Math.max(col2X(cursor.x + state.value.length + multibyte + 1) - document.body.clientWidth, 0);
 
     return {
-      pointerEvent: "none",
       minWidth: state.busy || !state.focus ? 0 : col2X(state.cursor.width),
       height: row2Y(1),
       transform: `translate(${col2X(cursor.x) - offset}px, ${row2Y(cursor.y)}px)`,

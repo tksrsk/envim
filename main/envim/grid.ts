@@ -69,7 +69,7 @@ class Grid {
 
   getDefault(row: number, col: number) {
     return {
-      cell: { row, col, text: " ", hl: "0", width: 0 },
+      cell: { row, col, text: " ", hl: "0", width: 1 },
       hl: { fg: 0, bg: 0, sp: 0 },
     };
   }
