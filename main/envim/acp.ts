@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { constants } from "os";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
@@ -16,7 +17,7 @@ export class Acp {
   private connection: AcpSDK.ClientConnection | null = null;
   private sessions: { [key: string]: IAcpSession } = {};
   private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
-  private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
+  private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, killed?: boolean, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
   private permission: { [key: string]: (response: AcpSDK.RequestPermissionResponse) => void } = {};
   private elicitation: { [key: string]: { request: IElicitationRequest, resolve: (response: AcpSDK.CreateElicitationResponse) => void } } = {};
   private lastMessageId: { [k: string]: string } = {};
@@ -543,12 +544,16 @@ export class Acp {
     this.stdoutPush?.(data);
   }
 
-  private onAcpTerminalExit = (data: { terminalId: string; exitCode: number; signal: string }) => {
+  private onAcpTerminalExit = (data: { terminalId: string; exitCode: number }) => {
     const terminal = this.terminal[data.terminalId];
 
     if (terminal) {
+      const signal = terminal.killed && data.exitCode > 128
+        ? Object.entries(constants.signals).find(([, num]) => num === data.exitCode - 128)?.[0]
+        : undefined;
+
       terminal.pid = 0;
-      terminal.exitStatus = { exitCode: data.exitCode ?? null, signal: data.signal ?? null };
+      terminal.exitStatus = signal ? { exitCode: null, signal } : { exitCode: data.exitCode ?? null, signal: null };
       terminal.resolve?.(terminal.exitStatus);
       this.notifyTerminalOutput(data.terminalId);
     }
@@ -766,9 +771,12 @@ export class Acp {
   }
 
   private async onKillTerminal(params: AcpSDK.KillTerminalRequest): Promise<AcpSDK.KillTerminalResponse> {
-    const { pid } = this.getTerminal(params.terminalId);
+    const terminal = this.getTerminal(params.terminalId);
 
-    pid && await this.workspace.emit.share("neovim:function", "jobstop", [pid]);
+    if (terminal.pid) {
+      terminal.killed = true;
+      await this.workspace.emit.share("neovim:function", "jobstop", [terminal.pid]);
+    }
 
     return {};
   }

@@ -232,13 +232,8 @@ _G.envim_acp_terminal_start = function(terminalId, command, opts)
       end
     end
   end
-  opts.on_exit = function(_, exitCode, event)
-    local signal = nil
-    if event == "signal" then
-      signal = tostring(exitCode)
-      exitCode = nil
-    end
-    envim_connect(0, { "envim_acp_terminal_exit", { terminalId = terminalId, exitCode = exitCode, signal = signal } })
+  opts.on_exit = function(_, exitCode)
+    envim_connect(0, { "envim_acp_terminal_exit", { terminalId = terminalId, exitCode = exitCode } })
   end
 
   return vim.fn.jobstart(command, opts)
