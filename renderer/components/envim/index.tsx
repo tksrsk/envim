@@ -28,6 +28,7 @@ interface Props {
 
 interface States {
   pause: boolean;
+  acp: boolean;
   grids: { [k: number]: {
     gid: number;
     winid: number;
@@ -54,27 +55,35 @@ const styles: { [k: string]: React.CSSProperties } = {
 };
 
 export function EnvimComponent(props: Props) {
-  const [state, setState] = React.useState<States>({ pause: false, grids: {} });
+  const [state, setState] = React.useState<States>({ pause: false, acp: false, grids: {} });
   const { active, emit, highlights } = useWorkspace();
+  const acp = { width: state.acp ? 400 : 0, height: row2Y(y2Row(props.main.height) - 1) };
+  const editor = { width: col2X(x2Col(props.main.width - acp.width) - 2), height: acp.height };
   const timer: React.RefObject<number> = React.useRef<number>(0);
 
   React.useEffect(() => {
     highlights.setHighlight("0", true, {  });
     Emit.on("app:pause", onAppPause);
+    emit.on("acp:toggle", onAcpToggle);
     emit.on("neovim:ui:highlight:set", onNeovimUiHighlightSet);
     emit.on("neovim:ui:window:position", onNeovimUiWindowPosition);
-    emit.send("neovim:ui:attach", x2Col(props.main.width), y2Row(props.main.height), Setting.options);
+    emit.send("neovim:ui:attach", x2Col(editor.width), y2Row(editor.height), Setting.options);
 
     return () => {
       Emit.off("app:pause", onAppPause);
+      emit.off("acp:toggle", onAcpToggle);
       emit.off("neovim:ui:highlight:set", onNeovimUiHighlightSet);
       emit.off("neovim:ui:window:position", onNeovimUiWindowPosition);
     };
   }, []);
 
   React.useEffect(() => {
-    emit.send("neovim:ui:resize", 0, x2Col(props.main.width), y2Row(props.main.height));
-  }, [props.main.width, props.main.height]);
+    emit.send("neovim:ui:resize", 0, x2Col(editor.width), y2Row(editor.height));
+  }, [editor.width, editor.height]);
+
+  function onAcpToggle() {
+    setState(state => ({ ...state, acp: !state.acp }));
+  }
 
   function onAppPause(pause: boolean) {
     setState(state => ({ ...state, pause }));
@@ -125,22 +134,26 @@ export function EnvimComponent(props: Props) {
     <EditorProvider>
       <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
         <TablineComponent {...props.header} />
-        <FlexComponent zIndex={0}>
-          <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />
-          <FlexComponent zIndex={0} direction="column" overflow="visible">
-            <div className="color-default" style={{height: Setting.font.height}} />
-            <FlexComponent overflow="visible" style={props.main}>
-              { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
-                <EditorComponent key={grid.gid} { ...grid } />
-              )) }
-              <PopupmenuComponent />
-              <InputComponent />
+        <FlexComponent zIndex={0} direction="column" style={props.main}>
+          <FlexComponent color="default" grow={1} />
+          <FlexComponent>
+            <FlexComponent zIndex={0} grow={1} shrink={1}>
+              <FlexComponent color="default" zIndex={-1} grow={1} />
+              <FlexComponent zIndex={0} overflow="visible" style={editor}>
+                { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
+                  <EditorComponent key={grid.gid} { ...grid } />
+                )) }
+                <PopupmenuComponent />
+                <InputComponent />
+              </FlexComponent>
+              <FlexComponent color="default" zIndex={-1} grow={1} />
+              <CmdlineComponent />
+              <NotificateComponent />
+            </FlexComponent>
+            <FlexComponent style={acp}>
+              <AcpComponent />
             </FlexComponent>
           </FlexComponent>
-          <CmdlineComponent />
-          <NotificateComponent />
-          <AcpComponent />
-          <FlexComponent color="default" zIndex={-1} grow={1} shrink={1} />
         </FlexComponent>
         <HistoryComponent {...props.footer} />
         { state.pause && (

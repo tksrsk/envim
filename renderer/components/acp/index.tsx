@@ -39,7 +39,6 @@ const styles: { [k: string]: React.CSSProperties } = {
     padding: 0,
   },
   panel: {
-    width: 400,
     fontSize: "9px",
   },
   invisible: {
@@ -560,7 +559,7 @@ export function AcpComponent() {
   }
 
   return (
-    <FlexComponent color="default" animate="fade-in" direction="column" position="absolute" padding={[8]} inset={[0, 0, 0, "auto"]} style={state.visible ? styles.panel :styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
+    <FlexComponent color="default" animate="fade-in" direction="column" grow={1} shrink={1} padding={[8]} style={state.visible ? styles.panel : styles.invisible} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
       <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} onFocus={() => emit.share("ui:focused")} tabIndex={-1} />
       <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
         {state.status.status === "authenticating" ? (

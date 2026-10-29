@@ -5,7 +5,7 @@ import { WorkspaceProvider } from "renderer/context/workspace";
 import { Emit, WorkspaceEmit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { Cache } from "renderer/utils/cache";
-import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
+import { y2Row, row2Y } from "renderer/utils/size";
 
 import { SettingComponent } from "renderer/components/setting";
 import { EnvimComponent } from "renderer/components/envim";
@@ -28,11 +28,8 @@ export function AppComponent() {
     height: Math.max(row2Y(2), (titlebar.y * 2) + titlebar.height),
     paddingLeft: titlebar.left || 0,
   };
-  const main = {
-    width: col2X(x2Col(state.window.width) - 2),
-    height: row2Y(y2Row(state.window.height - header.height - row2Y(1) - 4) - 1),
-  };
-  const footer = { width: state.window.width, height: state.window.height - header.height - main.height - row2Y(1) };
+  const main = { width: state.window.width, height: row2Y(y2Row(state.window.height - header.height - row2Y(1) - 4)) };
+  const footer = { width: state.window.width, height: state.window.height - header.height - main.height };
 
   React.useEffect(() => {
     document.fonts.load("10px Regular").then();
