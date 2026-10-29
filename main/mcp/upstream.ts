@@ -9,6 +9,7 @@ import { McpAppService } from "main/mcp/app";
 type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 
 const MCP_APP_MIME = "text/html;profile=mcp-app";
+const PING_TIMEOUT = 5000;
 
 export class McpUpstream {
   private constructor(
@@ -86,7 +87,7 @@ export class McpUpstreamRegistry {
       const headers = [...server.headers].sort((left, right) => left.name.localeCompare(right.name));
       const definition = JSON.stringify({ name: server.name, type: server.type, url: server.url, headers });
       const id = createHash("sha256").update(definition).digest("hex");
-      const upstream = next.get(id) || this.upstreams.get(id) || await McpUpstream.connect(id, server, this.app, this.emit);
+      const upstream = next.get(id) || await this.reuse(id) || await McpUpstream.connect(id, server, this.app, this.emit);
 
       if (upstream) {
         next.set(id, upstream);
@@ -102,6 +103,24 @@ export class McpUpstreamRegistry {
     await Promise.all(removed.map(upstream => upstream.close()));
 
     return resolved;
+  }
+
+  private async reuse(id: string): Promise<McpUpstream | null> {
+    const upstream = this.upstreams.get(id);
+
+    if (!upstream) return null;
+
+    try {
+      await upstream.client.ping({ timeout: PING_TIMEOUT });
+
+      return upstream;
+    } catch {
+      this.upstreams.delete(id);
+      await upstream.close();
+      this.app.onToolsChanged(id);
+
+      return null;
+    }
   }
 
   get(upstreamId: string): McpUpstream {
