@@ -136,8 +136,8 @@ export function EnvimComponent(props: Props) {
         <TablineComponent {...props.header} />
         <FlexComponent zIndex={0} direction="column" style={props.main}>
           <FlexComponent color="default" grow={1} />
-          <FlexComponent>
-            <FlexComponent zIndex={0} grow={1} shrink={1}>
+          <FlexComponent overflow="visible">
+            <FlexComponent zIndex={0} grow={1} shrink={1} overflow="visible">
               <FlexComponent color="default" zIndex={-1} grow={1} />
               <FlexComponent zIndex={0} overflow="visible" style={editor}>
                 { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
