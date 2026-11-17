@@ -117,11 +117,18 @@ export function AcpComponent() {
   }, [state.mode.main]);
 
   React.useEffect(() => {
+    CSS.highlights.delete("search-all");
+    CSS.highlights.delete("search-active");
+
+    const container = scroll.current?.parentElement;
+
+    if (!state.search.highlight || !container) return;
+
     const ranges: Range[] = [];
 
-    if (state.search.query && scroll.current?.parentElement) {
+    if (state.search.query) {
       const regex = new RegExp(state.search.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-      const walker = document.createTreeWalker(scroll.current.parentElement, NodeFilter.SHOW_TEXT, {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
         acceptNode: node => getComputedStyle(node.parentElement as HTMLElement).userSelect === "none"
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT,
@@ -138,27 +145,27 @@ export function AcpComponent() {
       }
     }
 
-    setState(state => ({ ...state, search: { ...state.search, ranges } }));
-  }, [state.search.query]);
+    const active = ranges.length ? ((state.search.active % ranges.length) + ranges.length) % ranges.length : 0;
+    const range = ranges[active];
 
-  React.useEffect(() => {
-    CSS.highlights.delete("search-all");
-    CSS.highlights.delete("search-active");
+    setState(state => ({ ...state, search: { ...state.search, ranges, active } }));
 
-    const range = state.search.ranges[state.search.active];
+    if (range) {
+      CSS.highlights.set("search-all", new Highlight(...ranges));
+      CSS.highlights.set("search-active", new Highlight(range));
 
-    if (!state.search.highlight || !range || !scroll.current?.parentElement) return;
+      const element = range.startContainer.parentElement as HTMLElement;
+      let target = element.closest<HTMLElement>("p, pre, li, td, th, h1, h2, h3, h4, h5, h6, summary") || element;
+      for (let parent: HTMLElement | null = element; parent && parent !== container; parent = parent.parentElement) {
+        if (parent.tagName !== "DETAILS" || (parent as HTMLDetailsElement).open) continue;
+        const summary = parent.querySelector<HTMLElement>(":scope > summary");
+        if (summary && !summary.contains(range.startContainer)) target = summary;
+      }
 
-    CSS.highlights.set("search-all", new Highlight(...state.search.ranges));
-    CSS.highlights.set("search-active", new Highlight(range));
-
-    const active = range.getBoundingClientRect();
-    const base = scroll.current.parentElement.getBoundingClientRect();
-
-    if (active.top < base.top || active.bottom > base.bottom) {
-      scroll.current.parentElement.scrollBy({ top: active.top - base.top - base.height / 2 + active.height / 2, behavior: "smooth" });
+      target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      target.animate([{ backgroundColor: "var(--color-orange-alpha)" }, {}], { duration: 1200, easing: "ease-out" });
     }
-  }, [state.search]);
+  }, [state.search.query, state.search.active, state.search.highlight]);
 
   function onAcpFileAdd(file: string) {
     setState(state => ({
@@ -455,7 +462,7 @@ export function AcpComponent() {
   }
 
   function onSearch(active: number) {
-    state.search.ranges.length && setState(s => ({ ...s, search: { ...s.search, highlight: true, active: (active + s.search.ranges.length) % s.search.ranges.length } }));
+    setState(s => ({ ...s, search: { ...s.search, highlight: true, active } }));
   }
 
   function clearSearch() {
