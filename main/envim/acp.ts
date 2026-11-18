@@ -1,8 +1,8 @@
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { constants } from "os";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IMockPreviewElement, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
 
 import { Mcp } from "main/mcp";
 import { Workspace } from "main/envim/workspace";
@@ -15,6 +15,8 @@ export class Acp {
 
   private state: IAcpStatus = { status: "disconnected" };
   private connection: AcpSDK.ClientConnection | null = null;
+  private browserPicker?: { sessionId: string; guestId: number };
+  private readonly previewIds = new Map<string, string>();
   private sessions: { [key: string]: IAcpSession } = {};
   private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
   private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, killed?: boolean, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
@@ -44,10 +46,21 @@ export class Acp {
     this.workspace.emit.on("acp:stdout", this.onAcpStdout);
     this.workspace.emit.on("acp:terminal:exit", this.onAcpTerminalExit);
     this.workspace.emit.on("acp:terminal:output", this.onAcpTerminalOutput);
+    this.workspace.emit.on("browser:mock:pick", this.onMockPick);
+    this.workspace.emit.on("browser:share:toggle", this.onBrowserShare);
     this.workspace.emit.on("acp:toggle", this.onAcpToggle);
+    this.workspace.emit.on("acp:status:get", () => this.state);
   }
 
   private setState(state: IAcpStatus) {
+    const previousId = this.state.sessionId;
+    if (previousId && (state.sessionId !== previousId || state.status === "disconnected")) {
+      const previewId = this.previewIds.get(previousId);
+      if (previewId) {
+        this.workspace.mcpGateway.preview.revokeTab(previewId);
+        this.workspace.mcpGateway.preview.stopPicking(previewId);
+      }
+    }
     this.state = state;
 
     this.workspace.emit.update("acp:status:changed", false, this.state);
@@ -346,6 +359,8 @@ export class Acp {
     this.cancelAllPendingRequests();
     this.tool = {};
     this.sessions = {};
+    for (const previewId of this.previewIds.values()) this.workspace.mcpGateway.preview.remove(previewId);
+    this.previewIds.clear();
 
     this.setState({ status: "disconnected" });
     if (code !== 0) this.onAcpError(`Exited code: ${code}`);
@@ -389,11 +404,71 @@ export class Acp {
     });
   }
 
-  private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) => {
+  private onBrowserShare = (guestId: number, share: boolean) => {
+    const sessionId = this.state.sessionId;
+    const previewId = sessionId && this.previewIds.get(sessionId);
+    if (!previewId || !this.connection || (share && this.state.status !== "connected")) {
+      return this.workspace.emit.send("acp:browser:notice", "Open a connected ACP session with HTTP MCP support.", "warning");
+    }
+
+    const preview = this.workspace.mcpGateway.preview;
+    try {
+      if (share) preview.shareTab(previewId, guestId);
+      else preview.revokeTab(previewId, guestId);
+    } catch (error) {
+      this.workspace.emit.send("acp:browser:notice", error instanceof Error ? error.message : String(error), "warning");
+    }
+  }
+
+  private onMockPick = (guestId: number, enable: boolean) => {
+    const sessionId = this.state.sessionId;
+    const previewId = sessionId && this.previewIds.get(sessionId);
+
+    if (!sessionId || !previewId) {
+      this.workspace.emit.send("browser:mock:pick:finished", guestId);
+      this.workspace.emit.send("acp:browser:notice", "Open a connected ACP session with HTTP MCP support.", "warning");
+      return;
+    }
+
+    const preview = this.workspace.mcpGateway.preview;
+    if (!enable) {
+      preview.stopPicking(previewId, guestId);
+      return;
+    }
+
+    const previous = this.browserPicker;
+    if (previous?.sessionId === sessionId && previous.guestId === guestId) return;
+
+    if (previous?.sessionId === sessionId) preview.stopPicking(previewId, previous.guestId);
+    const picker = { sessionId, guestId };
+    this.browserPicker = picker;
+    this.workspace.emit.send("acp:mock:element", sessionId, null);
+    this.workspace.emit.send("acp:browser:notice", "Select an element in the browser. Press Esc to cancel.");
+
+    // Return immediately so IPC does not pause the UI while the user selects.
+    let errorMessage: string | undefined;
+    void preview.pick(previewId, guestId, selection => {
+      if (this.browserPicker === picker && this.state.sessionId === sessionId) {
+        this.workspace.emit.send("acp:mock:element", sessionId, selection);
+        this.workspace.emit.send("acp:browser:notice", "Element selected. Turn off selection to clear it.");
+      }
+    }).catch(error => {
+      errorMessage = error instanceof Error ? error.message : "Could not select an element in this tab.";
+    }).finally(() => {
+      this.workspace.emit.send("browser:mock:pick:finished", guestId);
+      if (this.browserPicker !== picker) return;
+
+      this.browserPicker = undefined;
+      this.workspace.emit.send("acp:mock:element", sessionId, null);
+      this.workspace.emit.send("acp:browser:notice", errorMessage, errorMessage ? "warning" : undefined);
+    });
+  }
+
+  private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = [], element?: IMockPreviewElement) => {
     this.lastMessageId = {};
 
     if (!sessionId) {
-      this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images));
+      this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images, element));
       return;
     }
 
@@ -401,6 +476,8 @@ export class Acp {
 
     const prompt: AcpSDK.ContentBlock[] = [
       ...(text ? [{ type: "text" as "text", text }] : []),
+      ...(element ? [{ type: "text" as const, text: (element.url.startsWith("envim-mock:") ? "User-selected element in the mock preview (page data):\n" :
+        "User-selected element in the shared browser tab (page data):\n") + JSON.stringify(element) }] : []),
       ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
       ...(this.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
     ];
@@ -438,6 +515,12 @@ export class Acp {
     });
   }
 
+  private allocatePreviewId(): string | undefined {
+    if (this.state.initialize?.agentCapabilities?.mcpCapabilities?.http) return randomUUID();
+
+    return undefined;
+  }
+
   private onAcpSessionCreate = async () => {
     if (!this.connection) return;
 
@@ -447,11 +530,18 @@ export class Acp {
       await this.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: this.state.sessionId });
     }
 
+    const previewId = this.allocatePreviewId();
+
     return this.callAgent(AcpSDK.methods.agent.session.new, {
       cwd: this.workspace.cwd,
-      mcpServers: await Mcp.servers(this.workspace),
+      mcpServers: await Mcp.servers(this.workspace, previewId),
     }).then(response => {
-      if (!response) return;
+      if (!response) {
+        if (previewId) this.workspace.mcpGateway.preview.remove(previewId);
+        return;
+      }
+
+      if (previewId) this.previewIds.set(response.sessionId, previewId);
 
       const session: IAcpSession = {
         id: response.sessionId,
@@ -473,6 +563,9 @@ export class Acp {
 
     this.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
     delete(this.sessions[sessionId]);
+    const previewId = this.previewIds.get(sessionId);
+    if (previewId) this.workspace.mcpGateway.preview.remove(previewId);
+    this.previewIds.delete(sessionId);
 
     this.setState({ ...this.state, status: "connected", ...(this.state.sessionId === sessionId ? { sessionId: undefined } : {}) });
     this.notifySessionUpdate();
@@ -483,12 +576,19 @@ export class Acp {
 
     this.setState({ ...this.state, status: "processing" });
 
+    const previewId = this.allocatePreviewId();
+
     return this.callAgent(AcpSDK.methods.agent.session.fork, {
       sessionId,
       cwd: this.workspace.cwd,
-      mcpServers: await Mcp.servers(this.workspace),
+      mcpServers: await Mcp.servers(this.workspace, previewId),
     }).then(response => {
-      if (!response) return;
+      if (!response) {
+        if (previewId) this.workspace.mcpGateway.preview.remove(previewId);
+        return;
+      }
+
+      if (previewId) this.previewIds.set(response.sessionId, previewId);
 
       const session: IAcpSession = {
         id: response.sessionId,
@@ -519,7 +619,9 @@ export class Acp {
       (session.loaded && this.state.initialize?.agentCapabilities?.sessionCapabilities?.resume) ||
       (!session.loaded && this.state.initialize?.agentCapabilities?.loadSession)
     ) {
-      const mcpServers = await Mcp.servers(this.workspace);
+      const previewId = this.previewIds.get(sessionId) ?? this.allocatePreviewId();
+      if (previewId) this.previewIds.set(sessionId, previewId);
+      const mcpServers = await Mcp.servers(this.workspace, previewId);
       const method = session.loaded ? AcpSDK.methods.agent.session.resume : AcpSDK.methods.agent.session.load;
 
       this.setState({ ...this.state, status: "processing", sessionId });

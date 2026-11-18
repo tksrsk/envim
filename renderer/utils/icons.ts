@@ -13,6 +13,8 @@ export const uiIcons = {
   refresh: "󰑓",
   save: "",
   debug: "",
+  acp: "",
+  placing: "󰮐",
 } as const;
 
 export const icons = [

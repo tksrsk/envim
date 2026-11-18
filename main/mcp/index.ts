@@ -8,30 +8,25 @@ type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 export class Mcp {
   private static syncPromise: Promise<void> = Promise.resolve();
 
-  static servers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
-    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace));
+  static servers(workspace: Workspace, previewId?: string): Promise<AcpSDK.McpServer[]> {
+    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace, previewId));
 
     Mcp.syncPromise = operation.then(() => undefined, () => undefined);
 
     return operation;
   }
 
-  private static async syncServers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
+  private static async syncServers(workspace: Workspace, previewId?: string): Promise<AcpSDK.McpServer[]> {
     const servers = (Setting.get()?.acp?.mcpServers || [])
       .filter(mcp => mcp.enabled)
       .map(mcp => mcp.server);
     const httpServers = servers.filter(Mcp.isHttpServer);
     const gateway = workspace.mcpGateway;
 
-    if (httpServers.length === 0) {
-      await gateway.upstreams.sync([]);
-      gateway.app.onUpstreamsChanged([]);
-
-      return servers;
-    }
-
     const upstreams = await gateway.upstreams.sync(httpServers);
     gateway.app.onUpstreamsChanged([...upstreams.values()].map(upstream => upstream.id));
+    if (!previewId && httpServers.length === 0) return servers;
+
     let gatewayUrl: string;
 
     try {
@@ -40,7 +35,7 @@ export class Mcp {
       return servers;
     }
 
-    return servers.map(server => {
+    const configuredServers = servers.map<AcpSDK.McpServer>(server => {
       const upstream = upstreams.get(server);
 
       if (!upstream) return server;
@@ -49,6 +44,13 @@ export class Mcp {
 
       return { type: "http", name: server.name, url, headers: [] };
     });
+
+    if (previewId) {
+      const endpoint = gateway.preview.endpoint(previewId);
+      configuredServers.push({ type: "http", name: "envim-mock-preview", url: `${gatewayUrl}/mcp/${endpoint}`, headers: [] });
+    }
+
+    return configuredServers;
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {

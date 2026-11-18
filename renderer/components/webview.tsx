@@ -1,7 +1,7 @@
 import * as Electron from "electron";
 import React from "react";
 
-import { ISetting } from "common/interface";
+import { IAcpStatus, ISetting } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
@@ -17,6 +17,7 @@ import { IconComponent } from "renderer/components/icon";
 
 interface Props {
   src: string;
+  requestId?: string;
   active: boolean;
   style: React.CSSProperties;
 }
@@ -59,13 +60,33 @@ export function WebviewComponent(props: Props) {
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
+  const [shared, setShared] = React.useState(false);
+  const [acpStatus, setAcpStatus] = React.useState<IAcpStatus>({ status: "disconnected" });
+  const [pickerId, setPickerId] = React.useState<number>();
   const { active } = useFocus();
   const mode = getMode(active);
-  const blank = (webview.current?.getURL() ?? getUrl(props.src)) === "about:blank";
+  const currentUrl = webview.current?.getURL() ?? getUrl(props.src);
+  const blank = currentUrl === "about:blank";
+  const mock = currentUrl.startsWith("envim-mock://");
+  const webPage = /^https?:\/\//.test(currentUrl);
+  const agentIcon = acpStatus.status === "disconnected" ? undefined : acpStatus.agent?.icon;
+  const acpReady = (acpStatus.status === "connected" || acpStatus.status === "processing") &&
+    !!acpStatus.sessionId && !!acpStatus.initialize?.agentCapabilities?.mcpCapabilities?.http;
+  const selecting = pickerId !== undefined;
+  const canSelect = acpReady && (mock || (webPage && shared)) && !state.loading;
+  const canToggleSelection = selecting || canSelect;
+  const canToggleSharing = shared || !state.loading;
+  const shareIconStyle = {
+    opacity: canToggleSharing ? 1 : 0.5,
+    ...(agentIcon && {
+      "--color-fg": shared ? "var(--color-purple)" : "var(--color-gray)",
+      height: "calc(1em + 8px)",
+    }),
+  } as React.CSSProperties;
   const icon = state.searchengines.some(({ uri }) => uri === state.input)
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
-  const color = { command: "green", visual: "purple", browser: "blue" }[mode] || "default";
+  const color = pickerId !== undefined ? "purple" : { command: "green", visual: "purple", browser: "blue" }[mode] || "default";
 
   React.useEffect(() => {
     Emit.on("browser:action", onBrowserAction);
@@ -78,33 +99,80 @@ export function WebviewComponent(props: Props) {
   }, []);
 
   React.useEffect(() => {
+    setShared(false);
+    setPickerId(undefined);
     if (container.current) {
-      const webview = document.createElement("webview") as Electron.WebviewTag;
+      const guest = document.createElement("webview") as Electron.WebviewTag;
 
-      container.current.appendChild(webview);
-      webview.setAttribute("allowpopups", "on");
-      webview.addEventListener("dom-ready", onReady);
-      webview.src = getUrl(props.src);
+      guest.setAttribute("allowpopups", "on");
+      guest.addEventListener("dom-ready", onReady);
+      if (props.requestId) guest.addEventListener("did-finish-load", onShareReady);
+      guest.src = getUrl(props.src);
+      container.current.appendChild(guest);
 
       return () => {
-        webview.removeEventListener("did-start-loading", onLoad);
-        webview.removeEventListener("did-stop-loading", onLoad);
-        webview.removeEventListener("did-finish-load", onLoad);
-        webview.removeEventListener("did-navigate", onLoad);
-        webview.removeEventListener("did-navigate-in-page", onLoad);
-        webview.removeEventListener("page-title-updated", onLoad);
-        webview.removeEventListener("page-favicon-updated", onFavicon);
+        guest.removeEventListener("dom-ready", onReady);
+        guest.removeEventListener("did-finish-load", onShareReady);
+        guest.removeEventListener("close", onClose);
+        guest.removeEventListener("did-start-loading", onLoad);
+        guest.removeEventListener("did-stop-loading", onLoad);
+        guest.removeEventListener("did-finish-load", onLoad);
+        guest.removeEventListener("did-navigate", onLoad);
+        guest.removeEventListener("did-navigate-in-page", onLoad);
+        guest.removeEventListener("page-title-updated", onLoad);
+        guest.removeEventListener("page-favicon-updated", onFavicon);
+        guest.remove();
+        if (webview.current === guest) webview.current = null;
       };
     }
 
     return;
-  }, [container.current]);
+  }, [props.src, props.requestId]);
 
   React.useEffect(() => {
     webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
     ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
     ["command", "visual"].includes(mode) || setState(state => state.selection ? { ...state, selection: undefined } : state);
   }, [mode]);
+
+  React.useEffect(() => {
+    let waitingForStatus = true;
+    function onAcpStatus(status: IAcpStatus) {
+      waitingForStatus = false;
+      setAcpStatus(status);
+    }
+
+    function finish(id: number) {
+      setPickerId(current => current === id ? undefined : current);
+    }
+
+    function onShare(id: number, value: boolean) {
+      if (webview.current?.getWebContentsId() !== id) return;
+      setShared(value);
+    }
+
+    emit.on("browser:mock:pick:finished", finish);
+    emit.on("browser:share:status", onShare);
+    emit.on("acp:status:changed", onAcpStatus);
+    void emit.send<IAcpStatus>("acp:status:get").then(status => {
+      if (status && waitingForStatus) onAcpStatus(status);
+    });
+    return () => {
+      waitingForStatus = false;
+      emit.off("browser:mock:pick:finished", finish);
+      emit.off("browser:share:status", onShare);
+      emit.off("acp:status:changed", onAcpStatus);
+    };
+  }, [emit]);
+
+  function selectElement() {
+    if (!webview.current) return;
+
+    const id = webview.current.getWebContentsId();
+    const enable = pickerId === undefined;
+    if (enable) setPickerId(id);
+    void emit.send("browser:mock:pick", id, enable);
+  }
 
   function getMode(element: Element | null) {
     switch (element) {
@@ -117,9 +185,15 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onReady () {
-    if (container.current) {
-      webview.current = container.current.querySelector("webview") as Electron.WebviewTag;
+  function onShareReady(event: Event) {
+    const guest = event.currentTarget as Electron.WebviewTag;
+    guest.removeEventListener("did-finish-load", onShareReady);
+    if (props.requestId) void emit.send("browser:share:ready", props.requestId, guest.getWebContentsId());
+  }
+
+  function onReady(event: Event) {
+    if (event.currentTarget) {
+      webview.current = event.currentTarget as Electron.WebviewTag;
       webview.current.removeEventListener("dom-ready", onReady);
       webview.current.addEventListener("did-start-loading", onLoad);
       webview.current.addEventListener("did-stop-loading", onLoad);
@@ -129,6 +203,10 @@ export function WebviewComponent(props: Props) {
       webview.current.addEventListener("page-title-updated", onLoad);
       webview.current.addEventListener("page-favicon-updated", onFavicon);
       webview.current.addEventListener("close", onClose);
+      onLoad();
+      if (props.src.startsWith("envim-mock://")) {
+        void emit.send("browser:mock:ready", props.src, webview.current.getWebContentsId()).catch(console.error);
+      }
     }
   }
 
@@ -137,7 +215,7 @@ export function WebviewComponent(props: Props) {
 
     if (!input || input === "about:blank") {
       return "about:blank";
-    } else if (input.search(/^(((https?)|(file)):\/\/)|(data:.*\/.*;base64)/) === 0) {
+    } else if (input.search(/^(((https?)|(file)|(envim-mock)):\/\/)|(data:.*\/.*;base64)/) === 0) {
       return input;
     } else {
       const selected = state.searchengines.find(({ selected }) => selected);
@@ -148,6 +226,7 @@ export function WebviewComponent(props: Props) {
 
   function onClose() {
     webview.current = null;
+    setShared(false);
   }
 
   function setPointer(x: number | "max", y: number | "max") {
@@ -455,6 +534,13 @@ export function WebviewComponent(props: Props) {
           { state.zoom }%
           <IconComponent font="" onClick={() => runAction("zoom-in")} />
           <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
+          {webPage && (
+            <IconComponent font={agentIcon || uiIcons.acp} mark={!!agentIcon} color={shared ? "purple-fg" : "gray-fg"} style={shareIconStyle}
+              onClick={canToggleSharing ? () => webview.current && void emit.send("browser:share:toggle", webview.current.getWebContentsId(), !shared) : undefined} />
+          )}
+          {(mock || webPage) && (
+            <IconComponent font={uiIcons.placing} color={selecting ? "purple-fg" : "gray-fg"} onClick={canToggleSelection ? selectElement : undefined} />
+          )}
         </FlexComponent>
         <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
           <div className="space" ref={container} />

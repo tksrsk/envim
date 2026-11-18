@@ -6,6 +6,7 @@ import { CallToolResultSchema, ResultSchema } from "@modelcontextprotocol/core";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import { isInitializeRequest, Server } from "@modelcontextprotocol/server";
 
+import { MockPreview } from "main/mcp/preview";
 import { McpAppService } from "main/mcp/app";
 import { McpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
 import { Workspace } from "main/envim/workspace";
@@ -24,10 +25,12 @@ export class McpGateway {
   private sessions = new Map<string, IMcpGatewaySession>();
   private sockets: { [connectionId: string]: Socket } = {};
   private startPromise: Promise<string> | null = null;
+  public readonly preview: MockPreview;
   public readonly app: McpAppService;
   public readonly upstreams: McpUpstreamRegistry;
 
   constructor(public readonly workspace: Workspace) {
+    this.preview = new MockPreview(workspace);
     this.app = new McpAppService(this.workspace);
     this.upstreams = new McpUpstreamRegistry(this.app, this.workspace.emit);
     this.workspace.emit.share("neovim:luafile", "mcp.lua");
@@ -127,10 +130,11 @@ export class McpGateway {
       return McpGateway.writeError(res, 404, "Unknown MCP endpoint");
     }
 
-    let upstream: McpUpstream;
+    const preview = this.preview.has(upstreamId);
+    let upstream: McpUpstream | undefined;
 
     try {
-      upstream = this.upstreams.get(upstreamId);
+      if (!preview) upstream = this.upstreams.get(upstreamId);
     } catch {
       return McpGateway.writeError(res, 404, "Unknown MCP endpoint");
     }
@@ -144,7 +148,7 @@ export class McpGateway {
     }
 
     if (!session && req.method === "POST" && isInitializeRequest(body)) {
-      session = { upstreamId, transport: await this.createSession(upstream) };
+      session = { upstreamId, transport: await this.createSession(upstreamId, upstream) };
     }
 
     if (!session) {
@@ -154,35 +158,40 @@ export class McpGateway {
     await session.transport.handleRequest(req, res, body);
   }
 
-  private async createSession(upstream: McpUpstream): Promise<NodeStreamableHTTPServerTransport> {
-    const capabilities = upstream.client.getServerCapabilities() || {};
-    const server = new Server({ name: `envim-proxy:${upstream.name}`, version: "1.0.0" }, { capabilities });
+  private async createSession(upstreamId: string, upstream?: McpUpstream): Promise<NodeStreamableHTTPServerTransport> {
+    const capabilities = upstream ? upstream.client.getServerCapabilities() || {} : { tools: {} };
+    const server = new Server({ name: upstream ? `envim-proxy:${upstream.name}` : "envim-mock-preview", version: "1.0.0" }, { capabilities });
     let transport: NodeStreamableHTTPServerTransport;
 
-    server.setRequestHandler("tools/list", request => upstream.client.listTools(request.params));
-    server.setRequestHandler("tools/call", async request => {
-      const result = await upstream.client.callTool(request.params);
-      const appResult = CallToolResultSchema.safeParse(result);
+    if (upstream) {
+      server.setRequestHandler("tools/list", request => upstream.client.listTools(request.params));
+      server.setRequestHandler("tools/call", async request => {
+        const result = await upstream.client.callTool(request.params);
+        const appResult = CallToolResultSchema.safeParse(result);
 
-      if (appResult.success) {
-        this.app.getToolResource(upstream, request.params.name).then(resource => {
-          resource && this.workspace.emit.send("mcp:render", {
-            upstreamId: upstream.id, server: upstream.name, tool: request.params.name,
-            request: request.params, resource, result: appResult.data,
-          });
-        }).catch(() => {});
-      }
+        if (appResult.success) {
+          this.app.getToolResource(upstream, request.params.name).then(resource => {
+            resource && this.workspace.emit.send("mcp:render", {
+              upstreamId: upstream.id, server: upstream.name, tool: request.params.name,
+              request: request.params, resource, result: appResult.data,
+            });
+          }).catch(() => {});
+        }
 
-      return result;
-    });
-    server.fallbackRequestHandler = request =>
-      upstream.client.request({ method: request.method, params: request.params }, ResultSchema);
-    server.fallbackNotificationHandler = notification => upstream.client.notification(notification);
+        return result;
+      });
+      server.fallbackRequestHandler = request =>
+        upstream.client.request({ method: request.method, params: request.params }, ResultSchema);
+      server.fallbackNotificationHandler = notification => upstream.client.notification(notification);
+
+    } else {
+      this.preview.registerTools(server, upstreamId);
+    }
 
     transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: sessionId => {
-        this.sessions.set(sessionId, { upstreamId: upstream.id, transport });
+        this.sessions.set(sessionId, { upstreamId, transport });
       },
       onsessionclosed: sessionId => {
         this.sessions.delete(sessionId);
@@ -247,6 +256,7 @@ export class McpGateway {
   }
 
   dispose(): void {
+    this.preview.dispose();
     this.upstreams.sync([]).catch(() => {});
 
     for (const socket of Object.values(this.sockets)) {

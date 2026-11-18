@@ -1,7 +1,7 @@
 import React from "react";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IMockPreviewElement } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
@@ -28,6 +28,8 @@ interface State {
   scroll: boolean;
   files: string[];
   images: AcpSDK.ImageContent[];
+  browserNotice?: { text: string; severity?: "warning" };
+  mockElement?: { sessionId: string; element: IMockPreviewElement };
   registry: IAcpRegistry;
   search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
@@ -72,10 +74,13 @@ export function AcpComponent() {
   const textarea = React.useRef<HTMLTextAreaElement>(null);
   const { active } = useFocus();
   const main = active === command.current ? "normal" : active === textarea.current ? "input" : "blur";
+  const mockElement = state.mockElement?.sessionId === state.status.sessionId ? state.mockElement?.element : undefined;
   const color = main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
     emit.on("acp:file:add", onAcpFileAdd);
+    emit.on("acp:mock:element", onAcpMockElement);
+    emit.on("acp:browser:notice", onAcpBrowserNotice);
     emit.on("acp:message:added", onAcpMessageAdded);
     emit.on("acp:session:update", onAcpSessionUpdate);
     emit.on("acp:status:changed", onAcpStatusChanged);
@@ -83,6 +88,8 @@ export function AcpComponent() {
 
     return () => {
       emit.off("acp:file:add", onAcpFileAdd);
+      emit.off("acp:mock:element", onAcpMockElement);
+      emit.off("acp:browser:notice", onAcpBrowserNotice);
       emit.off("acp:message:added", onAcpMessageAdded);
       emit.off("acp:session:update", onAcpSessionUpdate);
       emit.off("acp:status:changed", onAcpStatusChanged);
@@ -171,6 +178,17 @@ export function AcpComponent() {
       ...state,
       files: [ ...state.files.filter(f => f !== file), file ]
     }));
+  }
+
+  function onAcpMockElement(sessionId: string, element: IMockPreviewElement | null) {
+    setState(state => ({
+      ...state,
+      mockElement: element ? { sessionId, element } : state.mockElement?.sessionId === sessionId ? undefined : state.mockElement,
+    }));
+  }
+
+  function onAcpBrowserNotice(text?: string, severity?: "warning") {
+    setState(state => ({ ...state, browserNotice: text ? { text, severity } : undefined }));
   }
 
   function onAcpMessageAdded(message: AcpSDK.SessionNotification) {
@@ -404,7 +422,7 @@ export function AcpComponent() {
           return;
         }
 
-        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images);
+        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images, mockElement);
 
         break;
       case "search":
@@ -593,7 +611,13 @@ export function AcpComponent() {
               </div>
             </FlexComponent>
           )}
-          {state.status.notice && <div className="divider color-gray" /> }
+          {state.browserNotice && (
+            <FlexComponent color={state.browserNotice.severity ? "yellow" : "blue"} padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
+              <IconComponent font={state.browserNotice.severity ? uiIcons.warning : uiIcons.info} />
+              <div role="status">{state.browserNotice.text}</div>
+            </FlexComponent>
+          )}
+          {(state.status.notice || state.browserNotice) && <div className="divider color-gray" /> }
           {state.status.elicitation && (
             <CollapseComponent label="󰋗 Elicitation" style={{marginBottom: 4}} open>
               <ElicitationComponent request={state.status.elicitation} />
@@ -645,7 +669,7 @@ export function AcpComponent() {
             </CollapseComponent>
           )}
           <FlexComponent>
-            {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
+            {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || uiIcons.acp} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
             {checkAcpStatus("connected") && <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpAgentStop} />}
             {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
             {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => switchMode("prompt")} />}

@@ -5,6 +5,7 @@ import { lookup } from "mime-types";
 
 import { Emit } from "main/emit";
 import { Browser } from "main/browser";
+import { MOCK_PREVIEW_SCHEME, MockPreview } from "main/mcp/preview";
 
 export class Bootstrap {
   static win?: Electron.BrowserWindow;
@@ -15,6 +16,7 @@ export class Bootstrap {
         { role: "editMenu", visible: true }
       ])
     );
+    Electron.protocol.registerSchemesAsPrivileged([{ scheme: MOCK_PREVIEW_SCHEME, privileges: { standard: true, secure: true } }]);
     Electron.app.commandLine.appendSwitch("remote-debugging-port", "8315");
     Electron.app.on("ready", this.onReady);
     Electron.app.on("activate", this.onActivate);
@@ -22,6 +24,7 @@ export class Bootstrap {
   }
 
   private onReady = () => {
+    Electron.session.defaultSession.protocol.handle(MOCK_PREVIEW_SCHEME, MockPreview.serve);
     this.create();
   }
 
@@ -66,10 +69,16 @@ export class Bootstrap {
       if (["file:"].includes(protocol)) Emit.share("neovim:function", "EnvimOpenFile", [url]);
       if (["http:", "https:"].includes(protocol)) Emit.share("browser:open", url);
     });
-    Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences) => {
+    Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences, params) => {
       delete(webPreferences.preload);
       webPreferences.nodeIntegration = false;
       webPreferences.transparent = false;
+      if (params.src.startsWith(`${MOCK_PREVIEW_SCHEME}://`)) {
+        webPreferences.contextIsolation = true;
+        webPreferences.sandbox = true;
+        webPreferences.nodeIntegrationInSubFrames = false;
+        webPreferences.nodeIntegrationInWorker = false;
+      }
     });
     Electron.session.defaultSession.protocol.handle("file", async (request) => {
       const filePath = decodeURIComponent(new URL(request.url).pathname);

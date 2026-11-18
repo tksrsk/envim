@@ -3,6 +3,7 @@ import { lookup } from "dns";
 
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
+import { MOCK_PREVIEW_SCHEME, MockPreview } from "main/mcp/preview";
 
 export class Browser {
   private ignoreCertErrorHost: string[] = [];
@@ -11,6 +12,11 @@ export class Browser {
 
   constructor(private webContents: Electron.WebContents) {
     webContents.setWindowOpenHandler(this.onOpenWindow);
+    webContents.on("will-frame-navigate", event => {
+      if (this.isMockPreview() && event.url.split("#")[0] !== webContents.getURL().split("#")[0]) {
+        event.preventDefault();
+      }
+    });
     webContents.on("devtools-open-url", this.onOpenUrl);
     webContents.on("login", this.onLogin);
     webContents.on("certificate-error", this.onCertError);
@@ -27,7 +33,13 @@ export class Browser {
     return Electron.dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0;
   }
 
+  private isMockPreview() {
+    return this.webContents.getURL().startsWith(`${MOCK_PREVIEW_SCHEME}://`);
+  }
+
   private onOpenWindow = (details: Electron.HandlerDetails) => {
+    if (this.isMockPreview()) return { action: "deny" as const };
+
     const action: "allow" | "deny" = !details.url.match(/^https?\/\//) || details.postBody ? "allow" : "deny";
 
     action === "deny" && Emit.share("browser:open", details.url);
@@ -98,7 +110,7 @@ export class Browser {
   private onInput = (e: Electron.Event, input: Electron.Input) => {
     switch (input.key) {
       case "Escape":
-        if (this.currentMode === "browser") {
+        if (this.currentMode === "browser" && !MockPreview.isPicking(this.webContents)) {
           e.preventDefault();
           Emit.send("browser:action", this.webContents.id, "mode-command");
         }

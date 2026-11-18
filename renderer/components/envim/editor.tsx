@@ -36,7 +36,7 @@ interface States {
   dragging: boolean;
   hidden: boolean;
   scrolling: number;
-  webview: { src: string; active: boolean; };
+  webview: { src: string; active: boolean; requestId?: string };
   scroll: {
     total: number;
     height: string;
@@ -187,8 +187,8 @@ export function EditorComponent(props: Props) {
     runCommand(e, `${line} | redraw`);
   }
 
-  function onBrowserView(src: string, active: boolean) {
-    setState(state => ({ ...state, webview: { src, active } }));
+  function onBrowserView(src: string, active: boolean, requestId?: string) {
+    setState(state => ({ ...state, webview: { src, active, requestId } }));
   }
 
   function onNeovimUiGridClear() {
@@ -272,8 +272,8 @@ export function EditorComponent(props: Props) {
   }
 
   function renderPreview() {
-    const { src, active } = state.webview;
-    return active && <WebviewComponent src={src} active={props.focus} style={!state.hidden ? {} : { display: "none" }} />;
+    const { src, active, requestId } = state.webview;
+    return active && <WebviewComponent src={src} requestId={requestId} active={props.focus} style={!state.hidden ? {} : { display: "none" }} />;
   }
 
   return (
@@ -319,7 +319,7 @@ export function EditorComponent(props: Props) {
             { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
             { props.type === "external" && !state.hidden && (
               <>
-                <IconComponent color="gray-fg" font="󰮐" active={state.dragging} onClick={dragExtWIndow} />
+                <IconComponent color="gray-fg" font={uiIcons.placing} active={state.dragging} onClick={dragExtWIndow} />
                 { renderIconMenu("", [
                   [
                     { font: "󱂪", onClick: e => runCommand(e, "wincmd H") },
