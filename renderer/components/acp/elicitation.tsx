@@ -100,7 +100,7 @@ export function ElicitationComponent({ request }: { request: IElicitationRequest
       </FlexComponent>
       {url && <FlexComponent color="orange-fg" title={url}>{new URL(url).host}</FlexComponent>}
       {schema && (
-        <form ref={form} onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.preventDefault()} onFocus={() => emit.share("ui:focused")}>
+        <form ref={form} onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && e.preventDefault()}>
           {properties.map(([key, property]) => (
             <FlexComponent key={key} direction="column" padding={[4, 0]} whiteSpace="pre-wrap">
               {property.type !== "boolean" && <span>{property.title || key}{schema.required?.includes(key) && " *"}</span>}

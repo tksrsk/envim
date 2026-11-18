@@ -2,6 +2,7 @@ import React from "react";
 
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
+import { useFocus } from "renderer/context/focus";
 
 import { keycode } from "renderer/utils/keycode";
 import { row2Y, col2X } from "renderer/utils/size";
@@ -12,8 +13,6 @@ interface States {
   cursor: { x: number, y: number, width: number, zIndex: number, shape: "block" | "vertical" | "horizontal" };
   value: string;
   busy: boolean;
-  focus: boolean;
-  focusable: boolean;
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -32,45 +31,23 @@ const styles: { [k: string]: React.CSSProperties } = {
 export function InputComponent () {
   const { busy, mode } = useEditor();
   const { emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy, focus: true, focusable: true });
+  const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy });
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
+  const { active, targets } = useFocus();
+  const focused = active === input.current;
 
   React.useEffect(() => {
+    targets.push(input);
     emit.on("neovim:ui:grid:cursor", onNeovimUiGridCursor);
-    emit.on("ui:focus", onUiFocus);
-    emit.on("ui:focusable", onUiFocusable);
 
     return () => {
+      targets.splice(targets.indexOf(input), 1);
       emit.off("neovim:ui:grid:cursor", onNeovimUiGridCursor);
-      emit.off("ui:focus", onUiFocus);
-      emit.off("ui:focusable", onUiFocusable);
     };
   }, []);
 
   function onNeovimUiGridCursor (cursor: { x: number, y: number, width: number, hl: string, zIndex: number }) {
     setState(state => ({ ...state, cursor: { ...state.cursor, ...cursor }}));
-  }
-
-  function onUiFocus () {
-    setState(state => {
-      if (state.focusable) {
-        const active = document.activeElement;
-        const otherInputFocused = active && active !== input.current && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
-
-        if (!otherInputFocused) {
-          const selected = window.getSelection()?.toString();
-          selected && navigator.clipboard.writeText(selected);
-          input.current?.focus();
-        }
-      }
-
-      return { ...state, focus: state.focusable };
-    });
-  }
-
-  function onUiFocusable (focusable: boolean) {
-    focusable ? input.current?.focus() : input.current?.blur();
-    setState(state => ({ ...state, focusable }));
   }
 
   React.useEffect(() => {
@@ -90,7 +67,7 @@ export function InputComponent () {
     const offset = Math.max(col2X(cursor.x + state.value.length + multibyte + 1) - document.body.clientWidth, 0);
 
     return {
-      minWidth: state.busy || !state.focus ? 0 : col2X(state.cursor.width),
+      minWidth: state.busy || !focused ? 0 : col2X(state.cursor.width),
       height: row2Y(1),
       transform: `translate(${col2X(cursor.x) - offset}px, ${row2Y(cursor.y)}px)`,
       zIndex: cursor.zIndex,
@@ -101,14 +78,6 @@ export function InputComponent () {
         block: {},
       }[cursor.shape]),
     };
-  }
-
-  function toggleFocus (focus: boolean) {
-    setTimeout(
-      () => (document.activeElement === input.current) === focus && setState(state => ({ ...state, focus })),
-      200
-    );
-    focus && emit.share("ui:focused");
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -131,10 +100,8 @@ export function InputComponent () {
   }
 
   return (
-    <FlexComponent animate="fade-in" style={makeStyle()} shadow={!state.busy && state.focus && state.cursor.shape === "block"} nomouse>
+    <FlexComponent animate="fade-in" style={makeStyle()} shadow={!state.busy && focused && state.cursor.shape === "block"} nomouse>
       <input type="text" style={styles.input} ref={input} tabIndex={-1} autoFocus
-        onFocus={() => toggleFocus(true)}
-        onBlur={() => toggleFocus(false)}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
       />

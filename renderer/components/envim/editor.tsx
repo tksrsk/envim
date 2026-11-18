@@ -85,10 +85,6 @@ export function EditorComponent(props: Props) {
       emit.send("neovim:ui:resized", props.gid);
   }, [props.style.width, props.style.height]);
 
-  React.useEffect(() => {
-      props.focus && emit.share("ui:focusable", !state.webview.active);
-  }, [props.focus, state.webview.active]);
-
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
     e.preventDefault();

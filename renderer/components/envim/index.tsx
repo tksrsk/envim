@@ -4,6 +4,7 @@ import { IWindow, IHighlight } from "common/interface";
 
 import { EditorProvider } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
+import { FocusProvider } from "renderer/context/focus";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
@@ -127,41 +128,42 @@ export function EnvimComponent(props: Props) {
 
   function onMouseUp() {
     emit.share("ui:drag", "");
-    emit.share("ui:focus");
   }
 
   return (
-    <EditorProvider>
-      <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
-        <TablineComponent {...props.header} />
-        <FlexComponent zIndex={0} direction="column" style={props.main}>
-          <FlexComponent color="default" grow={1} />
-          <FlexComponent overflow="visible">
-            <FlexComponent zIndex={0} grow={1} shrink={1} overflow="visible">
-              <FlexComponent color="default" zIndex={-1} grow={1} />
-              <FlexComponent zIndex={0} overflow="visible" style={editor}>
-                { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
-                  <EditorComponent key={grid.gid} { ...grid } />
-                )) }
-                <PopupmenuComponent />
-                <InputComponent />
+    <FocusProvider>
+      <EditorProvider>
+        <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
+          <TablineComponent {...props.header} />
+          <FlexComponent zIndex={0} direction="column" style={props.main}>
+            <FlexComponent color="default" grow={1} />
+            <FlexComponent overflow="visible">
+              <FlexComponent zIndex={0} grow={1} shrink={1} overflow="visible">
+                <FlexComponent color="default" zIndex={-1} grow={1} />
+                <FlexComponent zIndex={0} overflow="visible" style={editor}>
+                  { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
+                    <EditorComponent key={grid.gid} { ...grid } />
+                  )) }
+                  <PopupmenuComponent />
+                  <InputComponent />
+                </FlexComponent>
+                <FlexComponent color="default" zIndex={-1} grow={1} />
+                <CmdlineComponent />
+                <NotificateComponent />
               </FlexComponent>
-              <FlexComponent color="default" zIndex={-1} grow={1} />
-              <CmdlineComponent />
-              <NotificateComponent />
-            </FlexComponent>
-            <FlexComponent style={acp}>
-              <AcpComponent />
+              <FlexComponent style={acp}>
+                <AcpComponent />
+              </FlexComponent>
             </FlexComponent>
           </FlexComponent>
-        </FlexComponent>
-        <HistoryComponent {...props.footer} />
-        { state.pause && (
-          <FlexComponent direction="column" horizontal="center" vertical="center" color="default" position="absolute" zIndex={100} inset={[0]} style={styles.backdrop}>
-            <div className="animate loading" />
-          </FlexComponent>
-        ) }
-      </div>
-    </EditorProvider>
+          <HistoryComponent {...props.footer} />
+          { state.pause && (
+            <FlexComponent direction="column" horizontal="center" vertical="center" color="default" position="absolute" zIndex={100} inset={[0]} style={styles.backdrop}>
+              <div className="animate loading" />
+            </FlexComponent>
+          ) }
+        </div>
+      </EditorProvider>
+    </FocusProvider>
   );
 }

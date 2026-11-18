@@ -4,6 +4,7 @@ import React from "react";
 import { ISetting } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
+import { useFocus, FocusProvider } from "renderer/context/focus";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
@@ -26,7 +27,6 @@ interface States {
   title: string;
   loading: boolean;
   favicon?: string;
-  mode: "command" | "visual" | "input" | "search" | "browser" | "blur";
   searchengines: ISetting["searchengines"];
   zoom: number;
   pointer: Electron.Rectangle;
@@ -53,26 +53,27 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function WebviewComponent(props: Props) {
   const { emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, mode: "blur", searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
+  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<Electron.WebviewTag | null> = React.useRef<Electron.WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
+  const { active } = useFocus();
+  const mode = getMode(active);
+  const blank = (webview.current?.getURL() ?? getUrl(props.src)) === "about:blank";
   const icon = state.searchengines.some(({ uri }) => uri === state.input)
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
-  const color = { command: "green", visual: "purple", browser: "blue" }[state.mode] || "default";
+  const color = { command: "green", visual: "purple", browser: "blue" }[mode] || "default";
 
   React.useEffect(() => {
     Emit.on("browser:action", onBrowserAction);
     Emit.on("browser:searchengines", onBrowserSearchengines);
-    emit.on("ui:focused", onUiFocused);
 
     return () => {
       Emit.off("browser:action", onBrowserAction);
       Emit.off("browser:searchengines", onBrowserSearchengines);
-      emit.off("ui:focused", onUiFocused);
     };
   }, []);
 
@@ -93,7 +94,6 @@ export function WebviewComponent(props: Props) {
         webview.removeEventListener("did-navigate-in-page", onLoad);
         webview.removeEventListener("page-title-updated", onLoad);
         webview.removeEventListener("page-favicon-updated", onFavicon);
-        webview.removeEventListener("focus", onFocus);
       };
     }
 
@@ -101,8 +101,21 @@ export function WebviewComponent(props: Props) {
   }, [container.current]);
 
   React.useEffect(() => {
-    props.active && runAction("mode-command");
-  }, [props.active]);
+    webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
+    ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
+    ["command", "visual"].includes(mode) || setState(state => state.selection ? { ...state, selection: undefined } : state);
+  }, [mode]);
+
+  function getMode(element: Element | null) {
+    switch (element) {
+      case null: return "blur";
+      case command.current: return state.selection ? "visual" : "command";
+      case input.current: return "input";
+      case search.current: return "search";
+      case webview.current: return "browser";
+      default: return "blur";
+    }
+  }
 
   function onReady () {
     if (container.current) {
@@ -115,9 +128,7 @@ export function WebviewComponent(props: Props) {
       webview.current.addEventListener("did-navigate-in-page", onLoad);
       webview.current.addEventListener("page-title-updated", onLoad);
       webview.current.addEventListener("page-favicon-updated", onFavicon);
-      webview.current.addEventListener("focus", onFocus);
       webview.current.addEventListener("close", onClose);
-      props.active && runAction("mode-command");
     }
   }
 
@@ -135,37 +146,8 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onCancel (e: React.MouseEvent) {
-    e.stopPropagation();
-
-    e.type !== "mousemove" && state.mode === "blur" && runAction("mode-command");
-  }
-
-  function onFocus () {
-    emit.share("ui:focused");
-  }
-
   function onClose() {
     webview.current = null;
-  }
-
-  function onUiFocused () {
-    setState(state => {
-      const mode = (() => {
-        switch (document.activeElement) {
-          case command.current: return "command";
-          case input.current: return "input";
-          case search.current: return "search";
-          case webview.current: return "browser";
-          default: return "blur";
-        }
-      })();
-
-      webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
-      state.mode !== mode && ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
-
-      return { ...state, mode };
-    });
   }
 
   function setPointer(x: number | "max", y: number | "max") {
@@ -199,11 +181,11 @@ export function WebviewComponent(props: Props) {
     const rect = line ? { ...state.pointer, x: 0, width: container.current.offsetWidth } : state.pointer;
     const anchor = { ...state.pointer }
 
-    setState(state => ({ ...state, mode, selection: mode === "command" ? undefined : { anchor, line, rect } }));
+    setState(state => ({ ...state, selection: mode === "command" ? undefined : { anchor, line, rect } }));
   }
 
   function renderRect() {
-    const rect = { command: state.pointer, visual: state.selection?.rect }[state.mode];
+    const rect = mode === "command" ? state.pointer : mode === "visual" ? state.selection?.rect : undefined;
 
     if (!rect) return null;
 
@@ -217,7 +199,7 @@ export function WebviewComponent(props: Props) {
 
     webview.current.sendInputEvent({ type: "mouseDown", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
     webview.current.sendInputEvent({ type: "mouseUp", button: "left", x: state.pointer.x, y: state.pointer.y, clickCount: 1 });
-    emit.once("ui:focused", () => runAction("mode-command"));
+    (webview.current as HTMLElement).addEventListener("focus", () => runAction("mode-command"), { once: true });
   }
 
   function onKeyDown (e: React.KeyboardEvent) {
@@ -261,8 +243,8 @@ export function WebviewComponent(props: Props) {
       case "G": return (webview.current.sendInputEvent({ type: "keyDown", keyCode: "End" }), setPointer(state.pointer.x, "max"));
       case "v": return switchVisualMode("visual");
       case "V": return switchVisualMode("visual-line");
-      case "y": return state.mode === "visual" && switchVisualMode("command", "selected");
-      case "Y": return state.mode === "command" && switchVisualMode("command", "full");
+      case "y": return mode === "visual" && switchVisualMode("command", "selected");
+      case "Y": return mode === "command" && switchVisualMode("command", "full");
       case "-": return runAction("zoom-out");
       case "+": return runAction("zoom-in");
       case "i": return runAction("mode-browser");
@@ -280,7 +262,7 @@ export function WebviewComponent(props: Props) {
   function onChange (e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
 
-    switch (state.mode) {
+    switch (mode) {
       case "input": return setState(state => ({ ...state, input: value }));
       case "search": return setState(state => ({ ...state, search: value }));
     }
@@ -294,7 +276,7 @@ export function WebviewComponent(props: Props) {
 
     runAction("mode-command");
 
-    switch (state.mode) {
+    switch (mode) {
       case "input":
         if (state.input) {
           const url = webview.current.getURL();
@@ -320,9 +302,11 @@ export function WebviewComponent(props: Props) {
 
       setState(state => {
         state.input === "" && webview.current?.clearHistory();
-        !["blur", "command", "visual"].includes(state.mode) && state.loading !== loading && runAction("mode-command");
+        const mode = getMode(document.activeElement);
 
-        return { ...state, input: state.mode === "input" ? state.input : input, title, loading };
+        !["blur", "command", "visual"].includes(mode) && state.loading !== loading && runAction("mode-command");
+
+        return { ...state, input: mode === "input" ? state.input : input, title, loading };
       });
     }
   }
@@ -357,7 +341,7 @@ export function WebviewComponent(props: Props) {
         case "mode-search": return search.current?.focus();
         case "mode-command": return command.current?.focus();
         case "cancel-load": return webview.current.stop();
-        case "send-escape": state.mode === "command" && webview.current.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+        case "send-escape": mode === "command" && webview.current.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
       }
     }
   }
@@ -440,41 +424,43 @@ export function WebviewComponent(props: Props) {
   }
 
   return (
-    <FlexComponent animate="fade-in" direction="column" position="absolute" color="default" inset={[0]} style={props.style} onMouseDown={onCancel} onMouseMove={onCancel} onMouseUp={onCancel}>
-      <input style={styles.command} type="text" ref={command} onChange={onChange} onFocus={onFocus} onKeyDown={onKeyDown} tabIndex={-1} />
-      <FlexComponent color="gray-fg" vertical="center" horizontal="center">
-        { state.loading
-          ? <><div className="animate loading inline"></div><FlexComponent margin={[0, 4]} style={styles.title}>{ state.title }</FlexComponent></>
-          : <IconComponent font={state.favicon || ""} text={state.title} style={styles.title} />
-        }
-      </FlexComponent>
-      <FlexComponent vertical="center">
-        <IconComponent font="" onClick={() => runAction("navigate-backward")} />
-        <IconComponent font="" onClick={() => runAction("navigate-forward")} />
-        <IconComponent font={ state.loading ? uiIcons.stop : uiIcons.refresh } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
-        <MenuComponent label={() => <IconComponent { ...icon } onClick={saveEngine} />}>
-          { renderEngine("") }
-        </MenuComponent>
-        <FlexComponent grow={1} shrink={2} padding={[0, 8, 0, 0]}>
-          <form style={styles.form} onSubmit={onSubmit}>
-            <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} onFocus={onFocus} tabIndex={-1} />
-          </form>
+    <FocusProvider targets={[command, input, search, webview]} initial={blank ? input : command} delegate={props.active}>
+      <FlexComponent animate="fade-in" direction="column" position="absolute" color="default" inset={[0]} style={props.style}>
+        <input style={styles.command} type="text" ref={command} onChange={onChange} onKeyDown={onKeyDown} tabIndex={-1} />
+        <FlexComponent color="gray-fg" vertical="center" horizontal="center">
+          { state.loading
+            ? <><div className="animate loading inline"></div><FlexComponent margin={[0, 4]} style={styles.title}>{ state.title }</FlexComponent></>
+            : <IconComponent font={state.favicon || ""} text={state.title} style={styles.title} />
+          }
         </FlexComponent>
-        <IconComponent font={uiIcons.search} />
-        <FlexComponent shrink={3}>
-          <form style={styles.input} onSubmit={onSubmit}>
-            <input style={styles.input} type="text" ref={search} value={state.search} onChange={onChange} onFocus={onFocus} tabIndex={-1} />
-          </form>
+        <FlexComponent vertical="center">
+          <IconComponent font="" onClick={() => runAction("navigate-backward")} />
+          <IconComponent font="" onClick={() => runAction("navigate-forward")} />
+          <IconComponent font={ state.loading ? uiIcons.stop : uiIcons.refresh } onClick={() => runAction(state.loading ? "cancel-load" : "reload")} />
+          <MenuComponent label={() => <IconComponent { ...icon } onClick={saveEngine} />}>
+            { renderEngine("") }
+          </MenuComponent>
+          <FlexComponent grow={1} shrink={2} padding={[0, 8, 0, 0]}>
+            <form style={styles.form} onSubmit={onSubmit}>
+              <input style={styles.input} type="text" ref={input} value={state.input} onChange={onChange} tabIndex={-1} />
+            </form>
+          </FlexComponent>
+          <IconComponent font={uiIcons.search} />
+          <FlexComponent shrink={3}>
+            <form style={styles.input} onSubmit={onSubmit}>
+              <input style={styles.input} type="text" ref={search} value={state.search} onChange={onChange} tabIndex={-1} />
+            </form>
+          </FlexComponent>
+          <IconComponent font="" onClick={() => runAction("zoom-out")} />
+          { state.zoom }%
+          <IconComponent font="" onClick={() => runAction("zoom-in")} />
+          <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
         </FlexComponent>
-        <IconComponent font="" onClick={() => runAction("zoom-out")} />
-        { state.zoom }%
-        <IconComponent font="" onClick={() => runAction("zoom-in")} />
-        <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
+        <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
+          <div className="space" ref={container} />
+          { renderRect() }
+        </FlexComponent>
       </FlexComponent>
-      <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
-        <div className="space" ref={container} />
-        { renderRect() }
-      </FlexComponent>
-    </FlexComponent>
+    </FocusProvider>
   );
 }
