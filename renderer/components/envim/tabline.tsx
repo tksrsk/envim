@@ -204,10 +204,9 @@ export function TablineComponent(props: Props) {
     <FlexComponent color="default" overflow="visible" zIndex={1} style={props} shadow>
       {state.enabled && state.tabs.map((tab, i) => renderTab(i, tab))}
       <IconComponent color="green-fg" font={uiIcons.add} onClick={e => runCommand(e, "$tab split")} />
-      <MenuComponent color="lightblue-fg" label="󰉋">
+      <MenuComponent label={renderBookmark}>
         { renderBookmarkMenu("") }
       </MenuComponent>
-      { renderBookmark() }
       <div className="space dragable" />
       { renderSubmenu(state.menus, []) }
       <IconComponent color="gray-fg" font={uiIcons.stop} onClick={e => runCommand(e, "confirm quitall")} />
