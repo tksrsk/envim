@@ -24,7 +24,7 @@ export class BrowserTools {
 
   constructor(workspace: Workspace, private readonly onRemove?: (endpoint: string) => void) {
     this.mock = new MockPreview(workspace);
-    this.shared = new SharedBrowser(workspace.emit, endpoint => stopPicking(endpoint),
+    this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => stopPicking(endpoint, guestId),
       (url, requestId) => workspace.showBrowserTab(url, requestId));
   }
 
@@ -87,7 +87,9 @@ export class BrowserTools {
 
     const current = () => sharedGuest ? this.shared.guest(endpoint, guestId) : this.mock.guest(endpoint, guestId);
     await pickElement(endpoint, guest, () => current() === guest, selection => {
-      onSelection({ ...selection, url: sharedGuest ? guest.getURL() : this.mock.url(endpoint) ?? guest.getURL() });
+      onSelection(sharedGuest
+        ? { ...selection, url: guest.getURL(), tab: guestId }
+        : { ...selection, url: this.mock.url(endpoint) ?? guest.getURL() });
     });
   }
 

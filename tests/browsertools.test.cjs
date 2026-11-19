@@ -231,42 +231,69 @@ test('shared browser actions follow HTTP(S) navigation in the same tab and stop 
   }
 });
 
-test('navigate opens and shares only the new tab reported for this session', async () => {
+test('shares several tabs per session and targets them by tab id', async () => {
   const { EventEmitter } = require('node:events');
-  const urls = new Map([[1, 'https://example.test/already-open'], [2, 'https://example.test/new']]);
+  const urls = new Map([[1, 'https://example.test/already-open'], [2, 'https://example.test/new'], [3, 'https://example.test/other']]);
   const guests = new Map(Array.from(urls.keys(), id => [id, Object.assign(new EventEmitter(), {
     id,
     getType: () => 'webview',
     getURL: () => urls.get(id),
+    getTitle: () => 'Tab ' + id,
     isLoadingMainFrame: () => false,
     isDestroyed: () => false,
     async loadURL(url) { urls.set(id, url); }
   })]));
   const SharedBrowser = loadSharedBrowser(id => guests.get(id));
-  const requests = [], statuses = [];
-  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) }, undefined, async (url, id) => {
+  const requests = [], statuses = [], revoked = [];
+  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) }, (endpoint, id) => revoked.push([endpoint, id]), async (url, id) => {
     requests.push({ url, id });
   });
 
-  const opening = shared.act('first', { action: 'navigate', url: 'https://example.test/new' });
-  await assert.rejects(shared.act('first', { action: 'navigate', url: 'https://example.test/duplicate' }), /already opening/);
+  // With nothing shared, navigate opens a new tab. Two opens can run at the same time.
+  const first = shared.act('first', { action: 'navigate', url: 'https://example.test/new' });
+  const second = shared.act('first', { action: 'navigate', url: 'https://example.test/other', new_tab: true });
   shared.attach('unrelated-request', 1);
   assert.equal(shared.guest('first'), undefined);
   shared.attach(requests[0].id, 2);
-  assert.match(await opening, /in a new shared tab/);
-  assert.equal(shared.guest('first'), guests.get(2));
-  assert.equal(shared.guest('second'), undefined);
-  assert.deepEqual(statuses.map(status => status.slice(1)), [[2, true]]);
-  await shared.act('first', { action: 'navigate', url: 'https://example.test/next' });
-  assert.equal(urls.get(2), 'https://example.test/next');
-  assert.equal(urls.get(1), 'https://example.test/already-open');
-  assert.equal(requests.length, 1);
+  assert.match(await first, /in new shared tab 2/);
+  shared.attach(requests[1].id, 3);
+  assert.match(await second, /in new shared tab 3/);
+  assert.deepEqual(await shared.act('first', { action: 'list' }), [
+    { tab: 2, url: 'https://example.test/new', title: 'Tab 2' },
+    { tab: 3, url: 'https://example.test/other', title: 'Tab 3' },
+  ]);
 
-  const canceled = shared.act('second', { action: 'navigate', url: 'https://example.test/canceled' });
-  shared.revoke('second');
-  shared.attach(requests[1].id, 1);
+  // Several shared tabs require a tab id.
+  await assert.rejects(shared.act('first', { action: 'navigate', url: 'https://example.test/next' }), /Several tabs/);
+  await assert.rejects(shared.act('first', { action: 'inspect', tab: 1 }), /Tab 1 is not shared/);
+  assert.match(await shared.act('first', { action: 'navigate', url: 'https://example.test/next', tab: 3 }), /shared tab 3/);
+  assert.equal(urls.get(3), 'https://example.test/next');
+  assert.equal(urls.get(2), 'https://example.test/new');
+
+  // A manually shared tab is added without unsharing the others.
+  shared.share('first', 1);
+  assert.deepEqual((await shared.act('first', { action: 'list' })).map(tab => tab.tab), [2, 3, 1]);
+  assert.equal(shared.guest('first', 1), guests.get(1));
+
+  // Sharing a tab with another session moves it there.
+  shared.share('second', 1);
+  assert.deepEqual((await shared.act('first', { action: 'list' })).map(tab => tab.tab), [2, 3]);
+  assert.equal(shared.guest('second'), guests.get(1));
+
+  // Revoking one tab keeps the rest; revoking the session clears all of them.
+  shared.revoke('first', 2);
+  assert.equal(shared.guest('first'), guests.get(3));
+  shared.revoke('first');
+  assert.deepEqual(await shared.act('first', { action: 'list' }), []);
+  assert.deepEqual(revoked, [['first', 1], ['first', 2], ['first', 3]]);
+  assert.deepEqual(statuses.map(status => status.slice(1)),
+    [[2, true], [3, true], [1, true], [1, false], [1, true], [2, false], [3, false]]);
+
+  const canceled = shared.act('third', { action: 'navigate', url: 'https://example.test/canceled' });
+  shared.revoke('third');
+  shared.attach(requests[2].id, 2);
   await assert.rejects(canceled, /did not finish opening/);
-  assert.equal(shared.guest('second'), undefined);
+  assert.equal(shared.guest('third'), undefined);
 });
 
 test('waits for a newly opened mock tab to attach without polling', async () => {
