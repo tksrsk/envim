@@ -6,6 +6,7 @@ import { pageSelector } from "main/mcp/page";
 const MAX_LINES = 500;
 const MAX_CHARS = 30000;
 const MAX_NAME = 200;
+const MAX_TEXT = 1000;
 const ISOLATED_WORLD = "envim-browser-tools";
 
 // Roles that get a ref, so the agent can act on them. Focusable nodes get one as well.
@@ -16,11 +17,20 @@ const INTERACTIVE_ROLES = new Set([
 // Roles that only group their children. They are skipped when they have no name.
 const TRANSPARENT_ROLES = new Set([
   "none", "generic", "presentation", "InlineTextBox", "LineBreak", "LayoutTableCell", "LayoutTableRow", "LabelText", "MenuListPopup",
+  // Text formatting. The text inside still appears.
+  "strong", "emphasis", "mark", "subscript", "superscript", "deletion", "insertion",
+]);
+// Roles that structure the page. A focusable one, such as a heading with tabindex="-1", gets no ref.
+const STRUCTURAL_ROLES = new Set([
+  "heading", "paragraph", "article", "main", "region", "navigation", "banner", "contentinfo", "complementary", "search",
+  "form", "list", "listitem", "table", "rowgroup", "row", "cell", "gridcell", "columnheader", "rowheader", "sectionheader",
+  "separator", "status", "image", "img", "figure", "document", "group",
 ]);
 const STATES = ["checked", "pressed", "selected", "expanded", "disabled", "required", "readonly", "invalid", "focused"];
 
 interface AXValue {
   value?: unknown;
+  sources?: { type: string; value?: unknown; superseded?: boolean }[];
 }
 
 interface AXNode {
@@ -67,12 +77,20 @@ function text(value: unknown, max = MAX_NAME): string {
   return flat.length > max ? `${flat.slice(0, max)}...` : flat;
 }
 
+// Whether Chromium computed the name from the node's text content rather than an attribute or label.
+function nameFromContents(node: AXNode): boolean {
+  const source = node.name?.sources?.find(item => item.value !== undefined && !item.superseded);
+  return source?.type === "contents";
+}
+
 function describe(node: AXNode, role: string, name: string): string {
   const parts = [role];
   if (name) parts.push(JSON.stringify(name));
 
   const focusable = node.properties?.some(property => property.name === "focusable" && property.value.value === true);
-  if (node.backendDOMNodeId !== undefined && (INTERACTIVE_ROLES.has(role) || focusable)) parts.push(`[ref=e${node.backendDOMNodeId}]`);
+  if (node.backendDOMNodeId !== undefined && (INTERACTIVE_ROLES.has(role) || (focusable && !STRUCTURAL_ROLES.has(role)))) {
+    parts.push(`[ref=e${node.backendDOMNodeId}]`);
+  }
 
   const value = node.value?.value;
   if (value !== undefined && value !== "" && value !== name) parts.push(`value=${JSON.stringify(text(value))}`);
@@ -86,52 +104,78 @@ function describe(node: AXNode, role: string, name: string): string {
   return parts.join(" ");
 }
 
+// A rendered node, or a run of text. Adjacent runs of text are merged into one line, and repeated
+// identical leaf nodes into one line with a count.
+type Item = { line: string; children: Item[]; count: number } | { text: string };
+
 // Renders the accessibility tree as indented lines, with a ref on each node the agent can act on.
 function render(nodes: AXNode[]): { snapshot: string; truncated: boolean } {
   const byId = new Map(nodes.map(node => [node.nodeId, node]));
   const root = nodes.find(node => !node.parentId) ?? nodes[0];
-  const lines: string[] = [];
-  let chars = 0;
-  let truncated = false;
 
   // context is the name and value of the nearest rendered ancestor, passed through transparent nodes.
   // Text that repeats it is skipped.
-  const visit = (node: AXNode | undefined, depth: number, context: string) => {
-    if (!node || truncated) return;
+  const build = (node: AXNode | undefined, context: string): Item[] => {
+    if (!node) return [];
 
     const role = String(node.role?.value ?? "");
-    const name = text(node.name?.value);
-    const children = () => {
-      const own = `${name}\n${text(node.value?.value)}`;
-      for (const childId of node.childIds ?? []) visit(byId.get(childId), depth + 1, own.trim() ? own : "");
-    };
-    const passThrough = () => {
-      for (const childId of node.childIds ?? []) visit(byId.get(childId), depth, context);
-    };
+    const children = (childContext: string) => merge((node.childIds ?? []).flatMap(childId => build(byId.get(childId), childContext)));
 
     // List markers repeat the bullet or number of every list item.
-    if (role === "ListMarker") return;
-    if (node.ignored || role === "RootWebArea" || (TRANSPARENT_ROLES.has(role) && !name)) return passThrough();
-
-    let line: string;
+    if (role === "ListMarker") return [];
     if (role === "StaticText") {
-      if (!name || context.includes(name)) return;
-      line = `text: ${JSON.stringify(name)}`;
-    } else {
-      line = describe(node, role, name);
+      const content = text(node.name?.value, MAX_TEXT);
+      return content && !context.includes(content) ? [{ text: content }] : [];
     }
 
-    const rendered = `${"  ".repeat(depth)}- ${line}`;
-    if (lines.length >= MAX_LINES || chars + rendered.length > MAX_CHARS) {
-      truncated = true;
-      return;
-    }
-    lines.push(rendered);
-    chars += rendered.length + 1;
-    if (role !== "StaticText") children();
+    const name = text(node.name?.value);
+    if (node.ignored || role === "RootWebArea" || (TRANSPARENT_ROLES.has(role) && !name)) return children(context);
+
+    // A container named after its contents, such as a table cell, would repeat what its children show.
+    const shown = name && nameFromContents(node) && !INTERACTIVE_ROLES.has(role) && role !== "heading" ? "" : name;
+    const own = `${shown}\n${text(node.value?.value)}`;
+    const rendered = children(own.trim() ? own : "");
+    // An image inside a link or button named after it, such as a logo, repeats the name.
+    if ((role === "image" || role === "img") && name && context.includes(name) && rendered.length === 0) return [];
+    return [{ line: describe(node, role, shown), children: rendered, count: 1 }];
   };
 
-  visit(root, 0, "");
+  const merge = (items: Item[]): Item[] => {
+    const merged: Item[] = [];
+    for (const item of items) {
+      const last = merged[merged.length - 1];
+      if ("text" in item && last && "text" in last) {
+        merged[merged.length - 1] = { text: `${last.text} ${item.text}` };
+      } else if ("line" in item && last && "line" in last && item.line === last.line && !item.line.includes("[ref=") &&
+          item.children.length === 0 && last.children.length === 0) {
+        last.count++;
+      } else {
+        merged.push(item);
+      }
+    }
+    return merged;
+  };
+
+  const lines: string[] = [];
+  let chars = 0;
+  let truncated = false;
+  const emit = (items: Item[], depth: number) => {
+    for (const item of items) {
+      if (truncated) return;
+
+      const line = "text" in item ? `text: ${JSON.stringify(item.text)}` : item.count > 1 ? `${item.line} ×${item.count}` : item.line;
+      const rendered = `${"  ".repeat(depth)}- ${line}`;
+      if (lines.length >= MAX_LINES || chars + rendered.length > MAX_CHARS) {
+        truncated = true;
+        return;
+      }
+      lines.push(rendered);
+      chars += rendered.length + 1;
+      if ("children" in item) emit(item.children, depth + 1);
+    }
+  };
+
+  emit(build(root, ""), 0);
   return { snapshot: lines.join("\n"), truncated };
 }
 
