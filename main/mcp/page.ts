@@ -1,4 +1,4 @@
-export type BrowserPageAction = "inspect" | "click" | "scroll" | "type" | "select" | "check";
+export type BrowserPageAction = "click" | "scroll" | "type" | "select" | "check";
 
 export interface BrowserPageOptions {
   pixels?: number;
@@ -8,12 +8,33 @@ export interface BrowserPageOptions {
 }
 
 // Serialized into Electron's isolated world. Keep both functions self-contained.
+// Prefers attributes that survive layout changes: a unique id, data-testid, name or aria-label, on the
+// element or its nearest ancestor with one. Falls back to positions below that ancestor.
 export function pageSelector(target: Element): string {
+  const unique = (selector: string) => {
+    try {
+      return document.querySelectorAll(selector).length === 1;
+    } catch {
+      return false;
+    }
+  };
+  const anchor = (node: Element) => {
+    const tag = CSS.escape(node.localName);
+    const candidates = [
+      node.id && "#" + CSS.escape(node.id),
+      ...["data-testid", "data-test", "data-cy", "name", "aria-label"].map(attribute => {
+        const value = node.getAttribute(attribute);
+        return value ? `${tag}[${attribute}="${CSS.escape(value)}"]` : "";
+      }),
+    ];
+    return candidates.find(candidate => candidate && unique(candidate));
+  };
+
   const segments: string[] = [];
   for (let node: Element | null = target; node; node = node.parentElement) {
-    const id = node.id && "#" + CSS.escape(node.id);
-    if (id && document.querySelectorAll(id).length === 1) {
-      segments.unshift(id);
+    const found = anchor(node);
+    if (found) {
+      segments.unshift(found);
       break;
     }
 
@@ -32,28 +53,12 @@ export function pageSelector(target: Element): string {
 // mock preview URL. The mock preview runs sandboxed with an opaque origin, so origins cannot be compared.
 export function runPageAction(
   scope: string, action: BrowserPageAction, selector: string | undefined, options: BrowserPageOptions,
-  getSelector: typeof pageSelector,
 ) {
   const { pixels, text, option, checked } = options;
   if (!window.location.href.startsWith(scope)) throw new Error("The tab left the page it was used for.");
 
   const visible = (element: Element) => element.getClientRects().length > 0 &&
     getComputedStyle(element).visibility === "visible";
-
-  if (action === "inspect") {
-    const interactive = "a[href],button,input:not([type=hidden]),select,textarea,[contenteditable]:not([contenteditable=false]),summary,[role=button],[role=tab],[role=link]";
-    const elements = Array.from(document.querySelectorAll<HTMLElement>(interactive)).filter(visible).slice(0, 50).map(element => ({
-      selector: getSelector(element),
-      label: (element.getAttribute("aria-label") || element.textContent || element.getAttribute("title") ||
-        element.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim().slice(0, 160),
-    }));
-    return {
-      title: document.title,
-      url: location.href,
-      text: document.body?.innerText?.slice(0, 6000) || "",
-      elements,
-    };
-  }
 
   if (action === "scroll" && selector === undefined) {
     window.scrollBy(0, pixels ?? 0);

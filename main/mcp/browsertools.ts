@@ -2,6 +2,7 @@ import type { Server } from "@modelcontextprotocol/server";
 
 import type { IBrowserElement } from "common/interface";
 
+import { refToSelector, snapshotTab } from "main/mcp/axtree";
 import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture";
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
@@ -155,6 +156,16 @@ export class BrowserTools {
     return loaded;
   }
 
+  // Replaces a ref in params with the selector of its element as the page is now.
+  private static async withSelector(tab: BrowserTab, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { ref, selector } = params;
+    if (ref === undefined) return params;
+    if (selector !== undefined) throw new Error("Pass either ref or selector, not both.");
+    if (typeof ref !== "string" || !/^e\d+$/.test(ref)) throw new Error("Ref must be a value such as e12 from inspect.");
+
+    return { ...params, selector: await refToSelector(tab.guest, ref) };
+  }
+
   private async useTab(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const id = BrowserTools.tabId(params.tab);
     if (params.action === "list") return this.tabs(endpoint).map(summarizeTab);
@@ -168,25 +179,28 @@ export class BrowserTools {
 
     if (params.action === "wait") {
       const tab = this.resolveTab(endpoint, id);
-      return waitInTab(tab, params, () => this.current(endpoint, tab));
+      return waitInTab(tab, await BrowserTools.withSelector(tab, params), () => this.current(endpoint, tab));
     }
 
     const tab = await this.loadedTab(endpoint, id);
     if (params.action === "back" || params.action === "forward") return goInHistory(tab, params.action);
 
-    const result = await runTabAction(tab, params);
-    if (params.action !== "inspect") return result;
+    if (params.action !== "inspect") return runTabAction(tab, await BrowserTools.withSelector(tab, params));
 
-    // Page data is returned only while the tab is still available to this session.
-    if (!this.isAvailable(endpoint, tab)) throw new Error(`Tab ${tab.id} is no longer available to this session.`);
-    return { tab: tab.id, kind: tab.kind, ...(result as object) };
+    const url = tab.guest.getURL();
+    const snapshot = await snapshotTab(tab.guest);
+    // Page data is returned only while the tab is still available to this session and on the same page.
+    if (!this.isAvailable(endpoint, tab) || tab.guest.getURL() !== url) {
+      throw new Error(`Tab ${tab.id} changed while it was inspected. Try again.`);
+    }
+    return { ...summarizeTab(tab), ...snapshot };
   }
 
   private async screenshot(endpoint: string, params: Record<string, unknown> = {}): Promise<Screenshot> {
-    const { selector } = params;
+    const tab = await this.loadedTab(endpoint, BrowserTools.tabId(params.tab));
+    const { selector } = await BrowserTools.withSelector(tab, params);
     if (selector !== undefined && typeof selector !== "string") throw new Error("Selector must be a string.");
 
-    const tab = await this.loadedTab(endpoint, BrowserTools.tabId(params.tab));
     return captureGuest(tab.guest, selector, () => this.isAvailable(endpoint, tab));
   }
 
