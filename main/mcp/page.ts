@@ -21,11 +21,13 @@ export function pageSelector(target: Element): string {
   return segments.join(" > ");
 }
 
+// scope is the URL prefix the page must still be on: the origin plus "/" for a web tab, or the
+// mock preview URL. The mock preview runs sandboxed with an opaque origin, so origins cannot be compared.
 export function runPageAction(
-  origin: string, action: BrowserPageAction, selector: string | undefined, pixels: number | undefined, text: string | undefined,
+  scope: string, action: BrowserPageAction, selector: string | undefined, pixels: number | undefined, text: string | undefined,
   getSelector: typeof pageSelector,
 ) {
-  if (window.location.origin !== origin) throw new Error("The shared tab changed origin.");
+  if (!window.location.href.startsWith(scope)) throw new Error("The tab left the page it was used for.");
 
   const visible = (element: Element) => element.getClientRects().length > 0 &&
     getComputedStyle(element).visibility === "visible";

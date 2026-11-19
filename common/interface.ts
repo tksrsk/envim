@@ -164,8 +164,8 @@ export type IAcpRegistry = {
 
 export interface IBrowserElement {
   url: string;
-  // Shared tab id for use_shared_tab. Absent for the mock preview.
-  tab?: number;
+  // Tab id for use_tab and screenshot.
+  tab: number;
   selector: string;
   tag: string;
   label: string;

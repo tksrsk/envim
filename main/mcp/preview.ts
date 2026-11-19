@@ -19,7 +19,7 @@ interface Preview {
 
 export const showMockTool = {
   name: "show_mock",
-  description: "Create or update the interactive mockup shown beside this ACP chat. Use this to prototype UI without a repository, development server, or installed dependencies. Send a complete self-contained HTML document with inline CSS and JS and sample data. Use location.hash to store UI state and restore it on load. The result includes the preview URL for identifying the same tab with Chrome DevTools MCP.",
+  description: "Create or update the interactive mockup shown beside this ACP chat. Use this to prototype UI without a repository, development server, or installed dependencies. Send a complete self-contained HTML document with inline CSS and JS and sample data. Use location.hash to store UI state and restore it on load. The result includes the tab id for use_tab and screenshot, which can inspect, operate and capture the preview.",
   inputSchema: {
     type: "object" as const,
     properties: { html: { type: "string", description: "Complete interactive HTML document, maximum 1 MiB." } },

@@ -5,7 +5,7 @@ import type { IBrowserElement } from "common/interface";
 
 import { pageSelector } from "main/mcp/page";
 
-type Selection = Omit<IBrowserElement, "url">;
+type Selection = Omit<IBrowserElement, "url" | "tab">;
 type PickerWorld = typeof globalThis & {
   envimElementPicker?: { key: string; next: () => Promise<Selection | null>; stop: () => void };
 };
