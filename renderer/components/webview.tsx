@@ -79,10 +79,12 @@ export function WebviewComponent(props: Props) {
   const canSelect = acpReady && (mock || (webPage && shared)) && !state.loading;
   const canToggleSelection = selecting || canSelect;
   const canToggleSharing = shared || !state.loading;
+  // A mock preview always belongs to its ACP session, so it shows the connection state without a sharing toggle.
+  const connected = shared || (mock && acpReady);
   const shareIconStyle = {
-    opacity: canToggleSharing ? 1 : 0.5,
+    opacity: mock || (webPage && canToggleSharing) ? 1 : 0.5,
     ...(agentIcon && {
-      "--color-fg": shared ? "var(--color-purple)" : "var(--color-gray)",
+      "--color-fg": connected ? "var(--color-purple)" : "var(--color-gray)",
       height: "calc(1em + 8px)",
     }),
   } as React.CSSProperties;
@@ -567,13 +569,9 @@ export function WebviewComponent(props: Props) {
           { state.zoom }%
           <IconComponent font="" onClick={() => runAction("zoom-in")} />
           <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
-          {webPage && (
-            <IconComponent font={agentIcon || uiIcons.acp} mark={!!agentIcon} color={shared ? "purple-fg" : "gray-fg"} style={shareIconStyle}
-              onClick={canToggleSharing ? toggleSharing : undefined} />
-          )}
-          {(mock || webPage) && (
-            <IconComponent font={uiIcons.placing} color={selecting ? "purple-fg" : "gray-fg"} onClick={canToggleSelection ? selectElement : undefined} />
-          )}
+          <IconComponent font={agentIcon || uiIcons.acp} mark={!!agentIcon} color={connected ? "purple-fg" : "gray-fg"} style={shareIconStyle}
+            onClick={webPage && canToggleSharing ? toggleSharing : undefined} />
+          <IconComponent font={uiIcons.placing} color={selecting ? "purple-fg" : "gray-fg"} onClick={canToggleSelection ? selectElement : undefined} />
         </FlexComponent>
         <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
           <div className="space" ref={container} />
