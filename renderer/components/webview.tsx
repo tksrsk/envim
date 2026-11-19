@@ -24,6 +24,7 @@ interface Props {
 }
 
 interface States {
+  url: string;
   input: string;
   search: string;
   title: string;
@@ -55,7 +56,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function WebviewComponent(props: Props) {
   const { emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
+  const [state, setState] = React.useState<States>({ url: "", input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<Electron.WebviewTag | null> = React.useRef<Electron.WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
@@ -66,7 +67,8 @@ export function WebviewComponent(props: Props) {
   const [pickerId, setPickerId] = React.useState<number>();
   const { active } = useFocus();
   const mode = getMode(active);
-  const currentUrl = webview.current?.getURL() ?? getUrl(props.src);
+  // Do not call WebviewTag methods while rendering: they throw until the guest is attached and dom-ready.
+  const currentUrl = state.url || getUrl(props.src);
   const blank = currentUrl === "about:blank";
   const mock = currentUrl.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX);
   const webPage = /^https?:\/\//.test(currentUrl);
@@ -102,6 +104,7 @@ export function WebviewComponent(props: Props) {
   React.useEffect(() => {
     setShared(false);
     setPickerId(undefined);
+    setState(state => ({ ...state, url: "" }));
     if (container.current) {
       const guest = document.createElement("webview") as Electron.WebviewTag;
 
@@ -131,7 +134,8 @@ export function WebviewComponent(props: Props) {
   }, [props.src, props.requestId]);
 
   React.useEffect(() => {
-    webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
+    const id = guestId();
+    id !== undefined && Emit.send(`browser:mode:${id}`, mode);
     ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
     ["command", "visual"].includes(mode) || setState(state => state.selection ? { ...state, selection: undefined } : state);
   }, [mode]);
@@ -148,7 +152,7 @@ export function WebviewComponent(props: Props) {
     }
 
     function onShare(id: number, value: boolean) {
-      if (webview.current?.getWebContentsId() !== id) return;
+      if (guestId() !== id) return;
       setShared(value);
     }
 
@@ -166,10 +170,32 @@ export function WebviewComponent(props: Props) {
     };
   }, [emit]);
 
-  function selectElement() {
-    if (!webview.current) return;
+  // WebviewTag methods throw while the guest is detached or before dom-ready, so read them through these helpers.
+  function guestId(): number | undefined {
+    try {
+      return webview.current?.getWebContentsId();
+    } catch {
+      return undefined;
+    }
+  }
 
-    const id = webview.current.getWebContentsId();
+  function guestUrl(): string | undefined {
+    try {
+      return webview.current?.getURL();
+    } catch {
+      return undefined;
+    }
+  }
+
+  function toggleSharing() {
+    const id = guestId();
+    if (id !== undefined) void emit.send("browser:share:toggle", id, !shared);
+  }
+
+  function selectElement() {
+    const id = guestId();
+    if (id === undefined) return;
+
     const enable = pickerId === undefined;
     if (enable) setPickerId(id);
     void emit.send("browser:pick", id, enable);
@@ -189,7 +215,11 @@ export function WebviewComponent(props: Props) {
   function onShareReady(event: Event) {
     const guest = event.currentTarget as Electron.WebviewTag;
     guest.removeEventListener("did-finish-load", onShareReady);
-    if (props.requestId) void emit.send("browser:share:ready", props.requestId, guest.getWebContentsId());
+    try {
+      if (props.requestId) void emit.send("browser:share:ready", props.requestId, guest.getWebContentsId());
+    } catch {
+      // The guest was detached before it finished loading.
+    }
   }
 
   function onReady(event: Event) {
@@ -206,7 +236,8 @@ export function WebviewComponent(props: Props) {
       webview.current.addEventListener("close", onClose);
       onLoad();
       if (props.src.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX)) {
-        void emit.send("browser:mock:ready", props.src, webview.current.getWebContentsId()).catch(console.error);
+        const id = guestId();
+        if (id !== undefined) void emit.send("browser:mock:ready", props.src, id).catch(console.error);
       }
     }
   }
@@ -256,7 +287,7 @@ export function WebviewComponent(props: Props) {
     if (!webview.current || !container.current) return;
     if (state.selection?.line === line) mode = "command";
     if (mode === "visual-line") mode = "visual";
-    if (capture && state.selection) Emit.send(`browser:capture:${webview.current.getWebContentsId()}`, { selected: state.selection.rect }[capture]);
+    if (capture && state.selection) Emit.send(`browser:capture:${guestId()}`, { selected: state.selection.rect }[capture]);
 
     const rect = line ? { ...state.pointer, x: 0, width: container.current.offsetWidth } : state.pointer;
     const anchor = { ...state.pointer }
@@ -359,7 +390,7 @@ export function WebviewComponent(props: Props) {
     switch (mode) {
       case "input":
         if (state.input) {
-          const url = webview.current.getURL();
+          const url = guestUrl() ?? "";
 
           setState(state => ({ ...state, input: url === "about:blank" ? "" : url }));
           webview.current.src = getUrl(state.input);
@@ -374,8 +405,8 @@ export function WebviewComponent(props: Props) {
   }
 
   function onLoad () {
-    if (webview.current) {
-      const url = webview.current.getURL();
+    const url = guestUrl();
+    if (webview.current && url !== undefined) {
       const input = url === "about:blank" ? "" : url;
       const title = webview.current.getTitle();
       const loading = webview.current.isLoadingMainFrame();
@@ -386,7 +417,7 @@ export function WebviewComponent(props: Props) {
 
         !["blur", "command", "visual"].includes(mode) && state.loading !== loading && runAction("mode-command");
 
-        return { ...state, input: mode === "input" ? state.input : input, title, loading };
+        return { ...state, url, input: mode === "input" ? state.input : input, title, loading };
       });
     }
   }
@@ -398,12 +429,13 @@ export function WebviewComponent(props: Props) {
   }
 
   function onBrowserAction (id: number, action: string) {
-    webview.current?.getWebContentsId() === id && runAction(action);
+    guestId() === id && runAction(action);
   }
 
   function runAction(action: string) {
-    if (webview.current) {
-      if (webview.current.getURL() === "about:blank") return input.current?.focus();
+    const url = guestUrl();
+    if (webview.current && url !== undefined) {
+      if (url === "about:blank") return input.current?.focus();
 
       switch (action) {
         case "search-start": return webview.current.stopFindInPage("activateSelection");
@@ -415,7 +447,7 @@ export function WebviewComponent(props: Props) {
         case "reload": return webview.current.reloadIgnoringCache();
         case "zoom-out": return setZoom(state.zoom - 10);
         case "zoom-in": return setZoom(state.zoom + 10);
-        case "devtool": return Emit.send(`browser:devtool:${webview.current.getWebContentsId()}`);
+        case "devtool": return Emit.send(`browser:devtool:${guestId()}`);
         case "mode-browser": return webview.current.focus();
         case "mode-input": return input.current?.focus();
         case "mode-search": return search.current?.focus();
@@ -462,7 +494,7 @@ export function WebviewComponent(props: Props) {
 
   const saveEngine = async () => {
     if (webview.current) {
-      const uri = await emit.send<string>("neovim:readline", "URI", webview.current.getURL());
+      const uri = await emit.send<string>("neovim:readline", "URI", guestUrl() ?? "");
       const selected = state.searchengines.find(engine => engine.uri === uri);
       const name = uri && await emit.send<string>("neovim:readline", "Name", selected?.name || "");
       const hasquery = uri.indexOf("${query}") >= 0;
@@ -537,7 +569,7 @@ export function WebviewComponent(props: Props) {
           <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
           {webPage && (
             <IconComponent font={agentIcon || uiIcons.acp} mark={!!agentIcon} color={shared ? "purple-fg" : "gray-fg"} style={shareIconStyle}
-              onClick={canToggleSharing ? () => webview.current && void emit.send("browser:share:toggle", webview.current.getWebContentsId(), !shared) : undefined} />
+              onClick={canToggleSharing ? toggleSharing : undefined} />
           )}
           {(mock || webPage) && (
             <IconComponent font={uiIcons.placing} color={selecting ? "purple-fg" : "gray-fg"} onClick={canToggleSelection ? selectElement : undefined} />
