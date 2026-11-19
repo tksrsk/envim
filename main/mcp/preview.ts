@@ -142,7 +142,8 @@ export class MockPreview {
     preview.pending = operation.catch(() => {});
     await operation;
 
-    return `Mock preview: ${preview.url} (the current tab may include a revision and a state fragment)`;
+    const tab = this.guest(endpoint)?.id;
+    return `Mock preview: ${preview.url}${tab === undefined ? "" : ` in tab ${tab}`} (the current tab may include a revision and a state fragment)`;
   }
 
   endpoints(): string[] {

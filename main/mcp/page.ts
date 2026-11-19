@@ -88,3 +88,21 @@ export function runPageAction(
   element.click();
   return "Clicked the selected element.";
 }
+
+// Serialized into Electron's isolated world. Scrolls the element into view and returns its visible
+// part of the viewport in CSS pixels.
+export function locateElement(selector: string) {
+  const element = document.querySelector(selector);
+  if (!(element instanceof HTMLElement) || element.getClientRects().length === 0) {
+    throw new Error("No visible element matches the selector.");
+  }
+
+  element.scrollIntoView({ block: "nearest", inline: "nearest" });
+  const rect = element.getBoundingClientRect();
+  const left = Math.max(0, rect.left);
+  const top = Math.max(0, rect.top);
+  const right = Math.min(window.innerWidth, rect.right);
+  const bottom = Math.min(window.innerHeight, rect.bottom);
+  if (right <= left || bottom <= top) throw new Error("The element is outside the visible area.");
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}

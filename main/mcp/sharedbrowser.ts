@@ -143,6 +143,10 @@ export class SharedBrowser {
       .filter(tab => !tab.guest.isDestroyed() && webOrigin(tab.guest.getURL()));
   }
 
+  guests(endpoint: string): Electron.WebContents[] {
+    return this.liveTabs(endpoint).map(tab => tab.guest);
+  }
+
   // Returns the shared guest with the id, or the only shared guest when guestId is omitted.
   guest(endpoint: string, guestId?: number): Electron.WebContents | undefined {
     const tabs = this.liveTabs(endpoint);
