@@ -7,6 +7,7 @@ import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
 import { pickElement, stopPicking } from "main/mcp/picker";
 import { runTabAction, summarizeTab, useTabTool, type BrowserTab } from "main/mcp/tabs";
+import { readLogsTool, TabLogs } from "main/mcp/tablog";
 import type { Workspace } from "main/envim/workspace";
 
 export const BROWSER_TOOLS_SERVER_NAME = "envim-browser";
@@ -25,7 +26,7 @@ function imageResult({ image, summary }: Screenshot): ToolResult {
 }
 
 // Browser tools exposed to one ACP session: the mock preview, the shared HTTP(S) tabs, actions and
-// screenshots on either kind of tab, and element picking.
+// screenshots and logs on either kind of tab, and element picking.
 export class BrowserTools {
   private readonly mock: MockPreview;
   private readonly shared: SharedBrowser;
@@ -167,13 +168,19 @@ export class BrowserTools {
     return captureGuest(tab.guest, selector, () => this.isAvailable(endpoint, tab));
   }
 
+  private readLogs(endpoint: string, params: Record<string, unknown> = {}) {
+    const tab = this.resolveTab(endpoint, BrowserTools.tabId(params.tab));
+    return { tab: tab.id, kind: tab.kind, ...TabLogs.read(tab.id, params) };
+  }
+
   registerTools(server: Server, endpoint: string): void {
-    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool] }));
+    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool] }));
     server.setRequestHandler("tools/call", async ({ params }) => {
       try {
         switch (params.name) {
           case showMockTool.name: return textResult(await this.mock.show(endpoint, params.arguments?.html));
           case useTabTool.name: return textResult(await this.useTab(endpoint, params.arguments));
+          case readLogsTool.name: return textResult(this.readLogs(endpoint, params.arguments));
           case screenshotTool.name: return imageResult(await this.screenshot(endpoint, params.arguments));
           default: return textResult(`Unknown tool: ${params.name}`, true);
         }

@@ -6,6 +6,7 @@ import { MOCK_PREVIEW_ORIGIN_PREFIX } from "common/constant";
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
 import { isPicking } from "main/mcp/picker";
+import { TabLogs } from "main/mcp/tablog";
 
 export class Browser {
   private ignoreCertErrorHost: string[] = [];
@@ -13,6 +14,7 @@ export class Browser {
   private currentMode = "blur";
 
   constructor(private webContents: Electron.WebContents) {
+    TabLogs.track(webContents);
     webContents.setWindowOpenHandler(this.onOpenWindow);
     webContents.on("will-frame-navigate", event => {
       if (this.isMockPreview() && event.url.split("#")[0] !== webContents.getURL().split("#")[0]) {
