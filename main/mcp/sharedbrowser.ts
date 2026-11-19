@@ -1,6 +1,7 @@
 import * as Electron from "electron";
 import { randomUUID } from "crypto";
 import type { WorkspaceEmit } from "main/emit";
+import { waitForLoadOrThrow } from "main/mcp/wait";
 
 export function webOrigin(url: string): string | undefined {
   try {
@@ -167,7 +168,7 @@ export class SharedBrowser {
     }
 
     const tab = this.resolve(endpoint, tabId);
-    if (tab.guest.isLoadingMainFrame()) throw new Error(`Shared tab ${tab.id} is loading. Try again after navigation finishes.`);
+    await waitForLoadOrThrow(tab.guest);
     await tab.guest.loadURL(destination);
     if (!this.isShared(endpoint, tab)) throw new Error(`Tab ${tab.id} is no longer shared.`);
     return `Opened ${tab.guest.getURL()} in shared tab ${tab.id}.`;

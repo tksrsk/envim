@@ -28,7 +28,6 @@ export async function captureGuest(guest: Electron.WebContents, selector: string
   if (selector !== undefined && (!selector.trim() || selector.length > 4096)) {
     throw new Error("Provide a CSS selector of at most 4096 characters.");
   }
-  if (guest.isLoadingMainFrame()) throw new Error(`Tab ${guest.id} is loading. Try again after navigation finishes.`);
 
   let rect: Electron.Rectangle | undefined;
   if (selector !== undefined) {

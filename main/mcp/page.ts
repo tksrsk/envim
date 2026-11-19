@@ -91,6 +91,31 @@ export function runPageAction(
   return "Clicked the selected element.";
 }
 
+// Serialized into Electron's isolated world. Returns whether the wait condition holds on the page in scope.
+// With only selector, a visible matching element; with text, the text in that element or the page body;
+// with neither, a fully loaded document. gone inverts the result. Returns "invalid-selector" for a
+// selector the page cannot parse, since errors thrown here reach the main process without their message.
+export function checkPageCondition(scope: string, selector: string | undefined, text: string | undefined, gone: boolean) {
+  if (!window.location.href.startsWith(scope)) return false;
+
+  let found: boolean;
+  if (selector !== undefined) {
+    let element: Element | null;
+    try {
+      element = document.querySelector(selector);
+    } catch {
+      return "invalid-selector";
+    }
+    found = element instanceof HTMLElement && element.getClientRects().length > 0 &&
+      getComputedStyle(element).visibility === "visible" && (text === undefined || element.innerText.includes(text));
+  } else if (text !== undefined) {
+    found = (document.body?.innerText ?? "").includes(text);
+  } else {
+    found = document.readyState === "complete";
+  }
+  return gone ? !found : found;
+}
+
 // Serialized into Electron's isolated world. Scrolls the element into view and returns its visible
 // part of the viewport in CSS pixels.
 export function locateElement(selector: string) {

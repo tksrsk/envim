@@ -6,7 +6,8 @@ import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture"
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
 import { pickElement, stopPicking } from "main/mcp/picker";
-import { runTabAction, summarizeTab, useTabTool, type BrowserTab } from "main/mcp/tabs";
+import { runTabAction, summarizeTab, useTabTool, waitInTab, type BrowserTab } from "main/mcp/tabs";
+import { waitForLoadOrThrow } from "main/mcp/wait";
 import { readLogsTool, TabLogs } from "main/mcp/tablog";
 import type { Workspace } from "main/envim/workspace";
 
@@ -136,8 +137,22 @@ export class BrowserTools {
     return tab;
   }
 
+  // The tab as it is now, with a scope that follows the current page, or undefined when it is no longer available.
+  private current(endpoint: string, tab: BrowserTab): BrowserTab | undefined {
+    return this.tabs(endpoint).find(current => current.guest === tab.guest && current.kind === tab.kind);
+  }
+
   private isAvailable(endpoint: string, tab: BrowserTab): boolean {
-    return this.tabs(endpoint).some(current => current.guest === tab.guest && current.kind === tab.kind);
+    return this.current(endpoint, tab) !== undefined;
+  }
+
+  // Resolves the tab after any page it is loading has finished, so the scope matches the loaded page.
+  private async loadedTab(endpoint: string, id: number | undefined): Promise<BrowserTab> {
+    const tab = this.resolveTab(endpoint, id);
+    await waitForLoadOrThrow(tab.guest);
+    const loaded = this.current(endpoint, tab);
+    if (!loaded) throw new Error(`Tab ${tab.id} is no longer available to this session.`);
+    return loaded;
   }
 
   private async useTab(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -151,7 +166,12 @@ export class BrowserTools {
       return this.shared.navigate(endpoint, params.url, id, params.new_tab);
     }
 
-    const tab = this.resolveTab(endpoint, id);
+    if (params.action === "wait") {
+      const tab = this.resolveTab(endpoint, id);
+      return waitInTab(tab, params, () => this.current(endpoint, tab));
+    }
+
+    const tab = await this.loadedTab(endpoint, id);
     const result = await runTabAction(tab, params);
     if (params.action !== "inspect") return result;
 
@@ -164,7 +184,7 @@ export class BrowserTools {
     const { selector } = params;
     if (selector !== undefined && typeof selector !== "string") throw new Error("Selector must be a string.");
 
-    const tab = this.resolveTab(endpoint, BrowserTools.tabId(params.tab));
+    const tab = await this.loadedTab(endpoint, BrowserTools.tabId(params.tab));
     return captureGuest(tab.guest, selector, () => this.isAvailable(endpoint, tab));
   }
 
