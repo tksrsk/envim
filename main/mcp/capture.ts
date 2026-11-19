@@ -1,5 +1,6 @@
 import * as Electron from "electron";
 
+import { runInPage } from "main/mcp/inject";
 import { locateElement } from "main/mcp/page";
 
 const MAX_WIDTH = 1280;
@@ -32,7 +33,7 @@ export async function captureGuest(guest: Electron.WebContents, selector: string
   let rect: Electron.Rectangle | undefined;
   if (selector !== undefined) {
     const code = `(${locateElement.toString()})(${JSON.stringify(selector)})`;
-    const area: Electron.Rectangle = await guest.executeJavaScriptInIsolatedWorld(1001, [{ code }]);
+    const area = await runInPage<Electron.Rectangle>(guest, code);
     // The page reports CSS pixels; capturePage expects DIPs, which differ by the zoom factor.
     const zoom = guest.getZoomFactor();
     const x = Math.floor(area.x * zoom);

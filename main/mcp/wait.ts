@@ -1,5 +1,7 @@
 import type * as Electron from "electron";
 
+import { PageError } from "main/mcp/inject";
+
 const LOAD_TIMEOUT = 10000;
 // How long to wait after an action for a navigation it triggered to start.
 const NAVIGATION_START_WINDOW = 300;
@@ -71,8 +73,8 @@ export function watchNavigation(guest: Electron.WebContents) {
   };
 }
 
-// Thrown by a wait check to stop waiting. Other errors from a check are retried, since they come from
-// pages being replaced.
+// Thrown by a wait check to stop waiting. A PageError, such as an invalid selector, also stops waiting.
+// Other errors from a check are retried, since they come from pages being replaced.
 export class WaitAbort extends Error {}
 
 // Polls check from the main process, so waiting continues across navigations that replace the page scripts.
@@ -88,7 +90,7 @@ export async function waitForCondition(
         const result = await Promise.race([check(), delay(2000).then(() => false)]);
         if (result) return Date.now() - started;
       } catch (error) {
-        if (error instanceof WaitAbort) throw error;
+        if (error instanceof WaitAbort || error instanceof PageError) throw error;
       }
     }
 

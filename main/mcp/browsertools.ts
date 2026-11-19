@@ -6,7 +6,7 @@ import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture"
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
 import { pickElement, stopPicking } from "main/mcp/picker";
-import { runTabAction, summarizeTab, useTabTool, waitInTab, type BrowserTab } from "main/mcp/tabs";
+import { goInHistory, runTabAction, summarizeTab, useTabTool, waitInTab, type BrowserTab } from "main/mcp/tabs";
 import { waitForLoadOrThrow } from "main/mcp/wait";
 import { readLogsTool, TabLogs } from "main/mcp/tablog";
 import type { Workspace } from "main/envim/workspace";
@@ -172,6 +172,8 @@ export class BrowserTools {
     }
 
     const tab = await this.loadedTab(endpoint, id);
+    if (params.action === "back" || params.action === "forward") return goInHistory(tab, params.action);
+
     const result = await runTabAction(tab, params);
     if (params.action !== "inspect") return result;
 

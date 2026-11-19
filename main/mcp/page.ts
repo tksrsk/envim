@@ -1,4 +1,11 @@
-export type BrowserPageAction = "inspect" | "click" | "scroll" | "type";
+export type BrowserPageAction = "inspect" | "click" | "scroll" | "type" | "select" | "check";
+
+export interface BrowserPageOptions {
+  pixels?: number;
+  text?: string;
+  option?: string;
+  checked?: boolean;
+}
 
 // Serialized into Electron's isolated world. Keep both functions self-contained.
 export function pageSelector(target: Element): string {
@@ -24,9 +31,10 @@ export function pageSelector(target: Element): string {
 // scope is the URL prefix the page must still be on: the origin plus "/" for a web tab, or the
 // mock preview URL. The mock preview runs sandboxed with an opaque origin, so origins cannot be compared.
 export function runPageAction(
-  scope: string, action: BrowserPageAction, selector: string | undefined, pixels: number | undefined, text: string | undefined,
+  scope: string, action: BrowserPageAction, selector: string | undefined, options: BrowserPageOptions,
   getSelector: typeof pageSelector,
 ) {
+  const { pixels, text, option, checked } = options;
   if (!window.location.href.startsWith(scope)) throw new Error("The tab left the page it was used for.");
 
   const visible = (element: Element) => element.getClientRects().length > 0 &&
@@ -87,25 +95,51 @@ export function runPageAction(
     return "Entered text in the selected element.";
   }
 
+  if (action === "select") {
+    if (!(element instanceof HTMLSelectElement)) throw new Error("The element is not a select box.");
+
+    const options = Array.from(element.options);
+    const label = (item: HTMLOptionElement) => item.label.replace(/\s+/g, " ").trim();
+    const target = options.find(item => item.value === option) ?? options.find(item => label(item) === option);
+    if (!target) {
+      const choices = options.slice(0, 30).map(item => JSON.stringify(label(item)) + (item.value !== label(item) ? ` (${JSON.stringify(item.value)})` : ""));
+      throw new Error(`No option matches. Options: ${choices.join(", ")}${options.length > 30 ? ", ..." : ""}`);
+    }
+    if (target.disabled) throw new Error("The option is disabled.");
+
+    element.focus();
+    target.selected = true;
+    element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    return `Selected ${JSON.stringify(label(target))}.`;
+  }
+
+  if (action === "check") {
+    if (!(element instanceof HTMLInputElement) || !["checkbox", "radio"].includes(element.type)) {
+      throw new Error("The element is not a checkbox or radio button.");
+    }
+    if (element.checked === checked) return `The element is already ${checked ? "checked" : "unchecked"}.`;
+    if (element.type === "radio" && !checked) throw new Error("A radio button cannot be unchecked. Check another one in the group.");
+
+    // Clicking runs the page's handlers, as a user's click would.
+    element.click();
+    if (element.checked !== checked) throw new Error("The page did not change the checked state.");
+    return `${checked ? "Checked" : "Unchecked"} the element.`;
+  }
+
   element.click();
   return "Clicked the selected element.";
 }
 
 // Serialized into Electron's isolated world. Returns whether the wait condition holds on the page in scope.
 // With only selector, a visible matching element; with text, the text in that element or the page body;
-// with neither, a fully loaded document. gone inverts the result. Returns "invalid-selector" for a
-// selector the page cannot parse, since errors thrown here reach the main process without their message.
+// with neither, a fully loaded document. gone inverts the result.
 export function checkPageCondition(scope: string, selector: string | undefined, text: string | undefined, gone: boolean) {
   if (!window.location.href.startsWith(scope)) return false;
 
   let found: boolean;
   if (selector !== undefined) {
-    let element: Element | null;
-    try {
-      element = document.querySelector(selector);
-    } catch {
-      return "invalid-selector";
-    }
+    const element = document.querySelector(selector);
     found = element instanceof HTMLElement && element.getClientRects().length > 0 &&
       getComputedStyle(element).visibility === "visible" && (text === undefined || element.innerText.includes(text));
   } else if (text !== undefined) {
