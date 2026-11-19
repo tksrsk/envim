@@ -1,6 +1,7 @@
 import * as Electron from "electron";
 import React from "react";
 
+import { MOCK_PREVIEW_ORIGIN_PREFIX, MOCK_PREVIEW_SCHEME } from "common/constant";
 import { IAcpStatus, ISetting } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
@@ -67,7 +68,7 @@ export function WebviewComponent(props: Props) {
   const mode = getMode(active);
   const currentUrl = webview.current?.getURL() ?? getUrl(props.src);
   const blank = currentUrl === "about:blank";
-  const mock = currentUrl.startsWith("envim-mock://");
+  const mock = currentUrl.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX);
   const webPage = /^https?:\/\//.test(currentUrl);
   const agentIcon = acpStatus.status === "disconnected" ? undefined : acpStatus.agent?.icon;
   const acpReady = (acpStatus.status === "connected" || acpStatus.status === "processing") &&
@@ -151,7 +152,7 @@ export function WebviewComponent(props: Props) {
       setShared(value);
     }
 
-    emit.on("browser:mock:pick:finished", finish);
+    emit.on("browser:pick:finished", finish);
     emit.on("browser:share:status", onShare);
     emit.on("acp:status:changed", onAcpStatus);
     void emit.send<IAcpStatus>("acp:status:get").then(status => {
@@ -159,7 +160,7 @@ export function WebviewComponent(props: Props) {
     });
     return () => {
       waitingForStatus = false;
-      emit.off("browser:mock:pick:finished", finish);
+      emit.off("browser:pick:finished", finish);
       emit.off("browser:share:status", onShare);
       emit.off("acp:status:changed", onAcpStatus);
     };
@@ -171,7 +172,7 @@ export function WebviewComponent(props: Props) {
     const id = webview.current.getWebContentsId();
     const enable = pickerId === undefined;
     if (enable) setPickerId(id);
-    void emit.send("browser:mock:pick", id, enable);
+    void emit.send("browser:pick", id, enable);
   }
 
   function getMode(element: Element | null) {
@@ -204,7 +205,7 @@ export function WebviewComponent(props: Props) {
       webview.current.addEventListener("page-favicon-updated", onFavicon);
       webview.current.addEventListener("close", onClose);
       onLoad();
-      if (props.src.startsWith("envim-mock://")) {
+      if (props.src.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX)) {
         void emit.send("browser:mock:ready", props.src, webview.current.getWebContentsId()).catch(console.error);
       }
     }
@@ -215,7 +216,7 @@ export function WebviewComponent(props: Props) {
 
     if (!input || input === "about:blank") {
       return "about:blank";
-    } else if (input.search(/^(((https?)|(file)|(envim-mock)):\/\/)|(data:.*\/.*;base64)/) === 0) {
+    } else if (input.search(new RegExp(`^(((https?)|(file)|(${MOCK_PREVIEW_SCHEME})):\\/\\/)|(data:.*\\/.*;base64)`)) === 0) {
       return input;
     } else {
       const selected = state.searchengines.find(({ selected }) => selected);

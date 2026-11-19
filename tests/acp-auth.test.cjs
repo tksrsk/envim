@@ -9,6 +9,7 @@ const filename = path.resolve(__dirname, '../main/envim/acp.ts');
 const loaded = new Module(filename);
 loaded.require = name => {
   if (name === 'main/mcp') return { Mcp: { servers: async () => [] } };
+  if (name === 'common/constant') return { MOCK_PREVIEW_ORIGIN_PREFIX: 'envim-mock://' };
   return require(name);
 };
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {

@@ -1,9 +1,11 @@
 import * as Electron from "electron";
 import { lookup } from "dns";
 
+import { MOCK_PREVIEW_ORIGIN_PREFIX } from "common/constant";
+
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
-import { MOCK_PREVIEW_SCHEME, MockPreview } from "main/mcp/preview";
+import { isPicking } from "main/mcp/picker";
 
 export class Browser {
   private ignoreCertErrorHost: string[] = [];
@@ -34,7 +36,7 @@ export class Browser {
   }
 
   private isMockPreview() {
-    return this.webContents.getURL().startsWith(`${MOCK_PREVIEW_SCHEME}://`);
+    return this.webContents.getURL().startsWith(MOCK_PREVIEW_ORIGIN_PREFIX);
   }
 
   private onOpenWindow = (details: Electron.HandlerDetails) => {
@@ -110,7 +112,7 @@ export class Browser {
   private onInput = (e: Electron.Event, input: Electron.Input) => {
     switch (input.key) {
       case "Escape":
-        if (this.currentMode === "browser" && !MockPreview.isPicking(this.webContents)) {
+        if (this.currentMode === "browser" && !isPicking(this.webContents)) {
           e.preventDefault();
           Emit.send("browser:action", this.webContents.id, "mode-command");
         }

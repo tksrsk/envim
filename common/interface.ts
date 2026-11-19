@@ -162,7 +162,7 @@ export type IAcpRegistry = {
   [key in "npx" | "uvx" | "binary"]: IAcpRegistryAgent[];
 };
 
-export interface IMockPreviewElement {
+export interface IBrowserElement {
   url: string;
   selector: string;
   tag: string;

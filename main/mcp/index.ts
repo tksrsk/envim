@@ -1,6 +1,7 @@
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { Workspace } from "main/envim/workspace";
+import { BROWSER_TOOLS_SERVER_NAME } from "main/mcp/browsertools";
 import { Setting } from "main/setting";
 
 type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
@@ -46,8 +47,8 @@ export class Mcp {
     });
 
     if (previewId) {
-      const endpoint = gateway.preview.endpoint(previewId);
-      configuredServers.push({ type: "http", name: "envim-mock-preview", url: `${gatewayUrl}/mcp/${endpoint}`, headers: [] });
+      const endpoint = gateway.browser.create(previewId);
+      configuredServers.push({ type: "http", name: BROWSER_TOOLS_SERVER_NAME, url: `${gatewayUrl}/mcp/${endpoint}`, headers: [] });
     }
 
     return configuredServers;

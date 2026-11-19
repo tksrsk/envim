@@ -38,8 +38,8 @@ export class Workspace {
     const emit = new WorkspaceEmit(this.id);
 
     emit.on("browser:open", this.onBrowserOpen);
-    emit.on("browser:mock:ready", (url: string, id: number) => this.mcpGateway.preview.attach(url, id));
-    emit.on("browser:share:ready", (id: string, guestId: number) => this.mcpGateway.preview.attachSharedTab(id, guestId));
+    emit.on("browser:mock:ready", (url: string, id: number) => this.mcpGateway.browser.attachMock(url, id));
+    emit.on("browser:share:ready", (id: string, guestId: number) => this.mcpGateway.browser.attachSharedTab(id, guestId));
     emit.on("browser:view", this.onBrowserView);
     emit.on("neovim:api", this.onNeovimApi);
     emit.on("neovim:command", this.onNeovimCommand);
@@ -69,29 +69,30 @@ export class Workspace {
   }
 
   private onBrowserOpen = (src: string, command?: string) => {
-    command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
-    const encoded = encodeURIComponent(src).replace(/%/g, "\\%");
-
-    this.nvim.command(`${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${encoded}`);
+    return this.openBrowser(src, command);
   }
 
-  async showBrowserTab(src: string, requestId?: string): Promise<void> {
+  // Shows src in a browser tab, reusing a window that already displays the same buffer.
+  showBrowserTab(src: string, requestId?: string): Promise<void> {
+    return this.openBrowser(src, "tabnew", requestId, true);
+  }
+
+  private async openBrowser(src: string, command?: string, requestId?: string, reuse = false): Promise<void> {
+    command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
     const name = `envim-browser://${encodeURIComponent(src)}${requestId ? "#" + requestId : ""}`;
+
     await this.nvim.request("nvim_exec_lua", [`
-      local name = ...
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buffer = vim.api.nvim_win_get_buf(win)
-        if vim.api.nvim_buf_get_name(buffer) == name then
-          vim.api.nvim_set_current_win(win)
-          return
+      local name, command, reuse = ...
+      if reuse then
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) == name then
+            vim.api.nvim_set_current_win(win)
+            return
+          end
         end
       end
-      vim.cmd("tabnew " .. vim.fn.fnameescape(name))
-      vim.opt_local.buftype = "nofile"
-      vim.opt_local.bufhidden = "wipe"
-      vim.opt_local.buflisted = false
-      vim.opt_local.filetype = "browser"
-    `, [name]]);
+      vim.cmd(command .. " +setlocal\\\\ buftype=nofile\\\\ bufhidden=wipe\\\\ filetype=browser\\\\ nobuflisted " .. vim.fn.fnameescape(name))
+    `, [name, command, reuse]]);
   }
 
   private onBrowserView = (winid: number, active: boolean, src: string) => {

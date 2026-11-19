@@ -3,9 +3,11 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { lookup } from "mime-types";
 
+import { MOCK_PREVIEW_SCHEME, MOCK_PREVIEW_ORIGIN_PREFIX } from "common/constant";
+
 import { Emit } from "main/emit";
 import { Browser } from "main/browser";
-import { MOCK_PREVIEW_SCHEME, MockPreview } from "main/mcp/preview";
+import { MockPreview } from "main/mcp/preview";
 
 export class Bootstrap {
   static win?: Electron.BrowserWindow;
@@ -73,7 +75,7 @@ export class Bootstrap {
       delete(webPreferences.preload);
       webPreferences.nodeIntegration = false;
       webPreferences.transparent = false;
-      if (params.src.startsWith(`${MOCK_PREVIEW_SCHEME}://`)) {
+      if (params.src.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX)) {
         webPreferences.contextIsolation = true;
         webPreferences.sandbox = true;
         webPreferences.nodeIntegrationInSubFrames = false;

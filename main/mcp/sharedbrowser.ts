@@ -1,7 +1,7 @@
 import * as Electron from "electron";
 import { randomUUID } from "crypto";
 import type { WorkspaceEmit } from "main/emit";
-import { pageSelector, runPageAction } from "main/mcp/browser-page";
+import { pageSelector, runPageAction } from "main/mcp/page";
 
 export const sharedTabTool = {
   name: "use_shared_tab",
@@ -82,6 +82,7 @@ export class SharedBrowser {
     if (!guest || !origin) throw new Error("Open an HTTP or HTTPS page before sharing its tab.");
 
     this.revoke(endpoint);
+    this.revokeGuest(guestId);
     const close = () => this.revoke(endpoint);
     const navigate = (event: Electron.WebContentsDidStartNavigationEventParams) => {
       if (event.isMainFrame && !webOrigin(event.url)) close();
@@ -115,6 +116,13 @@ export class SharedBrowser {
     tab.detach();
     this.onRevoke?.(endpoint);
     this.emit.send("browser:share:status", id, false);
+  }
+
+  // Revokes the tab from whichever session it is shared with, including inactive sessions.
+  revokeGuest(guestId: number): void {
+    for (const [endpoint, tab] of [...this.tabs]) {
+      if (tab.id === guestId) this.revoke(endpoint, guestId);
+    }
   }
 
   guest(endpoint: string, guestId?: number): Electron.WebContents | undefined {

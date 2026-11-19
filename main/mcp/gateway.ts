@@ -6,7 +6,7 @@ import { CallToolResultSchema, ResultSchema } from "@modelcontextprotocol/core";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import { isInitializeRequest, Server } from "@modelcontextprotocol/server";
 
-import { MockPreview } from "main/mcp/preview";
+import { BROWSER_TOOLS_SERVER_NAME, BrowserTools } from "main/mcp/browsertools";
 import { McpAppService } from "main/mcp/app";
 import { McpUpstream, McpUpstreamRegistry } from "main/mcp/upstream";
 import { Workspace } from "main/envim/workspace";
@@ -25,12 +25,12 @@ export class McpGateway {
   private sessions = new Map<string, IMcpGatewaySession>();
   private sockets: { [connectionId: string]: Socket } = {};
   private startPromise: Promise<string> | null = null;
-  public readonly preview: MockPreview;
+  public readonly browser: BrowserTools;
   public readonly app: McpAppService;
   public readonly upstreams: McpUpstreamRegistry;
 
   constructor(public readonly workspace: Workspace) {
-    this.preview = new MockPreview(workspace);
+    this.browser = new BrowserTools(workspace, endpoint => this.closeSessions(endpoint));
     this.app = new McpAppService(this.workspace);
     this.upstreams = new McpUpstreamRegistry(this.app, this.workspace.emit);
     this.workspace.emit.share("neovim:luafile", "mcp.lua");
@@ -130,7 +130,7 @@ export class McpGateway {
       return McpGateway.writeError(res, 404, "Unknown MCP endpoint");
     }
 
-    const preview = this.preview.has(upstreamId);
+    const preview = this.browser.has(upstreamId);
     let upstream: McpUpstream | undefined;
 
     try {
@@ -160,7 +160,7 @@ export class McpGateway {
 
   private async createSession(upstreamId: string, upstream?: McpUpstream): Promise<NodeStreamableHTTPServerTransport> {
     const capabilities = upstream ? upstream.client.getServerCapabilities() || {} : { tools: {} };
-    const server = new Server({ name: upstream ? `envim-proxy:${upstream.name}` : "envim-mock-preview", version: "1.0.0" }, { capabilities });
+    const server = new Server({ name: upstream ? `envim-proxy:${upstream.name}` : BROWSER_TOOLS_SERVER_NAME, version: "1.0.0" }, { capabilities });
     let transport: NodeStreamableHTTPServerTransport;
 
     if (upstream) {
@@ -185,7 +185,7 @@ export class McpGateway {
       server.fallbackNotificationHandler = notification => upstream.client.notification(notification);
 
     } else {
-      this.preview.registerTools(server, upstreamId);
+      this.browser.registerTools(server, upstreamId);
     }
 
     transport = new NodeStreamableHTTPServerTransport({
@@ -255,8 +255,17 @@ export class McpGateway {
     this.workspace.emit.share("neovim:function", "EnvimMcpTunnelClose", [connectionId]);
   }
 
+  private closeSessions(upstreamId: string): void {
+    for (const [sessionId, session] of [...this.sessions]) {
+      if (session.upstreamId !== upstreamId) continue;
+
+      this.sessions.delete(sessionId);
+      session.transport.close().catch(() => {});
+    }
+  }
+
   dispose(): void {
-    this.preview.dispose();
+    this.browser.dispose();
     this.upstreams.sync([]).catch(() => {});
 
     for (const socket of Object.values(this.sockets)) {

@@ -1,7 +1,7 @@
 import React from "react";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IMockPreviewElement } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IBrowserElement } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
@@ -29,7 +29,7 @@ interface State {
   files: string[];
   images: AcpSDK.ImageContent[];
   browserNotice?: { text: string; severity?: "warning" };
-  mockElement?: { sessionId: string; element: IMockPreviewElement };
+  browserElement?: { sessionId: string; element: IBrowserElement };
   registry: IAcpRegistry;
   search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
@@ -74,12 +74,12 @@ export function AcpComponent() {
   const textarea = React.useRef<HTMLTextAreaElement>(null);
   const { active } = useFocus();
   const main = active === command.current ? "normal" : active === textarea.current ? "input" : "blur";
-  const mockElement = state.mockElement?.sessionId === state.status.sessionId ? state.mockElement?.element : undefined;
+  const browserElement = state.browserElement?.sessionId === state.status.sessionId ? state.browserElement?.element : undefined;
   const color = main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
     emit.on("acp:file:add", onAcpFileAdd);
-    emit.on("acp:mock:element", onAcpMockElement);
+    emit.on("acp:browser:element", onAcpBrowserElement);
     emit.on("acp:browser:notice", onAcpBrowserNotice);
     emit.on("acp:message:added", onAcpMessageAdded);
     emit.on("acp:session:update", onAcpSessionUpdate);
@@ -88,7 +88,7 @@ export function AcpComponent() {
 
     return () => {
       emit.off("acp:file:add", onAcpFileAdd);
-      emit.off("acp:mock:element", onAcpMockElement);
+      emit.off("acp:browser:element", onAcpBrowserElement);
       emit.off("acp:browser:notice", onAcpBrowserNotice);
       emit.off("acp:message:added", onAcpMessageAdded);
       emit.off("acp:session:update", onAcpSessionUpdate);
@@ -180,10 +180,10 @@ export function AcpComponent() {
     }));
   }
 
-  function onAcpMockElement(sessionId: string, element: IMockPreviewElement | null) {
+  function onAcpBrowserElement(sessionId: string, element: IBrowserElement | null) {
     setState(state => ({
       ...state,
-      mockElement: element ? { sessionId, element } : state.mockElement?.sessionId === sessionId ? undefined : state.mockElement,
+      browserElement: element ? { sessionId, element } : state.browserElement?.sessionId === sessionId ? undefined : state.browserElement,
     }));
   }
 
@@ -422,7 +422,7 @@ export function AcpComponent() {
           return;
         }
 
-        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images, mockElement);
+        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images, browserElement);
 
         break;
       case "search":

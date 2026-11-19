@@ -5,54 +5,74 @@ const path = require('node:path');
 const { test } = require('node:test');
 const ts = require('typescript');
 
-function loadBrowserModule(file, load = require) {
-  const filename = path.resolve(__dirname, '../main/mcp', file);
+function loadModule(file, overrides = {}, cache = new Map()) {
+  const filename = path.resolve(__dirname, '..', file);
+  if (cache.has(filename)) return cache.get(filename).exports;
   const loaded = new Module(filename);
-  loaded.require = load;
+  cache.set(filename, loaded);
+  loaded.require = name => {
+    if (name in overrides) return overrides[name];
+    if (/^(main|common)\//.test(name)) return loadModule(name + '.ts', overrides, cache);
+    return require(name);
+  };
   loaded._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText, filename);
   return loaded.exports;
 }
 
-function setup() {
-  const filename = path.resolve(__dirname, '../main/mcp/preview.ts');
-  const loaded = new Module(filename);
-  const tabs = [];
-  loaded.require = name => {
-    if (name === 'electron') return { webContents: { fromId: id => tabs[id] } };
-    if (name === 'main/mcp/browser-page') return loadBrowserModule('browser-page.ts');
-    if (name === 'main/mcp/shared-browser') return loadBrowserModule('shared-browser.ts', loaded.require);
-    if (name === 'main/mcp/pick-element') return { pickMockElement: () => null };
-    return require(name);
+function createTab(url) {
+  return {
+    url,
+    reloads: 0,
+    getType: () => 'webview',
+    isDestroyed: () => false,
+    isLoadingMainFrame: () => false,
+    getURL() { return this.url; },
+    async loadURL(url) { this.url = url; this.reloads++; }
   };
-  loaded._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-  }).outputText, filename);
-  const { MockPreview } = loaded.exports;
-  const service = new MockPreview({
+}
+
+function setup({ attachLater = false } = {}) {
+  const tabs = [];
+  const cache = new Map();
+  const overrides = {
+    electron: { webContents: { fromId: id => tabs[id] } },
+    'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {} },
+  };
+  const { BrowserTools } = loadModule('main/mcp/browsertools.ts', overrides, cache);
+  const { MockPreview } = loadModule('main/mcp/preview.ts', overrides, cache);
+  const removed = [];
+  const service = new BrowserTools({
     showBrowserTab: async url => {
-      const id = tabs.push({
-        url,
-        reloads: 0,
-        getType: () => 'webview',
-        isDestroyed: () => false,
-        isLoadingMainFrame: () => false,
-        getURL() { return this.url; },
-        async loadURL(url) { this.url = url; this.reloads++; }
-      }) - 1;
-      service.attach(url, id);
+      const id = tabs.push(createTab(url)) - 1;
+      if (attachLater) setTimeout(() => service.attachMock(url, id), 20);
+      else service.attachMock(url, id);
     }
-  });
+  }, endpoint => removed.push(endpoint));
 
   function connect(chat) {
     const handlers = {};
-    const endpoint = service.endpoint(chat);
+    const endpoint = service.create(chat);
     service.registerTools({ setRequestHandler: (name, handler) => { handlers[name] = handler; } }, endpoint);
     return html => handlers['tools/call']({ params: { name: 'show_mock', arguments: { html } } });
   }
 
-  return { service, tabs, connect, serve: url => MockPreview.serve(new Request(url)) };
+  return { service, tabs, removed, connect, serve: url => MockPreview.serve(new Request(url)) };
+}
+
+function loadPicker(window) {
+  const source = readFileSync(path.resolve(__dirname, '../main/mcp/picker.ts'), 'utf8');
+  const js = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  }).outputText;
+  const picker = window.eval('(() => { const exports = {}; const require = () => ({}); ' + js + '; return exports.elementPicker; })()');
+  const { pageSelector } = loadModule('main/mcp/page.ts');
+  return () => picker(window.eval('(' + pageSelector.toString() + ')'), 'test-picker', false);
+}
+
+function loadSharedBrowser(fromId) {
+  return loadModule('main/mcp/sharedbrowser.ts', { electron: { webContents: { fromId } } }).SharedBrowser;
 }
 
 test('publishes an isolated mock and updates it in place without dropping its fragment', async () => {
@@ -85,7 +105,7 @@ test('publishes an isolated mock and updates it in place without dropping its fr
 });
 
 test('keeps chats independent and rejects writes after removal', async () => {
-  const { service, tabs, connect, serve } = setup();
+  const { service, tabs, removed, connect, serve } = setup();
   const showFirst = connect('first');
   const showSecond = connect('second');
   assert.equal((await showFirst('')).isError, true);
@@ -93,6 +113,7 @@ test('keeps chats independent and rejects writes after removal', async () => {
   await showSecond('<p>Second</p>');
   assert.notEqual(tabs[0].url, tabs[1].url);
   service.remove('first');
+  assert.deepEqual(removed, ['browser-first']);
   assert.equal((await showFirst('<p>Old chat</p>')).isError, true);
   assert.equal(serve(tabs[0].url).status, 404);
   assert.equal(await serve(tabs[1].url).text(), '<p>Second</p>');
@@ -103,13 +124,7 @@ test('picker keeps an outline after choosing, supports reselection, and clears o
   const dom = new JSDOM('<button>Open settings</button><button>Close settings</button>', { runScripts: 'outside-only' });
   const { window } = dom;
   window.CSS = { escape: value => value };
-  const source = readFileSync(path.resolve(__dirname, '../main/mcp/pick-element.ts'), 'utf8');
-  const js = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-  }).outputText;
-  const picker = window.eval('(() => { const exports = {}; ' + js + '; return exports.pickMockElement; })()');
-  const { pageSelector } = loadBrowserModule('browser-page.ts');
-  const pick = () => picker(window.eval('(' + pageSelector.toString() + ')'), 'test-picker', false);
+  const pick = loadPicker(window);
 
   try {
     const buttons = window.document.querySelectorAll('button');
@@ -174,11 +189,7 @@ test('shared browser actions follow HTTP(S) navigation in the same tab and stop 
     executeJavaScriptInIsolatedWorld: async (_id, scripts) => window.eval(scripts[0].code)
   });
   const statuses = [];
-  const { SharedBrowser } = loadBrowserModule('shared-browser.ts', name => {
-    if (name === 'electron') return { webContents: { fromId: () => guest } };
-    if (name === 'main/mcp/browser-page') return loadBrowserModule('browser-page.ts');
-    return require(name);
-  });
+  const SharedBrowser = loadSharedBrowser(() => guest);
   const shared = new SharedBrowser({ send: (...args) => statuses.push(args) });
 
   try {
@@ -231,11 +242,7 @@ test('navigate opens and shares only the new tab reported for this session', asy
     isDestroyed: () => false,
     async loadURL(url) { urls.set(id, url); }
   })]));
-  const { SharedBrowser } = loadBrowserModule('shared-browser.ts', name => {
-    if (name === 'electron') return { webContents: { fromId: id => guests.get(id) } };
-    if (name === 'main/mcp/browser-page') return loadBrowserModule('browser-page.ts');
-    return require(name);
-  });
+  const SharedBrowser = loadSharedBrowser(id => guests.get(id));
   const requests = [], statuses = [];
   const shared = new SharedBrowser({ send: (...args) => statuses.push(args) }, undefined, async (url, id) => {
     requests.push({ url, id });
@@ -260,4 +267,75 @@ test('navigate opens and shares only the new tab reported for this session', asy
   shared.attach(requests[1].id, 1);
   await assert.rejects(canceled, /did not finish opening/);
   assert.equal(shared.guest('second'), undefined);
+});
+
+test('waits for a newly opened mock tab to attach without polling', async () => {
+  const { tabs, connect } = setup({ attachLater: true });
+  const show = connect('first');
+  const result = await show('<p>Ready</p>');
+  assert.equal(result.isError, undefined);
+  assert.equal(tabs.length, 1);
+});
+
+test('picker selects the nearest HTML element instead of SVG children', async () => {
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<button aria-label="Search"><svg><path d="M0 0"></path></svg></button>', { runScripts: 'outside-only' });
+  const { window } = dom;
+  window.CSS = { escape: value => value };
+  const pick = loadPicker(window);
+
+  try {
+    const result = pick();
+    window.document.querySelector('path').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const selected = await result;
+    assert.equal(selected.tag, 'button');
+    assert.equal(selected.label, 'Search');
+    assert.equal(window.document.querySelector(selected.selector), window.document.querySelector('button'));
+    window.envimElementPicker.stop();
+  } finally {
+    window.close();
+  }
+});
+
+test('a tab can be unshared regardless of which session it is shared with', () => {
+  const { EventEmitter } = require('node:events');
+  const guest = Object.assign(new EventEmitter(), {
+    id: 5, getType: () => 'webview', getURL: () => 'https://example.test/', isDestroyed: () => false,
+  });
+  const statuses = [];
+  const SharedBrowser = loadSharedBrowser(() => guest);
+  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) });
+
+  shared.share('inactive', guest.id);
+  shared.share('active', guest.id);
+  assert.equal(shared.guest('inactive'), undefined);
+  assert.equal(shared.guest('active'), guest);
+  shared.revokeGuest(guest.id);
+  assert.equal(shared.guest('active'), undefined);
+  assert.deepEqual(statuses.map(status => status.slice(1)), [[5, true], [5, false], [5, true], [5, false]]);
+});
+
+test('starting a picker on a tab that is still picking waits for the previous one to stop', async () => {
+  const { EventEmitter } = require('node:events');
+  const guest = Object.assign(new EventEmitter(), {
+    id: 7,
+    focus() {},
+    isDestroyed: () => false,
+    isLoadingMainFrame: () => false,
+    // The in-page picker never yields a selection in this test; it only ends when aborted.
+    executeJavaScriptInIsolatedWorld: async (_id, [{ code }]) => code.endsWith('.stop()') ? undefined : new Promise(() => {}),
+  });
+  const { pickElement, stopPicking, isPicking } = loadModule('main/mcp/picker.ts', { electron: {} });
+  const order = [];
+
+  const first = pickElement('one', guest, () => true, () => {}).then(() => order.push('first'));
+  const second = pickElement('two', guest, () => true, () => {}).then(() => order.push('second'));
+  await first;
+  assert.deepEqual(order, ['first']);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(isPicking(guest), true);
+  stopPicking('two', guest.id);
+  await second;
+  assert.deepEqual(order, ['first', 'second']);
+  assert.equal(isPicking(guest), false);
 });
