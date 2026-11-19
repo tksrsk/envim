@@ -14,7 +14,10 @@ import { Setting } from "main/setting";
 import { Workspace } from "main/envim/workspace";
 
 export class Connection {
+  // Kept in creation order: the renderer lists workspaces in this order, and reordering them moves their DOM, which reloads <webview> guests.
   private static workspaces: Workspace[] = [];
+  // Most recently used last, to pick the next workspace on disconnect.
+  private static recent: Workspace[] = [];
   private static current?: Workspace;
 
   private static attach(reader: Readable, writer: Writable) {
@@ -116,7 +119,8 @@ export class Connection {
 
       workspace.bookmark = bookmark;
       Connection.current = workspace;
-      Connection.workspaces = [ ...Connection.workspaces.filter(w => w !== workspace), workspace ];
+      Connection.workspaces = Connection.workspaces.includes(workspace) ? Connection.workspaces : [ ...Connection.workspaces, workspace ];
+      Connection.recent = [ ...Connection.recent.filter(w => w !== workspace), workspace ];
       Connection.emitWorkspace(setting);
       Emit.share("app:theme:native");
     };
@@ -137,7 +141,8 @@ export class Connection {
     workspace && workspace.dispose();
 
     Connection.workspaces = Connection.workspaces.filter(w => w !== workspace);
-    Connection.current = Connection.current === workspace ? Connection.workspaces[Connection.workspaces.length - 1] : Connection.current;
+    Connection.recent = Connection.recent.filter(w => w !== workspace);
+    Connection.current = Connection.current === workspace ? Connection.recent[Connection.recent.length - 1] : Connection.current;
     Connection.emitWorkspace();
   }
 

@@ -62,7 +62,9 @@ export function WebviewComponent(props: Props) {
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
-  const [shared, setShared] = React.useState(false);
+  // Holds the shared guest id, not a flag: a re-created guest gets a new id, so the revoke for the old id must still clear it.
+  const [sharedId, setSharedId] = React.useState<number>();
+  const shared = sharedId !== undefined;
   const [acpStatus, setAcpStatus] = React.useState<IAcpStatus>({ status: "disconnected" });
   const [pickerId, setPickerId] = React.useState<number>();
   const { active } = useFocus();
@@ -104,7 +106,7 @@ export function WebviewComponent(props: Props) {
   }, []);
 
   React.useEffect(() => {
-    setShared(false);
+    setSharedId(undefined);
     setPickerId(undefined);
     setState(state => ({ ...state, url: "" }));
     if (container.current) {
@@ -154,8 +156,11 @@ export function WebviewComponent(props: Props) {
     }
 
     function onShare(id: number, value: boolean) {
-      if (guestId() !== id) return;
-      setShared(value);
+      if (value) {
+        guestId() === id && setSharedId(id);
+      } else {
+        setSharedId(current => current === id ? undefined : current);
+      }
     }
 
     emit.on("browser:pick:finished", finish);
@@ -260,7 +265,7 @@ export function WebviewComponent(props: Props) {
 
   function onClose() {
     webview.current = null;
-    setShared(false);
+    setSharedId(undefined);
   }
 
   function setPointer(x: number | "max", y: number | "max") {
