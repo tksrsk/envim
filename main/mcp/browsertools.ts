@@ -1,9 +1,11 @@
+import type * as Electron from "electron";
 import type { Server } from "@modelcontextprotocol/server";
 
 import type { IBrowserElement } from "common/interface";
 
 import { refToSelector, snapshotTab } from "main/mcp/axtree";
 import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture";
+import { Downloads, downloadsTool, type DownloadContent } from "main/mcp/downloads";
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
 import { pickElement, stopPicking } from "main/mcp/picker";
@@ -14,7 +16,7 @@ import type { Workspace } from "main/envim/workspace";
 
 export const BROWSER_TOOLS_SERVER_NAME = "envim-browser";
 
-type ToolContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+type ToolContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string } | DownloadContent;
 type ToolResult = { isError?: true; content: ToolContent[] };
 
 function textResult(value: unknown, isError = false): ToolResult {
@@ -32,9 +34,11 @@ function imageResult({ image, summary }: Screenshot): ToolResult {
 export class BrowserTools {
   private readonly mock: MockPreview;
   private readonly shared: SharedBrowser;
+  private readonly downloads: Downloads;
 
   constructor(workspace: Workspace, private readonly onRemove?: (endpoint: string) => void) {
     this.mock = new MockPreview(workspace);
+    this.downloads = new Downloads(message => workspace.emit.send("acp:browser:notice", message));
     this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => stopPicking(endpoint, guestId),
       (url, requestId) => workspace.showBrowserTab(url, requestId));
   }
@@ -60,6 +64,7 @@ export class BrowserTools {
   private removeEndpoint(endpoint: string): void {
     this.shared.revoke(endpoint);
     stopPicking(endpoint);
+    this.downloads.remove(endpoint);
     if (!this.mock.has(endpoint)) return;
 
     this.mock.remove(endpoint);
@@ -166,6 +171,19 @@ export class BrowserTools {
     return { ...params, selector: await refToSelector(tab.guest, ref) };
   }
 
+  // Runs an action that can start downloads in the tab, and reports them with its result. A failed
+  // action that downloaded a file, such as a navigation that became a download, reports the download.
+  private async withDownloads(endpoint: string, guest: Electron.WebContents, run: () => Promise<unknown>): Promise<unknown> {
+    const { value, error, downloads } = await this.downloads.capture(endpoint, guest, run);
+    if (downloads.length === 0) {
+      if (error !== undefined) throw error;
+      return value;
+    }
+
+    const summary = Downloads.summary(downloads);
+    return error !== undefined || typeof value !== "string" ? summary : `${value} ${summary}`;
+  }
+
   private async useTab(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const id = BrowserTools.tabId(params.tab);
     if (params.action === "list") return this.tabs(endpoint).map(summarizeTab);
@@ -174,7 +192,9 @@ export class BrowserTools {
       if (id !== undefined && this.mock.guest(endpoint, id)) {
         throw new Error(`Tab ${id} shows the mock preview. Update it with show_mock, or navigate a shared tab.`);
       }
-      return this.shared.navigate(endpoint, params.url, id, params.new_tab);
+      const guest = params.new_tab === true ? undefined : this.shared.guest(endpoint, id);
+      const navigate = () => this.shared.navigate(endpoint, params.url, id, params.new_tab);
+      return guest ? this.withDownloads(endpoint, guest, navigate) : navigate();
     }
 
     if (params.action === "wait") {
@@ -183,9 +203,15 @@ export class BrowserTools {
     }
 
     const tab = await this.loadedTab(endpoint, id);
-    if (params.action === "back" || params.action === "forward") return goInHistory(tab, params.action);
+    if (params.action === "back" || params.action === "forward") {
+      const direction = params.action;
+      return this.withDownloads(endpoint, tab.guest, () => goInHistory(tab, direction));
+    }
 
-    if (params.action !== "inspect") return runTabAction(tab, await BrowserTools.withSelector(tab, params));
+    if (params.action !== "inspect") {
+      const resolved = await BrowserTools.withSelector(tab, params);
+      return params.action === "scroll" ? runTabAction(tab, resolved) : this.withDownloads(endpoint, tab.guest, () => runTabAction(tab, resolved));
+    }
 
     const url = tab.guest.getURL();
     const snapshot = await snapshotTab(tab.guest);
@@ -210,12 +236,18 @@ export class BrowserTools {
   }
 
   registerTools(server: Server, endpoint: string): void {
-    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool] }));
+    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool, downloadsTool] }));
     server.setRequestHandler("tools/call", async ({ params }) => {
       try {
         switch (params.name) {
           case showMockTool.name: return textResult(await this.mock.show(endpoint, params.arguments?.html));
           case useTabTool.name: return textResult(await this.useTab(endpoint, params.arguments));
+          case downloadsTool.name: {
+            const id = params.arguments?.id;
+            if (id === undefined) return textResult(this.downloads.list(endpoint));
+            if (typeof id !== "string") return textResult("Id must be a download id such as d1.", true);
+            return { content: await this.downloads.read(endpoint, id) };
+          }
           case readLogsTool.name: return textResult(this.readLogs(endpoint, params.arguments));
           case screenshotTool.name: return imageResult(await this.screenshot(endpoint, params.arguments));
           default: return textResult(`Unknown tool: ${params.name}`, true);

@@ -49,9 +49,16 @@ export function watchNavigation(guest: Electron.WebContents) {
     started = true;
     notify();
   };
+  // A navigation that becomes a download, or is cancelled, starts but never commits.
+  let committed = false;
+  const onCommit = () => { committed = true; };
   guest.on("did-start-navigation", onStart);
+  guest.on("did-navigate", onCommit);
   const dispose = () => {
-    if (!guest.isDestroyed()) guest.removeListener("did-start-navigation", onStart);
+    if (guest.isDestroyed()) return;
+
+    guest.removeListener("did-start-navigation", onStart);
+    guest.removeListener("did-navigate", onCommit);
   };
 
   return {
@@ -63,9 +70,8 @@ export function watchNavigation(guest: Electron.WebContents) {
         if (!started) return undefined;
         if (guest.isDestroyed()) return "The tab was closed.";
 
-        return await waitForLoad(guest)
-          ? `The page navigated to ${guest.getURL()}.`
-          : `The page is navigating to ${guest.getURL()} and is still loading.`;
+        if (!await waitForLoad(guest)) return `The page is navigating to ${guest.getURL()} and is still loading.`;
+        return committed ? `The page navigated to ${guest.getURL()}.` : undefined;
       } finally {
         dispose();
       }
