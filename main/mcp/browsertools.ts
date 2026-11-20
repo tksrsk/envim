@@ -5,6 +5,7 @@ import type { IBrowserElement } from "common/interface";
 
 import { refToSelector, snapshotTab } from "main/mcp/axtree";
 import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture";
+import { Dialogs, handleDialogTool, type ActionOutcome } from "main/mcp/dialogs";
 import { Downloads, downloadsTool, type DownloadContent } from "main/mcp/downloads";
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
@@ -35,11 +36,17 @@ export class BrowserTools {
   private readonly mock: MockPreview;
   private readonly shared: SharedBrowser;
   private readonly downloads: Downloads;
+  private readonly notify: (message: string) => void;
 
   constructor(workspace: Workspace, private readonly onRemove?: (endpoint: string) => void) {
+    this.notify = message => workspace.emit.send("acp:browser:notice", message);
     this.mock = new MockPreview(workspace);
-    this.downloads = new Downloads(message => workspace.emit.send("acp:browser:notice", message), guestId => this.ownerOf(guestId));
-    this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => stopPicking(endpoint, guestId),
+    this.downloads = new Downloads(this.notify, guestId => this.ownerOf(guestId));
+    this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => {
+      stopPicking(endpoint, guestId);
+      // A dialog the agent has not answered goes to the user.
+      Dialogs.release(guestId);
+    },
       (url, requestId) => workspace.showBrowserTab(url, requestId), (_, guest) => this.downloads.watch(guest.session));
   }
 
@@ -66,6 +73,9 @@ export class BrowserTools {
     stopPicking(endpoint);
     this.downloads.remove(endpoint);
     if (!this.mock.has(endpoint)) return;
+
+    const mock = this.mock.guest(endpoint);
+    if (mock) Dialogs.release(mock.id);
 
     this.mock.remove(endpoint);
     this.onRemove?.(endpoint);
@@ -155,6 +165,8 @@ export class BrowserTools {
   // Resolves the tab after any page it is loading has finished, so the scope matches the loaded page.
   private async loadedTab(endpoint: string, id: number | undefined): Promise<BrowserTab> {
     const tab = this.resolveTab(endpoint, id);
+    // A page blocked by a dialog does not finish loading.
+    Dialogs.assertNone(tab.guest);
     await waitForLoadOrThrow(tab.guest);
     const loaded = this.current(endpoint, tab);
     if (!loaded) throw new Error(`Tab ${tab.id} is no longer available to this session.`);
@@ -191,6 +203,31 @@ export class BrowserTools {
     return error !== undefined || typeof value !== "string" ? summary : `${value} ${summary}`;
   }
 
+  // Describes an action's outcome for the agent: its result with what the page did on its own, or the
+  // dialog the action opened that waits for an answer.
+  private static report(tabId: number, outcome: ActionOutcome): unknown {
+    const notes = outcome.notes.join(" ");
+    if ("dialog" in outcome) {
+      const dialog = `The page opened ${Dialogs.describe(outcome.dialog)} and waits for an answer. Answer it with handle_dialog on tab ${tabId}.`;
+      return notes ? `${notes} ${dialog}` : dialog;
+    }
+
+    const { value } = outcome;
+    if (!notes) return value;
+    if (value === undefined || typeof value === "string") return [value, notes].filter(Boolean).join(" ");
+    return typeof value === "object" && value !== null ? { ...value, notes: outcome.notes } : value;
+  }
+
+  // Runs an agent action, so dialogs it opens are held for the agent instead of blocking the action.
+  private async act(tab: { id: number; kind: "shared" | "mock"; guest: Electron.WebContents }, run: () => Promise<unknown>): Promise<unknown> {
+    const outcome = await Dialogs.act(tab.guest, run);
+    if ("dialog" in outcome) {
+      const release = tab.kind === "shared" ? " Stop sharing the tab to answer it yourself." : "";
+      this.notify(`The agent is answering ${Dialogs.describe(outcome.dialog)} in tab ${tab.id}.${release}`);
+    }
+    return BrowserTools.report(tab.id, outcome);
+  }
+
   private async useTab(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const id = BrowserTools.tabId(params.tab);
     if (params.action === "list") return this.tabs(endpoint).map(summarizeTab);
@@ -201,23 +238,26 @@ export class BrowserTools {
       }
       const guest = params.new_tab === true ? undefined : this.shared.guest(endpoint, id);
       const navigate = () => this.shared.navigate(endpoint, params.url, id, params.new_tab);
-      return guest ? this.withDownloads(guest, navigate) : navigate();
+      return guest ? this.withDownloads(guest, () => this.act({ id: guest.id, kind: "shared", guest }, navigate)) : navigate();
     }
 
     if (params.action === "wait") {
       const tab = this.resolveTab(endpoint, id);
-      return waitInTab(tab, await BrowserTools.withSelector(tab, params), () => this.current(endpoint, tab));
+      Dialogs.assertNone(tab.guest);
+      const resolved = await BrowserTools.withSelector(tab, params);
+      return this.act(tab, () => waitInTab(tab, resolved, () => this.current(endpoint, tab)));
     }
 
     const tab = await this.loadedTab(endpoint, id);
     if (params.action === "back" || params.action === "forward") {
       const direction = params.action;
-      return this.withDownloads(tab.guest, () => goInHistory(tab, direction));
+      return this.withDownloads(tab.guest, () => this.act(tab, () => goInHistory(tab, direction)));
     }
 
     if (params.action !== "inspect") {
       const resolved = await BrowserTools.withSelector(tab, params);
-      return params.action === "scroll" ? runTabAction(tab, resolved) : this.withDownloads(tab.guest, () => runTabAction(tab, resolved));
+      const run = () => this.act(tab, () => runTabAction(tab, resolved));
+      return params.action === "scroll" ? run() : this.withDownloads(tab.guest, run);
     }
 
     const url = tab.guest.getURL();
@@ -227,6 +267,17 @@ export class BrowserTools {
       throw new Error(`Tab ${tab.id} changed while it was inspected. Try again.`);
     }
     return { ...summarizeTab(tab), ...snapshot };
+  }
+
+  private async handleDialog(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    const tab = this.resolveTab(endpoint, BrowserTools.tabId(params.tab));
+    return this.withDownloads(tab.guest, async () => {
+      const outcome = await Dialogs.answer(tab.guest, params.accept);
+      const answered = params.accept ? "Pressed OK." : "Pressed Cancel.";
+      const report = BrowserTools.report(tab.id, outcome);
+      if (report === undefined || typeof report === "string") return [answered, report].filter(Boolean).join(" ");
+      return typeof report === "object" && report !== null ? { answered, ...report } : report;
+    });
   }
 
   private async screenshot(endpoint: string, params: Record<string, unknown> = {}): Promise<Screenshot> {
@@ -243,12 +294,13 @@ export class BrowserTools {
   }
 
   registerTools(server: Server, endpoint: string): void {
-    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool, downloadsTool] }));
+    server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool, downloadsTool, handleDialogTool] }));
     server.setRequestHandler("tools/call", async ({ params }) => {
       try {
         switch (params.name) {
           case showMockTool.name: return textResult(await this.mock.show(endpoint, params.arguments?.html));
           case useTabTool.name: return textResult(await this.useTab(endpoint, params.arguments));
+          case handleDialogTool.name: return textResult(await this.handleDialog(endpoint, params.arguments));
           case downloadsTool.name: {
             const id = params.arguments?.id;
             if (id === undefined) return textResult(this.downloads.list(endpoint));

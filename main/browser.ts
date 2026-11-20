@@ -5,6 +5,7 @@ import { MOCK_PREVIEW_ORIGIN_PREFIX } from "common/constant";
 
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
+import { Dialogs } from "main/mcp/dialogs";
 import { isPicking } from "main/mcp/picker";
 import { TabLogs } from "main/mcp/tablog";
 
@@ -15,6 +16,7 @@ export class Browser {
 
   constructor(private webContents: Electron.WebContents) {
     TabLogs.track(webContents);
+    Dialogs.track(webContents);
     webContents.setWindowOpenHandler(this.onOpenWindow);
     webContents.on("will-frame-navigate", event => {
       if (this.isMockPreview() && event.url.split("#")[0] !== webContents.getURL().split("#")[0]) {
@@ -98,7 +100,8 @@ export class Browser {
   }
 
   private onUnload = (e: Electron.Event) => {
-    this.confirm("Leave this page?") && e.preventDefault();
+    // A page the agent navigates away from is left without asking the user.
+    if (Dialogs.leaveForAgent(this.webContents) || this.confirm("Leave this page?")) e.preventDefault();
   }
 
   private onContextMenu = (_: Electron.Event, params: Electron.ContextMenuParams) => {
