@@ -38,7 +38,7 @@ function setup({ attachLater = false } = {}) {
   const cache = new Map();
   const overrides = {
     electron: { webContents: { fromId: id => tabs[id] } },
-    'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {} },
+    'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {}, isPicking: () => false },
   };
   const { BrowserTools } = loadModule('main/mcp/browsertools.ts', overrides, cache);
   const { MockPreview } = loadModule('main/mcp/preview.ts', overrides, cache);

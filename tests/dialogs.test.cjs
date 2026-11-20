@@ -46,7 +46,7 @@ function openDialog(guest, dialogType, messageText) {
 const cache = new Map();
 const overrides = {
   electron: { webContents: { fromId: id => guests.get(id) } },
-  'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {} },
+  'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {}, isPicking: () => false },
 };
 const guests = new Map();
 const { Dialogs } = loadModule('main/mcp/dialogs.ts', overrides, cache);
@@ -159,10 +159,20 @@ test('use_tab reports a dialog its click opened, and handle_dialog continues the
     getURL: () => 'https://example.test/',
     getTitle: () => 'Example',
     isLoadingMainFrame: () => false,
-    // The click handler asks for confirmation, which blocks the page until the dialog closes.
-    executeJavaScriptInIsolatedWorld: async () => {
-      const { accept } = await openDialog(guest, 'confirm', 'Delete the item?');
-      return { ok: true, value: accept ? 'Clicked the selected element.' : 'Cancelled.' };
+    // The page finds where to click the element.
+    executeJavaScriptInIsolatedWorld: async () => ({ ok: true, value: { click: { x: 10, y: 20 } } }),
+    debugger: {
+      attached: false,
+      events: [],
+      attach() { this.attached = true; },
+      detach() { this.attached = false; },
+      isAttached() { return this.attached; },
+      // The click handler asks for confirmation, which blocks the page until the dialog closes.
+      async sendCommand(method, params) {
+        this.events.push([method, params.type, params.x, params.y]);
+        if (params.type === 'mouseReleased') await openDialog(guest, 'confirm', 'Delete the item?');
+        return {};
+      },
     },
   });
   const notices = [];
@@ -187,11 +197,17 @@ test('use_tab reports a dialog its click opened, and handle_dialog continues the
   assert.equal(blocked.isError, true);
   assert.match(blocked.content[0].text, /handle_dialog first/);
 
+  assert.deepEqual(guest.debugger.events, [
+    ['Input.dispatchMouseEvent', 'mouseMoved', 10, 20],
+    ['Input.dispatchMouseEvent', 'mousePressed', 10, 20],
+    ['Input.dispatchMouseEvent', 'mouseReleased', 10, 20],
+  ]);
   const answered = await call('handle_dialog', { accept: true });
   assert.equal(answered.isError, undefined);
   assert.equal(answered.content[0].text, 'Pressed OK. Clicked the selected element.');
 
   const again = await call('handle_dialog', { accept: false });
   assert.equal(again.isError, true);
+  assert.equal(guest.debugger.isAttached(), false);
   service.dispose();
 });

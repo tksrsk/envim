@@ -9,7 +9,7 @@ import { Dialogs, handleDialogTool, type ActionOutcome } from "main/mcp/dialogs"
 import { Downloads, downloadsTool, type DownloadContent } from "main/mcp/downloads";
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
-import { pickElement, stopPicking } from "main/mcp/picker";
+import { isPicking, pickElement, stopPicking } from "main/mcp/picker";
 import { goInHistory, runTabAction, summarizeTab, useTabTool, waitInTab, type BrowserTab } from "main/mcp/tabs";
 import { waitForLoadOrThrow } from "main/mcp/wait";
 import { readLogsTool, TabLogs } from "main/mcp/tablog";
@@ -255,6 +255,10 @@ export class BrowserTools {
     }
 
     if (params.action !== "inspect") {
+      // The element picker takes trusted clicks as the user's selection.
+      if ((params.action === "click" || params.action === "check") && isPicking(tab.guest)) {
+        throw new Error(`The user is selecting an element in tab ${tab.id}. Try again after the selection ends.`);
+      }
       const resolved = await BrowserTools.withSelector(tab, params);
       const run = () => this.act(tab, () => runTabAction(tab, resolved));
       return params.action === "scroll" ? run() : this.withDownloads(tab.guest, run);

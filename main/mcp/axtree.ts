@@ -1,5 +1,6 @@
 import type * as Electron from "electron";
 
+import { withDebugger } from "main/mcp/cdp";
 import { PageError } from "main/mcp/inject";
 import { pageSelector } from "main/mcp/page";
 
@@ -43,33 +44,6 @@ interface AXNode {
   parentId?: string;
   childIds?: string[];
   backendDOMNodeId?: number;
-}
-
-// Debugger sessions are shared by concurrent tool calls on the same guest and detached when the last one ends.
-const sessions = new Map<Electron.WebContents, number>();
-
-async function withDebugger<T>(guest: Electron.WebContents, run: (send: (method: string, params?: object) => Promise<any>) => Promise<T>): Promise<T> {
-  const count = sessions.get(guest) ?? 0;
-  if (count === 0) {
-    try {
-      guest.debugger.attach("1.3");
-    } catch (error) {
-      throw new Error(`Could not inspect tab ${guest.id}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-    }
-  }
-  sessions.set(guest, count + 1);
-
-  try {
-    return await run((method, params) => guest.debugger.sendCommand(method, params));
-  } finally {
-    const remaining = (sessions.get(guest) ?? 1) - 1;
-    if (remaining > 0) {
-      sessions.set(guest, remaining);
-    } else {
-      sessions.delete(guest);
-      if (!guest.isDestroyed() && guest.debugger.isAttached()) guest.debugger.detach();
-    }
-  }
 }
 
 function text(value: unknown, max = MAX_NAME): string {
