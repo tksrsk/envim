@@ -30,106 +30,69 @@ function imageResult({ image, summary }: Screenshot): ToolResult {
   return { content: [{ type: "image", ...image }, { type: "text", text: JSON.stringify(summary) }] };
 }
 
-// Browser tools exposed to one ACP session: the mock preview, the shared HTTP(S) tabs, actions and
-// screenshots and logs on either kind of tab, and element picking.
+// Browser tools of a workspace, for the agent connected to it: the tabs the user shared with it, the mock
+// preview shown in one, actions and screenshots and logs on them, and element picking.
 export class BrowserTools {
-  private readonly mock: MockPreview;
+  public readonly mock: MockPreview;
   private readonly shared: SharedBrowser;
   private readonly downloads: Downloads;
   private readonly notify: (message: string) => void;
 
-  constructor(workspace: Workspace, private readonly onRemove?: (endpoint: string) => void) {
+  // origin returns the origin of the browser server that serves the mock preview.
+  constructor(workspace: Workspace, origin: () => Promise<string>) {
     this.notify = message => workspace.emit.send("acp:browser:notice", message);
-    this.mock = new MockPreview(workspace);
-    this.downloads = new Downloads(this.notify, guestId => this.ownerOf(guestId));
-    this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => {
-      stopPicking(endpoint, guestId);
+    this.downloads = new Downloads(this.notify, guestId => this.shared.has(guestId));
+    this.shared = new SharedBrowser(workspace.emit, guest => {
+      stopPicking(guest);
       // A dialog the agent has not answered goes to the user.
-      Dialogs.release(guestId);
+      Dialogs.release(guest.id);
     },
-      (url, requestId) => workspace.showBrowserTab(url, requestId), (_, guest) => this.downloads.watch(guest.session));
+      (url, requestId) => workspace.showBrowserTab(url, requestId), guest => this.downloads.watch(guest.session));
+    this.mock = new MockPreview(this.shared, origin);
   }
 
-  private static toEndpoint(id: string): string {
-    return `browser-${id}`;
-  }
-
-  create(id: string): string {
-    const endpoint = BrowserTools.toEndpoint(id);
-    this.mock.create(endpoint);
-    return endpoint;
-  }
-
-  has(endpoint: string): boolean {
-    return this.mock.has(endpoint);
-  }
-
-  remove(id: string): void {
-    this.removeEndpoint(BrowserTools.toEndpoint(id));
-  }
-
-  private removeEndpoint(endpoint: string): void {
-    this.shared.revoke(endpoint);
-    stopPicking(endpoint);
-    this.downloads.remove(endpoint);
-    if (!this.mock.has(endpoint)) return;
-
-    const mock = this.mock.guest(endpoint);
-    if (mock) Dialogs.release(mock.id);
-
-    this.mock.remove(endpoint);
-    this.onRemove?.(endpoint);
-  }
-
-  attachMock(url: string, guestId: number): void {
-    this.mock.attach(url, guestId);
+  // Forgets the shared tabs, mock preview and downloads of the agent that has gone.
+  reset(): void {
+    this.shared.revoke();
+    this.downloads.reset();
+    this.mock.html = undefined;
   }
 
   attachSharedTab(requestId: string, guestId: number): void {
     this.shared.attach(requestId, guestId);
   }
 
-  shareTab(id: string, guestId: number): string {
-    return this.shared.share(BrowserTools.toEndpoint(id), guestId);
+  shareTab(guestId: number): string {
+    return this.shared.share(guestId);
   }
 
-  revokeTab(id: string): void {
-    this.shared.revoke(BrowserTools.toEndpoint(id));
+  // Revokes one shared tab, or all of them when guestId is omitted.
+  revokeTabs(guestId?: number): void {
+    this.shared.revoke(guestId);
   }
 
-  revokeGuest(guestId: number): void {
-    this.shared.revokeGuest(guestId);
+  // Stops the element picker in one tab, or in every shared tab when guestId is omitted.
+  stopPicking(guestId?: number): void {
+    for (const guest of this.shared.guests()) {
+      if (guestId === undefined || guest.id === guestId) stopPicking(guest);
+    }
   }
 
-  stopPicking(id: string, guestId?: number): void {
-    stopPicking(BrowserTools.toEndpoint(id), guestId);
-  }
-
-  async pick(id: string, guestId: number, onSelection: (selection: IBrowserElement) => void): Promise<void> {
-    const endpoint = BrowserTools.toEndpoint(id);
-    const sharedGuest = this.shared.guest(endpoint, guestId);
-    const guest = sharedGuest ?? this.mock.guest(endpoint, guestId);
+  async pick(guestId: number, onSelection: (selection: IBrowserElement) => void): Promise<void> {
+    const guest = this.shared.guest(guestId);
     if (!guest) throw new Error("Share this tab with the active ACP session before selecting an element.");
 
-    const current = () => sharedGuest ? this.shared.guest(endpoint, guestId) : this.mock.guest(endpoint, guestId);
-    await pickElement(endpoint, guest, () => current() === guest, selection => {
-      const url = sharedGuest ? guest.getURL() : this.mock.url(endpoint) ?? guest.getURL();
-      onSelection({ ...selection, url, tab: guestId });
+    await pickElement(guest, () => this.shared.guest(guestId) === guest, selection => {
+      onSelection({ ...selection, url: guest.getURL(), tab: guestId });
     });
   }
 
-  // The shared tabs and the tab showing the mock preview.
-  private tabs(endpoint: string): BrowserTab[] {
-    const tabs: BrowserTab[] = [];
-    for (const guest of this.shared.guests(endpoint)) {
+  // The shared tabs.
+  private tabs(): BrowserTab[] {
+    return this.shared.guests().flatMap(guest => {
       const origin = webOrigin(guest.getURL());
-      if (origin) tabs.push({ id: guest.id, kind: "shared", guest, scope: `${origin}/` });
-    }
-
-    const mock = this.mock.guest(endpoint);
-    const url = this.mock.url(endpoint);
-    if (mock && url) tabs.push({ id: mock.id, kind: "mock", guest: mock, scope: url });
-    return tabs;
+      return origin ? [{ id: guest.id, guest, scope: `${origin}/` }] : [];
+    });
   }
 
   private static tabId(value: unknown): number | undefined {
@@ -140,8 +103,8 @@ export class BrowserTools {
   }
 
   // Returns the tab with the id, or the only tab when id is omitted.
-  private resolveTab(endpoint: string, id: number | undefined): BrowserTab {
-    const tabs = this.tabs(endpoint);
+  private resolveTab(id: number | undefined): BrowserTab {
+    const tabs = this.tabs();
     if (tabs.length === 0) throw new Error("No tab is available. Ask the user to share a web tab, or call show_mock first.");
     if (id === undefined) {
       if (tabs.length > 1) throw new Error(`Several tabs are available (${tabs.map(tab => tab.id).join(", ")}). Pass tab with one of these ids.`);
@@ -154,21 +117,21 @@ export class BrowserTools {
   }
 
   // The tab as it is now, with a scope that follows the current page, or undefined when it is no longer available.
-  private current(endpoint: string, tab: BrowserTab): BrowserTab | undefined {
-    return this.tabs(endpoint).find(current => current.guest === tab.guest && current.kind === tab.kind);
+  private current(tab: BrowserTab): BrowserTab | undefined {
+    return this.tabs().find(current => current.guest === tab.guest);
   }
 
-  private isAvailable(endpoint: string, tab: BrowserTab): boolean {
-    return this.current(endpoint, tab) !== undefined;
+  private isAvailable(tab: BrowserTab): boolean {
+    return this.current(tab) !== undefined;
   }
 
   // Resolves the tab after any page it is loading has finished, so the scope matches the loaded page.
-  private async loadedTab(endpoint: string, id: number | undefined): Promise<BrowserTab> {
-    const tab = this.resolveTab(endpoint, id);
+  private async loadedTab(id: number | undefined): Promise<BrowserTab> {
+    const tab = this.resolveTab(id);
     // A page blocked by a dialog does not finish loading.
     Dialogs.assertNone(tab.guest);
     await waitForLoadOrThrow(tab.guest);
-    const loaded = this.current(endpoint, tab);
+    const loaded = this.current(tab);
     if (!loaded) throw new Error(`Tab ${tab.id} is no longer available to this session.`);
     return loaded;
   }
@@ -183,16 +146,9 @@ export class BrowserTools {
     return { ...params, selector: await refToSelector(tab.guest, ref) };
   }
 
-  // The endpoint whose shared tab or mock preview the guest is.
-  private ownerOf(guestId: number): string | undefined {
-    return this.shared.endpointOf(guestId) ?? this.mock.endpoints().find(endpoint => this.mock.guest(endpoint, guestId)?.id === guestId);
-  }
-
   // Runs an action that can start downloads in the tab, and reports them with its result. A failed
   // action that downloaded a file, such as a navigation that became a download, reports the download.
   private async withDownloads(guest: Electron.WebContents, run: () => Promise<unknown>): Promise<unknown> {
-    // The mock preview is never shared, so its session is watched when the agent acts on it.
-    this.downloads.watch(guest.session);
     const { value, error, downloads } = await this.downloads.capture(guest, run);
     if (downloads.length === 0) {
       if (error !== undefined) throw error;
@@ -219,36 +175,32 @@ export class BrowserTools {
   }
 
   // Runs an agent action, so dialogs it opens are held for the agent instead of blocking the action.
-  private async act(tab: { id: number; kind: "shared" | "mock"; guest: Electron.WebContents }, run: () => Promise<unknown>): Promise<unknown> {
+  private async act(tab: { id: number; guest: Electron.WebContents }, run: () => Promise<unknown>): Promise<unknown> {
     const outcome = await Dialogs.act(tab.guest, run);
     if ("dialog" in outcome) {
-      const release = tab.kind === "shared" ? " Stop sharing the tab to answer it yourself." : "";
-      this.notify(`The agent is answering ${Dialogs.describe(outcome.dialog)} in tab ${tab.id}.${release}`);
+      this.notify(`The agent is answering ${Dialogs.describe(outcome.dialog)} in tab ${tab.id}. Stop sharing the tab to answer it yourself.`);
     }
     return BrowserTools.report(tab.id, outcome);
   }
 
-  private async useTab(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  private async useTab(params: Record<string, unknown> = {}): Promise<unknown> {
     const id = BrowserTools.tabId(params.tab);
-    if (params.action === "list") return this.tabs(endpoint).map(summarizeTab);
+    if (params.action === "list") return this.tabs().map(summarizeTab);
 
     if (params.action === "navigate") {
-      if (id !== undefined && this.mock.guest(endpoint, id)) {
-        throw new Error(`Tab ${id} shows the mock preview. Update it with show_mock, or navigate a shared tab.`);
-      }
-      const guest = params.new_tab === true ? undefined : this.shared.guest(endpoint, id);
-      const navigate = () => this.shared.navigate(endpoint, params.url, id, params.new_tab);
-      return guest ? this.withDownloads(guest, () => this.act({ id: guest.id, kind: "shared", guest }, navigate)) : navigate();
+      const guest = params.new_tab === true ? undefined : this.shared.guest(id);
+      const navigate = () => this.shared.navigate(params.url, id, params.new_tab);
+      return guest ? this.withDownloads(guest, () => this.act({ id: guest.id, guest }, navigate)) : navigate();
     }
 
     if (params.action === "wait") {
-      const tab = this.resolveTab(endpoint, id);
+      const tab = this.resolveTab(id);
       Dialogs.assertNone(tab.guest);
       const resolved = await BrowserTools.withSelector(tab, params);
-      return this.act(tab, () => waitInTab(tab, resolved, () => this.current(endpoint, tab)));
+      return this.act(tab, () => waitInTab(tab, resolved, () => this.current(tab)));
     }
 
-    const tab = await this.loadedTab(endpoint, id);
+    const tab = await this.loadedTab(id);
     if (params.action === "back" || params.action === "forward") {
       const direction = params.action;
       return this.withDownloads(tab.guest, () => this.act(tab, () => goInHistory(tab, direction)));
@@ -267,14 +219,14 @@ export class BrowserTools {
     const url = tab.guest.getURL();
     const snapshot = await snapshotTab(tab.guest);
     // Page data is returned only while the tab is still available to this session and on the same page.
-    if (!this.isAvailable(endpoint, tab) || tab.guest.getURL() !== url) {
+    if (!this.isAvailable(tab) || tab.guest.getURL() !== url) {
       throw new Error(`Tab ${tab.id} changed while it was inspected. Try again.`);
     }
     return { ...summarizeTab(tab), ...snapshot };
   }
 
-  private async handleDialog(endpoint: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    const tab = this.resolveTab(endpoint, BrowserTools.tabId(params.tab));
+  private async handleDialog(params: Record<string, unknown> = {}): Promise<unknown> {
+    const tab = this.resolveTab(BrowserTools.tabId(params.tab));
     return this.withDownloads(tab.guest, async () => {
       const outcome = await Dialogs.answer(tab.guest, params.accept);
       const answered = params.accept ? "Pressed OK." : "Pressed Cancel.";
@@ -284,44 +236,40 @@ export class BrowserTools {
     });
   }
 
-  private async screenshot(endpoint: string, params: Record<string, unknown> = {}): Promise<Screenshot> {
-    const tab = await this.loadedTab(endpoint, BrowserTools.tabId(params.tab));
+  private async screenshot(params: Record<string, unknown> = {}): Promise<Screenshot> {
+    const tab = await this.loadedTab(BrowserTools.tabId(params.tab));
     const { selector } = await BrowserTools.withSelector(tab, params);
     if (selector !== undefined && typeof selector !== "string") throw new Error("Selector must be a string.");
 
-    return captureGuest(tab.guest, selector, () => this.isAvailable(endpoint, tab));
+    return captureGuest(tab.guest, selector, () => this.isAvailable(tab));
   }
 
-  private readLogs(endpoint: string, params: Record<string, unknown> = {}) {
-    const tab = this.resolveTab(endpoint, BrowserTools.tabId(params.tab));
-    return { tab: tab.id, kind: tab.kind, ...TabLogs.read(tab.id, params) };
+  private readLogs(params: Record<string, unknown> = {}) {
+    const tab = this.resolveTab(BrowserTools.tabId(params.tab));
+    return { tab: tab.id, ...TabLogs.read(tab.id, params) };
   }
 
-  registerTools(server: Server, endpoint: string): void {
+  registerTools(server: Server): void {
     server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool, downloadsTool, handleDialogTool] }));
     server.setRequestHandler("tools/call", async ({ params }) => {
       try {
         switch (params.name) {
-          case showMockTool.name: return textResult(await this.mock.show(endpoint, params.arguments?.html));
-          case useTabTool.name: return textResult(await this.useTab(endpoint, params.arguments));
-          case handleDialogTool.name: return textResult(await this.handleDialog(endpoint, params.arguments));
+          case showMockTool.name: return textResult(await this.mock.show(params.arguments?.html));
+          case useTabTool.name: return textResult(await this.useTab(params.arguments));
+          case handleDialogTool.name: return textResult(await this.handleDialog(params.arguments));
           case downloadsTool.name: {
             const id = params.arguments?.id;
-            if (id === undefined) return textResult(this.downloads.list(endpoint));
+            if (id === undefined) return textResult(this.downloads.list());
             if (typeof id !== "string") return textResult("Id must be a download id such as d1.", true);
-            return { content: await this.downloads.read(endpoint, id) };
+            return { content: await this.downloads.read(id) };
           }
-          case readLogsTool.name: return textResult(this.readLogs(endpoint, params.arguments));
-          case screenshotTool.name: return imageResult(await this.screenshot(endpoint, params.arguments));
+          case readLogsTool.name: return textResult(this.readLogs(params.arguments));
+          case screenshotTool.name: return imageResult(await this.screenshot(params.arguments));
           default: return textResult(`Unknown tool: ${params.name}`, true);
         }
       } catch (error) {
         return textResult(error instanceof Error ? error : String(error), true);
       }
     });
-  }
-
-  dispose(): void {
-    for (const endpoint of this.mock.endpoints()) this.removeEndpoint(endpoint);
   }
 }

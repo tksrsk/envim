@@ -178,12 +178,11 @@ test('use_tab reports a dialog its click opened, and handle_dialog continues the
   const notices = [];
   guests.set(guest.id, guest);
   Dialogs.track(guest);
-  const service = new BrowserTools({ emit: { send: (channel, message) => notices.push([channel, message]) } });
+  const service = new BrowserTools({ emit: { send: (channel, message) => notices.push([channel, message]) } }, async () => 'http://127.0.0.1:1');
   const handlers = {};
-  const endpoint = service.create('chat');
-  service.registerTools({ setRequestHandler: (name, handler) => { handlers[name] = handler; } }, endpoint);
+  service.registerTools({ setRequestHandler: (name, handler) => { handlers[name] = handler; } });
   const call = (name, args) => handlers['tools/call']({ params: { name, arguments: args } });
-  service.shareTab('chat', guest.id);
+  service.shareTab(guest.id);
 
   const tools = (await handlers['tools/list']()).tools.map(tool => tool.name);
   assert.ok(tools.includes('handle_dialog'));
@@ -209,5 +208,5 @@ test('use_tab reports a dialog its click opened, and handle_dialog continues the
   const again = await call('handle_dialog', { accept: false });
   assert.equal(again.isError, true);
   assert.equal(guest.debugger.isAttached(), false);
-  service.dispose();
+  service.reset();
 });

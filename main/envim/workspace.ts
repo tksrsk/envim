@@ -14,6 +14,7 @@ import { Function } from "main/envim/function";
 import { Grids } from "main/envim/grid";
 import { Messages } from "main/envim/message";
 import { Highlights } from "main/envim/highlight";
+import { BrowserServer } from "main/mcp/browserserver";
 import { McpGateway } from "main/mcp/gateway";
 
 export class Workspace {
@@ -28,6 +29,7 @@ export class Workspace {
   public readonly clipboard: Clipboard;
   public readonly function: Function;
   public readonly mcpGateway: McpGateway;
+  public readonly browser: BrowserServer;
   public readonly app: App;
   public cwd = "";
 
@@ -38,8 +40,7 @@ export class Workspace {
     const emit = new WorkspaceEmit(this.id);
 
     emit.on("browser:open", this.onBrowserOpen);
-    emit.on("browser:mock:ready", (url: string, id: number) => this.mcpGateway.browser.attachMock(url, id));
-    emit.on("browser:share:ready", (id: string, guestId: number) => this.mcpGateway.browser.attachSharedTab(id, guestId));
+    emit.on("browser:share:ready", (id: string, guestId: number) => this.browser.tools.attachSharedTab(id, guestId));
     emit.on("browser:view", this.onBrowserView);
     emit.on("neovim:api", this.onNeovimApi);
     emit.on("neovim:command", this.onNeovimCommand);
@@ -66,33 +67,23 @@ export class Workspace {
     this.grids = new Grids(this);
     this.acp = new Acp(this);
     this.mcpGateway = new McpGateway(this);
+    this.browser = new BrowserServer(this);
   }
 
   private onBrowserOpen = (src: string, command?: string) => {
-    return this.openBrowser(src, command);
+    this.nvim.command(Workspace.browserCommand(src, command));
   }
 
-  // Shows src in a browser tab, reusing a window that already displays the same buffer.
-  showBrowserTab(src: string, requestId?: string): Promise<void> {
-    return this.openBrowser(src, "tabnew", requestId, true);
+  // Opens src in a browser tab. The renderer reports the tab with requestId once its webview is attached.
+  showBrowserTab(src: string, requestId: string): Promise<void> {
+    return this.nvim.command(Workspace.browserCommand(src, "tabnew", requestId));
   }
 
-  private async openBrowser(src: string, command?: string, requestId?: string, reuse = false): Promise<void> {
+  private static browserCommand(src: string, command?: string, requestId?: string): string {
     command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
-    const name = `envim-browser://${encodeURIComponent(src)}${requestId ? "#" + requestId : ""}`;
+    const encoded = encodeURIComponent(src).replace(/%/g, "\\%");
 
-    await this.nvim.request("nvim_exec_lua", [`
-      local name, command, reuse = ...
-      if reuse then
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          if vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) == name then
-            vim.api.nvim_set_current_win(win)
-            return
-          end
-        end
-      end
-      vim.cmd(command .. " +setlocal\\\\ buftype=nofile\\\\ bufhidden=wipe\\\\ filetype=browser\\\\ nobuflisted " .. vim.fn.fnameescape(name))
-    `, [name, command, reuse]]);
+    return `${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${encoded}${requestId ? `\\#${requestId}` : ""}`;
   }
 
   private onBrowserView = (winid: number, active: boolean, src: string) => {
@@ -183,6 +174,7 @@ export class Workspace {
   dispose() {
     this.timers.forEach(timer => clearInterval(timer));
     this.emit.dispose();
+    this.browser.dispose();
     this.mcpGateway.dispose();
   }
 }

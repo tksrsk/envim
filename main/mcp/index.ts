@@ -9,25 +9,35 @@ type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 export class Mcp {
   private static syncPromise: Promise<void> = Promise.resolve();
 
-  static servers(workspace: Workspace, previewId?: string): Promise<AcpSDK.McpServer[]> {
-    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace, previewId));
+  // browser adds the browser tools of the workspace to the servers.
+  static servers(workspace: Workspace, browser = false): Promise<AcpSDK.McpServer[]> {
+    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace, browser));
 
     Mcp.syncPromise = operation.then(() => undefined, () => undefined);
 
     return operation;
   }
 
-  private static async syncServers(workspace: Workspace, previewId?: string): Promise<AcpSDK.McpServer[]> {
+  private static async syncServers(workspace: Workspace, browser: boolean): Promise<AcpSDK.McpServer[]> {
     const servers = (Setting.get()?.acp?.mcpServers || [])
       .filter(mcp => mcp.enabled)
       .map(mcp => mcp.server);
-    const httpServers = servers.filter(Mcp.isHttpServer);
+    // The browser tools listen on Envim's host, so they reach the agent through the gateway like any HTTP server.
+    const browserServer: HttpMcpServer | undefined = browser
+      ? await workspace.browser.url().then(url => ({ type: "http", name: BROWSER_TOOLS_SERVER_NAME, url, headers: [] }), () => undefined)
+      : undefined;
+    const httpServers = [...servers.filter(Mcp.isHttpServer), ...(browserServer ? [browserServer] : [])];
     const gateway = workspace.mcpGateway;
+
+    if (httpServers.length === 0) {
+      await gateway.upstreams.sync([]);
+      gateway.app.onUpstreamsChanged([]);
+
+      return servers;
+    }
 
     const upstreams = await gateway.upstreams.sync(httpServers);
     gateway.app.onUpstreamsChanged([...upstreams.values()].map(upstream => upstream.id));
-    if (!previewId && httpServers.length === 0) return servers;
-
     let gatewayUrl: string;
 
     try {
@@ -36,22 +46,18 @@ export class Mcp {
       return servers;
     }
 
-    const configuredServers = servers.map<AcpSDK.McpServer>(server => {
+    const viaGateway = (server: AcpSDK.McpServer): AcpSDK.McpServer | undefined => {
       const upstream = upstreams.get(server);
 
-      if (!upstream) return server;
+      if (!upstream) return undefined;
 
       const url = `${gatewayUrl}/mcp/${encodeURIComponent(upstream.id)}`;
 
       return { type: "http", name: server.name, url, headers: [] };
-    });
+    };
+    const browserViaGateway = browserServer && viaGateway(browserServer);
 
-    if (previewId) {
-      const endpoint = gateway.browser.create(previewId);
-      configuredServers.push({ type: "http", name: BROWSER_TOOLS_SERVER_NAME, url: `${gatewayUrl}/mcp/${endpoint}`, headers: [] });
-    }
-
-    return configuredServers;
+    return [...servers.map(server => viaGateway(server) ?? server), ...(browserViaGateway ? [browserViaGateway] : [])];
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {

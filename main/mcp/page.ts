@@ -53,8 +53,7 @@ export function pageSelector(target: Element): string {
 // viewport, or text input into the focused field, whose contents are selected so the input replaces them.
 export type PageActionStep = string | { click: { x: number; y: number } } | { type: true };
 
-// scope is the URL prefix the page must still be on: the origin plus "/" for a web tab, or the
-// mock preview URL. The mock preview runs sandboxed with an opaque origin, so origins cannot be compared.
+// scope is the URL prefix the page must still be on: the origin of the tab plus "/".
 // Checks the element and prepares the action. Clicks and text input are left to the main process, which
 // sends them as trusted input events, as a user's would be.
 export function runPageAction(

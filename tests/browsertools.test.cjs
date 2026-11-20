@@ -22,43 +22,45 @@ function loadModule(file, overrides = {}, cache = new Map()) {
 }
 
 function createTab(url) {
-  return {
+  return Object.assign(new (require('node:events').EventEmitter)(), {
     url,
     reloads: 0,
+    session: new (require('node:events').EventEmitter)(),
     getType: () => 'webview',
     isDestroyed: () => false,
     isLoadingMainFrame: () => false,
     getURL() { return this.url; },
+    getTitle: () => 'Mock',
     async loadURL(url) { this.url = url; this.reloads++; }
-  };
+  });
 }
 
 function setup({ attachLater = false } = {}) {
   const tabs = [];
   const cache = new Map();
   const overrides = {
-    electron: { webContents: { fromId: id => tabs[id] } },
+    electron: { webContents: { fromId: id => tabs[id], getAllWebContents: () => tabs } },
     'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {}, isPicking: () => false },
   };
   const { BrowserTools } = loadModule('main/mcp/browsertools.ts', overrides, cache);
-  const { MockPreview } = loadModule('main/mcp/preview.ts', overrides, cache);
-  const removed = [];
   const service = new BrowserTools({
-    showBrowserTab: async url => {
-      const id = tabs.push(createTab(url)) - 1;
-      if (attachLater) setTimeout(() => service.attachMock(url, id), 20);
-      else service.attachMock(url, id);
+    emit: { send() {} },
+    showBrowserTab: async (url, requestId) => {
+      const id = tabs.length;
+      tabs.push(Object.assign(createTab(url), { id }));
+      if (attachLater) setTimeout(() => service.attachSharedTab(requestId, id), 20);
+      else service.attachSharedTab(requestId, id);
     }
-  }, endpoint => removed.push(endpoint));
+  }, async () => 'http://127.0.0.1:1');
 
-  function connect(chat) {
+  function connect() {
     const handlers = {};
-    const endpoint = service.create(chat);
-    service.registerTools({ setRequestHandler: (name, handler) => { handlers[name] = handler; } }, endpoint);
-    return html => handlers['tools/call']({ params: { name: 'show_mock', arguments: { html } } });
+    service.registerTools({ setRequestHandler: (name, handler) => { handlers[name] = handler; } });
+    const call = (name, args) => handlers['tools/call']({ params: { name, arguments: args } });
+    return Object.assign(html => call('show_mock', { html }), { call });
   }
 
-  return { service, tabs, removed, connect, serve: url => MockPreview.serve(new Request(url)) };
+  return { service, tabs, connect };
 }
 
 function loadPicker(window) {
@@ -75,48 +77,39 @@ function loadSharedBrowser(fromId) {
   return loadModule('main/mcp/sharedbrowser.ts', { electron: { webContents: { fromId } } }).SharedBrowser;
 }
 
-test('publishes an isolated mock and updates it in place without dropping its fragment', async () => {
-  const { service, tabs, connect, serve } = setup();
-  const show = connect('first');
-  assert.equal((await show('<button>Settings</button>')).isError, undefined);
+test('show_mock opens a shared tab on the served page and updates it in place without dropping its fragment', async () => {
+  const { service, tabs, connect } = setup();
+  const show = connect();
+  assert.equal((await show('')).isError, true);
+  assert.equal(tabs.length, 0);
+
+  const opened = await show('<button>Settings</button>');
+  assert.equal(opened.isError, undefined);
+  assert.match(opened.content[0].text, /in new shared tab 0/);
+  assert.equal(service.mock.html, '<button>Settings</button>');
   const [tab] = tabs;
-  const response = serve(tab.url);
-  assert.match(response.headers.get('content-security-policy'), /^sandbox allow-scripts; default-src 'none'/);
-  assert.equal(await response.text(), '<button>Settings</button>');
+  assert.equal(tab.url, 'http://127.0.0.1:1/mock');
+  assert.deepEqual(JSON.parse((await show.call('use_tab', { action: 'list' })).content[0].text), [{ tab: 0, url: tab.url, title: 'Mock' }]);
 
+  // Updating reloads the tab at a new revision and keeps the page's state in the fragment.
   tab.url += '#settings=open';
-  // A second guest can display the same URL. Only the registered tab should refresh.
-  const otherGuest = { ...tab };
-  tabs.push(otherGuest);
-  await show('<button>Preferences</button>');
-  assert.equal(tabs.length, 2);
+  assert.match((await show('<button>Preferences</button>')).content[0].text, /Updated the mock preview in shared tab 0/);
+  assert.equal(tabs.length, 1);
   assert.equal(tab.reloads, 1);
-  assert.match(tab.url, /[?]revision=[^#]+#settings=open$/);
-  const revisedUrl = tab.url;
+  assert.match(tab.url, /\/mock\?revision=[^#]+#settings=open$/);
+
+  // A tab that is no longer shared is shared again, not duplicated.
+  service.revokeTabs();
+  assert.deepEqual(JSON.parse((await show.call('use_tab', { action: 'list' })).content[0].text), []);
   await show('<button>Profile</button>');
-  assert.equal(tabs.length, 2);
+  assert.equal(tabs.length, 1);
   assert.equal(tab.reloads, 2);
-  assert.equal(otherGuest.reloads, 0);
-  assert.notEqual(tab.url, revisedUrl);
-  assert.equal(await serve(tab.url).text(), '<button>Profile</button>');
+  assert.equal(JSON.parse((await show.call('use_tab', { action: 'list' })).content[0].text).length, 1);
 
-  service.dispose();
-  assert.equal(serve(tab.url).status, 404);
-});
-
-test('keeps chats independent and rejects writes after removal', async () => {
-  const { service, tabs, removed, connect, serve } = setup();
-  const showFirst = connect('first');
-  const showSecond = connect('second');
-  assert.equal((await showFirst('')).isError, true);
-  await showFirst('<p>First</p>');
-  await showSecond('<p>Second</p>');
-  assert.notEqual(tabs[0].url, tabs[1].url);
-  service.remove('first');
-  assert.deepEqual(removed, ['browser-first']);
-  assert.equal((await showFirst('<p>Old chat</p>')).isError, true);
-  assert.equal(serve(tabs[0].url).status, 404);
-  assert.equal(await serve(tabs[1].url).text(), '<p>Second</p>');
+  // A reset forgets the page, so the next agent starts without one.
+  service.reset();
+  assert.equal(service.mock.html, undefined);
+  assert.deepEqual(JSON.parse((await show.call('use_tab', { action: 'list' })).content[0].text), []);
 });
 
 test('picker keeps an outline after choosing, supports reselection, and clears on Escape', async () => {
@@ -155,83 +148,7 @@ test('picker keeps an outline after choosing, supports reselection, and clears o
   }
 });
 
-test('shared browser actions follow HTTP(S) navigation in the same tab and stop at non-web pages', async () => {
-  const { EventEmitter } = require('node:events');
-  const { JSDOM } = require('jsdom');
-  const dom = new JSDOM('<button id="details">Details</button><input id="search"><textarea id="notes" readonly></textarea>', {
-    url: 'https://example.test/', runScripts: 'outside-only'
-  });
-  const { window } = dom;
-  window.CSS = { escape: value => value };
-  const button = window.document.querySelector('button');
-  for (const el of window.document.querySelectorAll('button,input,textarea')) {
-    el.getClientRects = () => [{}];
-    el.scrollIntoView = () => {};
-  }
-  const input = window.document.querySelector('#search');
-  let received;
-  input.addEventListener('input', event => { received = event.target.value; });
-  let clicks = 0, scroll = 0;
-  window.scrollBy = (_x, y) => { scroll += y; };
-  button.onclick = () => { clicks++; };
-
-  const guest = Object.assign(new EventEmitter(), {
-    id: 3,
-    getType: () => 'webview',
-    getURL: () => window.location.href,
-    async loadURL(url) {
-      this.emit('did-start-navigation', { isMainFrame: true, url });
-      dom.reconfigure({ url });
-      this.emit('did-navigate');
-    },
-    isLoadingMainFrame: () => false,
-    isDestroyed: () => false,
-    executeJavaScriptInIsolatedWorld: async (_id, scripts) => window.eval(scripts[0].code)
-  });
-  const statuses = [];
-  const SharedBrowser = loadSharedBrowser(() => guest);
-  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) });
-
-  try {
-    await assert.rejects(shared.act('one', { action: 'inspect' }), /No web tab/);
-    shared.share('one', guest.id);
-    assert.deepEqual(Array.from((await shared.act('one', { action: 'inspect' })).elements, element => element.selector), ['#details', '#search', '#notes']);
-    await assert.rejects(shared.act('two', { action: 'click', selector: '#details' }), /No web tab/);
-    await shared.act('one', { action: 'click', selector: '#details' });
-    assert.equal(clicks, 1);
-    await shared.act('one', { action: 'scroll', pixels: 200 });
-    assert.equal(scroll, 200);
-    await shared.act('one', { action: 'type', selector: '#search', text: 'hello' });
-    assert.equal(received, 'hello');
-    await shared.act('one', { action: 'type', selector: '#search', text: '' });
-    assert.equal(received, '');
-    await assert.rejects(shared.act('one', { action: 'type', selector: '#notes', text: 'hello' }), /not an editable/);
-    guest.emit('did-start-navigation', { isMainFrame: true, url: 'https://example.test/details' });
-    dom.reconfigure({ url: 'https://example.test/details' });
-    guest.emit('did-navigate');
-    assert.equal((await shared.act('one', { action: 'inspect' })).url, 'https://example.test/details');
-    guest.emit('did-start-navigation', { isMainFrame: true, url: 'https://other.test/' });
-    dom.reconfigure({ url: 'https://other.test/' });
-    guest.emit('did-navigate');
-    assert.equal((await shared.act('one', { action: 'inspect' })).url, 'https://other.test/');
-    for (const url of ['/relative', 'file:///tmp/example', 'https://']) {
-      await assert.rejects(shared.act('one', { action: 'navigate', url }), /absolute HTTP or HTTPS/);
-    }
-    assert.match(await shared.act('one', { action: 'navigate', url: 'https://example.test/direct' }), /example\.test\/direct/);
-    assert.equal((await shared.act('one', { action: 'inspect' })).url, 'https://example.test/direct');
-    guest.emit('did-start-navigation', { isMainFrame: true, url: 'file:///tmp/example' });
-    await assert.rejects(shared.act('one', { action: 'inspect' }), /No web tab/);
-    assert.deepEqual(statuses.map(status => status.slice(1)), [[3, true], [3, false]]);
-    shared.share('one', guest.id);
-    shared.revoke('one', guest.id);
-    await assert.rejects(shared.act('one', { action: 'click', selector: '#details' }), /No web tab/);
-    assert.equal(clicks, 1);
-  } finally {
-    window.close();
-  }
-});
-
-test('shares several tabs per session and targets them by tab id', async () => {
+test('shares several tabs and targets them by tab id', async () => {
   const { EventEmitter } = require('node:events');
   const urls = new Map([[1, 'https://example.test/already-open'], [2, 'https://example.test/new'], [3, 'https://example.test/other']]);
   const guests = new Map(Array.from(urls.keys(), id => [id, Object.assign(new EventEmitter(), {
@@ -245,60 +162,55 @@ test('shares several tabs per session and targets them by tab id', async () => {
   })]));
   const SharedBrowser = loadSharedBrowser(id => guests.get(id));
   const requests = [], statuses = [], revoked = [];
-  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) }, (endpoint, id) => revoked.push([endpoint, id]), async (url, id) => {
+  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) }, guest => revoked.push(guest.id), async (url, id) => {
     requests.push({ url, id });
   });
+  const list = () => shared.guests().map(guest => guest.id);
 
   // With nothing shared, navigate opens a new tab. Two opens can run at the same time.
-  const first = shared.act('first', { action: 'navigate', url: 'https://example.test/new' });
-  const second = shared.act('first', { action: 'navigate', url: 'https://example.test/other', new_tab: true });
+  const first = shared.navigate('https://example.test/new');
+  const second = shared.navigate('https://example.test/other', undefined, true);
   shared.attach('unrelated-request', 1);
-  assert.equal(shared.guest('first'), undefined);
+  assert.equal(shared.guest(), undefined);
   shared.attach(requests[0].id, 2);
   assert.match(await first, /in new shared tab 2/);
   shared.attach(requests[1].id, 3);
   assert.match(await second, /in new shared tab 3/);
-  assert.deepEqual(await shared.act('first', { action: 'list' }), [
-    { tab: 2, url: 'https://example.test/new', title: 'Tab 2' },
-    { tab: 3, url: 'https://example.test/other', title: 'Tab 3' },
-  ]);
+  assert.deepEqual(list(), [2, 3]);
 
   // Several shared tabs require a tab id.
-  await assert.rejects(shared.act('first', { action: 'navigate', url: 'https://example.test/next' }), /Several tabs/);
-  await assert.rejects(shared.act('first', { action: 'inspect', tab: 1 }), /Tab 1 is not shared/);
-  assert.match(await shared.act('first', { action: 'navigate', url: 'https://example.test/next', tab: 3 }), /shared tab 3/);
+  await assert.rejects(shared.navigate('https://example.test/next'), /Several tabs/);
+  await assert.rejects(shared.navigate('https://example.test/next', 1), /Tab 1 is not shared/);
+  for (const url of ['/relative', 'file:///tmp/example', 'https://']) {
+    await assert.rejects(shared.navigate(url, 3), /absolute HTTP or HTTPS/);
+  }
+  assert.match(await shared.navigate('https://example.test/next', 3), /shared tab 3/);
   assert.equal(urls.get(3), 'https://example.test/next');
   assert.equal(urls.get(2), 'https://example.test/new');
 
   // A manually shared tab is added without unsharing the others.
-  shared.share('first', 1);
-  assert.deepEqual((await shared.act('first', { action: 'list' })).map(tab => tab.tab), [2, 3, 1]);
-  assert.equal(shared.guest('first', 1), guests.get(1));
+  shared.share(1);
+  assert.deepEqual(list(), [2, 3, 1]);
+  assert.equal(shared.guest(1), guests.get(1));
 
-  // Sharing a tab with another session moves it there.
-  shared.share('second', 1);
-  assert.deepEqual((await shared.act('first', { action: 'list' })).map(tab => tab.tab), [2, 3]);
-  assert.equal(shared.guest('second'), guests.get(1));
+  // Revoking one tab keeps the rest; revoking without an id clears all of them.
+  shared.revoke(2);
+  assert.deepEqual(list(), [3, 1]);
+  shared.revoke();
+  assert.deepEqual(list(), []);
+  assert.deepEqual(revoked, [2, 3, 1]);
+  assert.deepEqual(statuses.map(status => status.slice(1)), [[2, true], [3, true], [1, true], [2, false], [3, false], [1, false]]);
 
-  // Revoking one tab keeps the rest; revoking the session clears all of them.
-  shared.revoke('first', 2);
-  assert.equal(shared.guest('first'), guests.get(3));
-  shared.revoke('first');
-  assert.deepEqual(await shared.act('first', { action: 'list' }), []);
-  assert.deepEqual(revoked, [['first', 1], ['first', 2], ['first', 3]]);
-  assert.deepEqual(statuses.map(status => status.slice(1)),
-    [[2, true], [3, true], [1, true], [1, false], [1, true], [2, false], [3, false]]);
-
-  const canceled = shared.act('third', { action: 'navigate', url: 'https://example.test/canceled' });
-  shared.revoke('third');
+  const canceled = shared.navigate('https://example.test/canceled');
+  shared.revoke();
   shared.attach(requests[2].id, 2);
   await assert.rejects(canceled, /did not finish opening/);
-  assert.equal(shared.guest('third'), undefined);
+  assert.equal(shared.guest(), undefined);
 });
 
-test('waits for a newly opened mock tab to attach without polling', async () => {
+test('show_mock waits for a newly opened tab to attach without polling', async () => {
   const { tabs, connect } = setup({ attachLater: true });
-  const show = connect('first');
+  const show = connect();
   const result = await show('<p>Ready</p>');
   assert.equal(result.isError, undefined);
   assert.equal(tabs.length, 1);
@@ -324,21 +236,34 @@ test('picker selects the nearest HTML element instead of SVG children', async ()
   }
 });
 
-test('a tab can be unshared regardless of which session it is shared with', () => {
+test('a shared tab is revoked when it leaves HTTP(S), and sharing it again is a no-op', () => {
   const { EventEmitter } = require('node:events');
   const guest = Object.assign(new EventEmitter(), {
-    id: 5, getType: () => 'webview', getURL: () => 'https://example.test/', isDestroyed: () => false,
+    id: 5, getType: () => 'webview', url: 'https://example.test/', getURL() { return this.url; }, isDestroyed: () => false,
   });
   const statuses = [];
-  const SharedBrowser = loadSharedBrowser(() => guest);
-  const shared = new SharedBrowser({ send: (...args) => statuses.push(args) });
+  const shared = new (loadSharedBrowser(() => guest))({ send: (...args) => statuses.push(args) });
 
-  shared.share('inactive', guest.id);
-  shared.share('active', guest.id);
-  assert.equal(shared.guest('inactive'), undefined);
-  assert.equal(shared.guest('active'), guest);
-  shared.revokeGuest(guest.id);
-  assert.equal(shared.guest('active'), undefined);
+  shared.share(guest.id);
+  shared.share(guest.id);
+  assert.equal(shared.guest(), guest);
+  assert.equal(shared.has(guest.id), true);
+
+  // Moving within the web keeps the tab shared.
+  guest.emit('did-start-navigation', { isMainFrame: true, url: 'https://other.test/' });
+  guest.url = 'https://other.test/';
+  guest.emit('did-navigate');
+  assert.equal(shared.guest(), guest);
+
+  // Subframes do not matter, but leaving the web in the main frame ends the share.
+  guest.emit('did-start-navigation', { isMainFrame: false, url: 'file:///tmp/frame' });
+  assert.equal(shared.guest(), guest);
+  guest.emit('did-start-navigation', { isMainFrame: true, url: 'file:///tmp/example' });
+  assert.equal(shared.guest(), undefined);
+  assert.equal(shared.has(guest.id), false);
+
+  shared.share(guest.id);
+  shared.revoke(guest.id);
   assert.deepEqual(statuses.map(status => status.slice(1)), [[5, true], [5, false], [5, true], [5, false]]);
 });
 
@@ -355,14 +280,106 @@ test('starting a picker on a tab that is still picking waits for the previous on
   const { pickElement, stopPicking, isPicking } = loadModule('main/mcp/picker.ts', { electron: {} });
   const order = [];
 
-  const first = pickElement('one', guest, () => true, () => {}).then(() => order.push('first'));
-  const second = pickElement('two', guest, () => true, () => {}).then(() => order.push('second'));
+  const first = pickElement(guest, () => true, () => {}).then(() => order.push('first'));
+  const second = pickElement(guest, () => true, () => {}).then(() => order.push('second'));
   await first;
   assert.deepEqual(order, ['first']);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(isPicking(guest), true);
-  stopPicking('two', guest.id);
+  stopPicking(guest);
   await second;
   assert.deepEqual(order, ['first', 'second']);
   assert.equal(isPicking(guest), false);
+});
+
+test('the workspace browser server serves the tools over MCP to the gateway only', async () => {
+  const { Client, StreamableHTTPClientTransport } = require('@modelcontextprotocol/client');
+  const overrides = {
+    electron: { webContents: { fromId: () => undefined } },
+    'main/mcp/picker': { pickElement: async () => {}, stopPicking: () => {}, isPicking: () => false },
+  };
+  const { BrowserServer } = loadModule('main/mcp/browserserver.ts', overrides);
+  const server = new BrowserServer({ emit: { send() {} }, showBrowserTab: async () => {} });
+
+  try {
+    const url = await server.url();
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/mcp\/browser$/);
+    assert.equal(await server.url(), url);
+
+    const client = new Client({ name: 'test', version: '1.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+    const tools = (await client.listTools()).tools.map(tool => tool.name);
+    assert.deepEqual(tools.sort(), ['downloads', 'handle_dialog', 'read_logs', 'screenshot', 'show_mock', 'use_tab']);
+    const listed = await client.callTool({ name: 'use_tab', arguments: { action: 'list' } });
+    assert.equal(listed.isError, undefined);
+    await client.close();
+
+    // The mock preview is served only once there is one, sandboxed and offline.
+    const origin = url.replace('/mcp/browser', '');
+    assert.equal((await fetch(`${origin}/mock`)).status, 404);
+    server.tools.mock.html = '<p>Mock</p>';
+    const mock = await fetch(`${origin}/mock?revision=1`);
+    assert.equal(mock.status, 200);
+    assert.equal(await mock.text(), '<p>Mock</p>');
+    assert.match(mock.headers.get('content-security-policy'), /^sandbox allow-scripts; default-src 'none'/);
+    assert.equal((await fetch(`${origin}/mock`, { method: 'POST' })).status, 404);
+
+    // Pages in a browser send Origin, and cannot reach the tools.
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    assert.equal((await fetch(url, { method: 'POST', headers: { ...headers, Origin: 'https://example.com' }, body })).status, 404);
+    assert.equal((await fetch(url.replace('/browser', '/other'), { method: 'POST', headers, body })).status, 404);
+  } finally {
+    server.dispose();
+  }
+});
+
+test('MCP servers pass the browser tools through the gateway only when asked for', async () => {
+  const { Mcp } = loadModule('main/mcp/index.ts', {
+    'main/setting': { Setting: { get: () => ({ acp: { mcpServers: [{ enabled: true, server: { name: 'stdio', command: 'tool', args: [], env: [] } }] } }) } },
+    'main/envim/workspace': {},
+    'main/mcp/browsertools': { BROWSER_TOOLS_SERVER_NAME: 'envim-browser' },
+  });
+  const synced = [];
+  let started = 0;
+  const workspace = {
+    browser: { url: async () => { started++; return 'http://127.0.0.1:1/mcp/browser'; } },
+    mcpGateway: {
+      upstreams: { sync: async servers => { synced.push(servers); return new Map(servers.map((server, i) => [server, { id: `up${i}` }])); } },
+      app: { onUpstreamsChanged() {} },
+      start: async () => 'http://127.0.0.1:2',
+    },
+  };
+
+  assert.deepEqual(await Mcp.servers(workspace, true), [
+    { name: 'stdio', command: 'tool', args: [], env: [] },
+    { type: 'http', name: 'envim-browser', url: 'http://127.0.0.1:2/mcp/up0', headers: [] },
+  ]);
+  assert.deepEqual(synced[0].map(server => server.url), ['http://127.0.0.1:1/mcp/browser']);
+
+  assert.deepEqual(await Mcp.servers(workspace), [{ name: 'stdio', command: 'tool', args: [], env: [] }]);
+  assert.equal(started, 1);
+});
+
+test('tab logs are cleared only when the tab moves to another site, even if its first navigation was not seen', () => {
+  const { EventEmitter } = require('node:events');
+  const { TabLogs } = loadModule('main/mcp/tablog.ts', {});
+  const guest = Object.assign(new EventEmitter(), {
+    id: 41, getURL: () => '', session: { webRequest: { onErrorOccurred() {}, onCompleted() {} } },
+  });
+  const read = () => TabLogs.read(41, { level: 'debug' }).entries.map(entry => entry.message);
+  const start = (url, isSameDocument = false) => guest.emit('did-start-navigation', { url, isMainFrame: true, isSameDocument });
+  TabLogs.track(guest);
+
+  // The page loaded before the tab was tracked: only its commit is seen.
+  guest.emit('console-message', { message: 'first error', level: 'error', sourceId: '', lineNumber: 1 });
+  guest.emit('did-navigate', {}, 'https://a.test/', 200);
+  start('https://a.test/next');
+  guest.emit('did-navigate', {}, 'https://a.test/next', 200);
+  assert.deepEqual(read(), ['first error', 'Navigated to https://a.test/ (HTTP 200)', 'Navigated to https://a.test/next (HTTP 200)']);
+
+  start('https://a.test/next#hash', true);
+  assert.equal(read().length, 3);
+  start('https://b.test/');
+  assert.deepEqual(read(), []);
 });

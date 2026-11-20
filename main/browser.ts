@@ -1,8 +1,6 @@
 import * as Electron from "electron";
 import { lookup } from "dns";
 
-import { MOCK_PREVIEW_ORIGIN_PREFIX } from "common/constant";
-
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
 import { Dialogs } from "main/mcp/dialogs";
@@ -18,11 +16,6 @@ export class Browser {
     TabLogs.track(webContents);
     Dialogs.track(webContents);
     webContents.setWindowOpenHandler(this.onOpenWindow);
-    webContents.on("will-frame-navigate", event => {
-      if (this.isMockPreview() && event.url.split("#")[0] !== webContents.getURL().split("#")[0]) {
-        event.preventDefault();
-      }
-    });
     webContents.on("devtools-open-url", this.onOpenUrl);
     webContents.on("login", this.onLogin);
     webContents.on("certificate-error", this.onCertError);
@@ -39,13 +32,7 @@ export class Browser {
     return Electron.dialog.showMessageBoxSync({ message, buttons: ["Yes", "No"], defaultId: 0 }) === 0;
   }
 
-  private isMockPreview() {
-    return this.webContents.getURL().startsWith(MOCK_PREVIEW_ORIGIN_PREFIX);
-  }
-
   private onOpenWindow = (details: Electron.HandlerDetails) => {
-    if (this.isMockPreview()) return { action: "deny" as const };
-
     const action: "allow" | "deny" = !details.url.match(/^https?\/\//) || details.postBody ? "allow" : "deny";
 
     action === "deny" && Emit.share("browser:open", details.url);

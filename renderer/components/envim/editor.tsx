@@ -319,7 +319,7 @@ export function EditorComponent(props: Props) {
             { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
             { props.type === "external" && !state.hidden && (
               <>
-                <IconComponent color="gray-fg" font={uiIcons.placing} active={state.dragging} onClick={dragExtWIndow} />
+                <IconComponent color="gray-fg" font="󰮐" active={state.dragging} onClick={dragExtWIndow} />
                 { renderIconMenu("", [
                   [
                     { font: "󱂪", onClick: e => runCommand(e, "wincmd H") },

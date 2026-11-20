@@ -9,7 +9,6 @@ const filename = path.resolve(__dirname, '../main/envim/acp.ts');
 const loaded = new Module(filename);
 loaded.require = name => {
   if (name === 'main/mcp') return { Mcp: { servers: async () => [] } };
-  if (name === 'common/constant') return { MOCK_PREVIEW_ORIGIN_PREFIX: 'envim-mock://' };
   return require(name);
 };
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -30,7 +29,8 @@ function setup() {
     share: async (name, fn, args) => name === 'neovim:function' ? invoke(fn, args) : undefined,
     send: (...args) => sent.push(args), update: (...args) => sent.push(args)
   };
-  const acp = new Acp({ emit, nvim: { call: invoke }, cwd: '/workspace' });
+  const browser = { tools: { reset() {}, revokeTabs() {}, stopPicking() {} } };
+  const acp = new Acp({ emit, nvim: { call: invoke }, cwd: '/workspace', browser });
   let request = async method => method === sdk.methods.agent.initialize ? structuredClone(initialize) : {};
   let closes = 0, connects = 0;
   const makeConnection = () => ({ close: () => { closes++; }, agent: {

@@ -35,7 +35,7 @@ export const readLogsTool = {
   },
 };
 
-// Site key for clearing logs across sites. URL.origin is "null" for the mock preview scheme, so use protocol and host.
+// Site key for clearing logs across sites.
 function siteOf(url: string): string | undefined {
   try {
     const { protocol, host } = new URL(url);
@@ -67,6 +67,8 @@ export class TabLogs {
       log.site = site;
     });
     guest.on("did-navigate", (_, url, status) => {
+      // The first navigation can start before the tab is tracked, so its site is known only once it commits.
+      log.site = siteOf(url);
       TabLogs.add(id, { type: "navigation", level: "info", message: `Navigated to ${url}${status > 0 ? ` (HTTP ${status})` : ""}` });
     });
     guest.once("destroyed", () => TabLogs.logs.delete(id));

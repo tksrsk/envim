@@ -17,69 +17,59 @@ interface SharedTab {
   detach: () => void;
 }
 
-interface OpeningTab {
-  endpoint: string;
-  ready: (guestId?: number) => void;
-}
-
 export class SharedBrowser {
-  // Shared tabs per endpoint, keyed by guest id. A guest is shared with at most one endpoint.
-  private readonly tabs = new Map<string, Map<number, SharedTab>>();
+  private readonly tabs = new Map<number, SharedTab>();
   // Tabs being opened by navigate, keyed by request id.
-  private readonly opening = new Map<string, OpeningTab>();
+  private readonly opening = new Map<string, (guestId?: number) => void>();
 
-  constructor(private readonly emit: WorkspaceEmit, private readonly onRevoke?: (endpoint: string, guestId: number) => void,
+  constructor(private readonly emit: WorkspaceEmit, private readonly onRevoke?: (guest: Electron.WebContents) => void,
     private readonly openTab?: (url: string, requestId: string) => Promise<void>,
-    private readonly onShare?: (endpoint: string, guest: Electron.WebContents) => void) {}
+    private readonly onShare?: (guest: Electron.WebContents) => void) {}
 
   attach(requestId: string, guestId: number): void {
-    this.opening.get(requestId)?.ready(guestId);
+    this.opening.get(requestId)?.(guestId);
   }
 
-  private async open(endpoint: string, url: string): Promise<SharedTab> {
+  private async open(url: string): Promise<SharedTab> {
     if (!this.openTab) throw new Error("The browser is unavailable.");
 
     const id = randomUUID();
     let ready!: (guestId?: number) => void;
     const attached = new Promise<number | undefined>(resolve => { ready = resolve; });
-    const request = { endpoint, ready };
-    this.opening.set(id, request);
+    this.opening.set(id, ready);
     const timer = setTimeout(ready, 15000);
     try {
       const guestId = await Promise.race([
         attached,
         this.openTab(url, id).then(() => attached),
       ]);
-      if (guestId === undefined || this.opening.get(id) !== request) {
+      if (guestId === undefined || this.opening.get(id) !== ready) {
         throw new Error("The new browser tab did not finish opening for sharing.");
       }
 
       this.opening.delete(id);
-      this.share(endpoint, guestId);
-      return this.tabs.get(endpoint)!.get(guestId)!;
+      this.share(guestId);
+      return this.tabs.get(guestId)!;
     } finally {
       clearTimeout(timer);
-      if (this.opening.get(id) === request) this.opening.delete(id);
+      if (this.opening.get(id) === ready) this.opening.delete(id);
     }
   }
 
-  share(endpoint: string, guestId: number): string {
+  share(guestId: number): string {
     const guest = Electron.webContents.fromId(guestId);
     const origin = guest?.getType() === "webview" ? webOrigin(guest.getURL()) : undefined;
     if (!guest || !origin) throw new Error("Open an HTTP or HTTPS page before sharing its tab.");
-    if (this.tabs.get(endpoint)?.has(guestId)) return guest.getURL();
+    if (this.tabs.has(guestId)) return guest.getURL();
 
-    this.revokeGuest(guestId);
-    const close = () => this.revoke(endpoint, guestId);
+    const close = () => this.revoke(guestId);
     const navigate = (event: Electron.WebContentsDidStartNavigationEventParams) => {
       if (event.isMainFrame && !webOrigin(event.url)) close();
     };
     const navigated = () => {
       if (!webOrigin(guest.getURL())) close();
     };
-    const tabs = this.tabs.get(endpoint) ?? new Map<number, SharedTab>();
-    this.tabs.set(endpoint, tabs);
-    tabs.set(guestId, { id: guestId, guest, detach: () => {
+    this.tabs.set(guestId, { id: guestId, guest, detach: () => {
       guest.removeListener("destroyed", close);
       guest.removeListener("did-start-navigation", navigate);
       guest.removeListener("did-navigate", navigated);
@@ -87,68 +77,52 @@ export class SharedBrowser {
     guest.once("destroyed", close);
     guest.on("did-start-navigation", navigate);
     guest.on("did-navigate", navigated);
-    this.onShare?.(endpoint, guest);
+    this.onShare?.(guest);
     this.emit.send("browser:share:status", guestId, true);
     return guest.getURL();
   }
 
-  // Revokes one tab, or every tab and pending open of the endpoint when guestId is omitted.
-  revoke(endpoint: string, guestId?: number): void {
+  // Revokes one tab, or every tab and pending open when guestId is omitted.
+  revoke(guestId?: number): void {
     if (guestId === undefined) {
-      for (const [id, request] of [...this.opening]) {
-        if (request.endpoint !== endpoint) continue;
-
+      for (const [id, ready] of [...this.opening]) {
         this.opening.delete(id);
-        request.ready();
+        ready();
       }
     }
 
-    const tabs = this.tabs.get(endpoint);
-    for (const tab of [...(tabs?.values() ?? [])]) {
+    for (const tab of [...this.tabs.values()]) {
       if (guestId !== undefined && tab.id !== guestId) continue;
 
-      tabs!.delete(tab.id);
+      this.tabs.delete(tab.id);
       tab.detach();
-      this.onRevoke?.(endpoint, tab.id);
+      this.onRevoke?.(tab.guest);
       this.emit.send("browser:share:status", tab.id, false);
     }
-    if (tabs?.size === 0) this.tabs.delete(endpoint);
   }
 
-  // Revokes the tab from whichever session it is shared with, including inactive sessions.
-  revokeGuest(guestId: number): void {
-    for (const [endpoint, tabs] of [...this.tabs]) {
-      if (tabs.has(guestId)) this.revoke(endpoint, guestId);
-    }
+  has(guestId: number): boolean {
+    return this.tabs.has(guestId);
   }
 
-  // Returns the endpoint the guest is shared with.
-  endpointOf(guestId: number): string | undefined {
-    for (const [endpoint, tabs] of this.tabs) {
-      if (tabs.has(guestId)) return endpoint;
-    }
-    return undefined;
+  private liveTabs(): SharedTab[] {
+    return [...this.tabs.values()].filter(tab => !tab.guest.isDestroyed() && webOrigin(tab.guest.getURL()));
   }
 
-  private liveTabs(endpoint: string): SharedTab[] {
-    return [...(this.tabs.get(endpoint)?.values() ?? [])]
-      .filter(tab => !tab.guest.isDestroyed() && webOrigin(tab.guest.getURL()));
-  }
-
-  guests(endpoint: string): Electron.WebContents[] {
-    return this.liveTabs(endpoint).map(tab => tab.guest);
+  guests(): Electron.WebContents[] {
+    return this.liveTabs().map(tab => tab.guest);
   }
 
   // Returns the shared guest with the id, or the only shared guest when guestId is omitted.
-  guest(endpoint: string, guestId?: number): Electron.WebContents | undefined {
-    const tabs = this.liveTabs(endpoint);
+  guest(guestId?: number): Electron.WebContents | undefined {
+    const tabs = this.liveTabs();
     if (guestId === undefined) return tabs.length === 1 ? tabs[0].guest : undefined;
 
     return tabs.find(tab => tab.id === guestId)?.guest;
   }
 
-  private resolve(endpoint: string, tabId: number | undefined): SharedTab {
-    const tabs = this.liveTabs(endpoint);
+  private resolve(tabId: number | undefined): SharedTab {
+    const tabs = this.liveTabs();
     if (tabs.length === 0) throw new Error("No web tab is shared with this session. Use Share tab in the browser toolbar.");
     if (tabId === undefined) {
       if (tabs.length > 1) throw new Error("Several tabs are shared with this session. Pass tab with an id from use_tab list.");
@@ -160,27 +134,27 @@ export class SharedBrowser {
     return tab;
   }
 
-  private isShared(endpoint: string, tab: SharedTab): boolean {
-    return this.tabs.get(endpoint)?.get(tab.id) === tab && this.guest(endpoint, tab.id) === tab.guest;
+  private isShared(tab: SharedTab): boolean {
+    return this.tabs.get(tab.id) === tab && this.guest(tab.id) === tab.guest;
   }
 
   // Loads url in the shared tab, or opens and shares a new tab when newTab is true or nothing is shared yet.
-  async navigate(endpoint: string, url: unknown, tabId: number | undefined, newTab: unknown): Promise<string> {
+  async navigate(url: unknown, tabId: number | undefined, newTab: unknown): Promise<string> {
     const target = typeof url === "string" ? url.trim() : "";
     if (!/^https?:\/\//i.test(target) || !webOrigin(target)) {
       throw new Error("Provide an absolute HTTP or HTTPS URL.");
     }
 
     const destination = new URL(target).href;
-    if (newTab === true || (tabId === undefined && this.liveTabs(endpoint).length === 0)) {
-      const opened = await this.open(endpoint, destination);
+    if (newTab === true || (tabId === undefined && this.liveTabs().length === 0)) {
+      const opened = await this.open(destination);
       return `Opened ${opened.guest.getURL()} in new shared tab ${opened.id}.`;
     }
 
-    const tab = this.resolve(endpoint, tabId);
+    const tab = this.resolve(tabId);
     await waitForLoadOrThrow(tab.guest);
     await tab.guest.loadURL(destination);
-    if (!this.isShared(endpoint, tab)) throw new Error(`Tab ${tab.id} is no longer shared.`);
+    if (!this.isShared(tab)) throw new Error(`Tab ${tab.id} is no longer shared.`);
     return `Opened ${tab.guest.getURL()} in shared tab ${tab.id}.`;
   }
 }

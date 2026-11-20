@@ -669,7 +669,7 @@ export function AcpComponent() {
             </CollapseComponent>
           )}
           <FlexComponent>
-            {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || uiIcons.acp} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
+            {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
             {checkAcpStatus("connected") && <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpAgentStop} />}
             {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
             {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => switchMode("prompt")} />}

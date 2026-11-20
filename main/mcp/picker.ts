@@ -11,7 +11,6 @@ type PickerWorld = typeof globalThis & {
 };
 
 interface ActivePicker {
-  endpoint: string;
   abort: () => void;
   done: Promise<void>;
 }
@@ -22,15 +21,13 @@ export function isPicking(guest: Electron.WebContents): boolean {
   return active.has(guest);
 }
 
-export function stopPicking(endpoint: string, guestId?: number): void {
-  for (const [guest, picker] of active) {
-    if (picker.endpoint === endpoint && (guestId === undefined || guest.id === guestId)) picker.abort();
-  }
+export function stopPicking(guest: Electron.WebContents): void {
+  active.get(guest)?.abort();
 }
 
 // Runs the in-page picker until it is stopped. A picker already running in the same guest is stopped first.
 export async function pickElement(
-  endpoint: string, guest: Electron.WebContents, isValid: () => boolean, onSelection: (selection: Selection) => void,
+  guest: Electron.WebContents, isValid: () => boolean, onSelection: (selection: Selection) => void,
 ): Promise<void> {
   for (let previous = active.get(guest); previous; previous = active.get(guest)) {
     previous.abort();
@@ -47,7 +44,7 @@ export async function pickElement(
   const picker = `(globalThis.envimElementPicker?.key === ${key} ? globalThis.envimElementPicker : null)`;
   let code = `(${elementPicker.toString()})(${pageSelector.toString()}, ${key})`;
   let finish!: () => void;
-  active.set(guest, { endpoint, abort, done: new Promise(resolve => { finish = resolve; }) });
+  active.set(guest, { abort, done: new Promise(resolve => { finish = resolve; }) });
   guest.once("destroyed", abort);
   guest.on("did-start-navigation", navigate);
   guest.focus();

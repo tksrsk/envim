@@ -1,7 +1,6 @@
 import * as Electron from "electron";
 import React from "react";
 
-import { MOCK_PREVIEW_ORIGIN_PREFIX, MOCK_PREVIEW_SCHEME } from "common/constant";
 import { IAcpStatus, ISetting } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
@@ -24,7 +23,6 @@ interface Props {
 }
 
 interface States {
-  url: string;
   input: string;
   search: string;
   title: string;
@@ -56,44 +54,36 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function WebviewComponent(props: Props) {
   const { emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ url: "", input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
+  const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
   const container: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
   const webview: React.RefObject<Electron.WebviewTag | null> = React.useRef<Electron.WebviewTag>(null);
   const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const search: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
-  // Holds the shared guest id, not a flag: a re-created guest gets a new id, so the revoke for the old id must still clear it.
-  const [sharedId, setSharedId] = React.useState<number>();
-  const shared = sharedId !== undefined;
+  const [shared, setShared] = React.useState(false);
+  const [selecting, setSelecting] = React.useState(false);
   const [acpStatus, setAcpStatus] = React.useState<IAcpStatus>({ status: "disconnected" });
-  const [pickerId, setPickerId] = React.useState<number>();
   const { active } = useFocus();
   const mode = getMode(active);
-  // Do not call WebviewTag methods while rendering: they throw until the guest is attached and dom-ready.
-  const currentUrl = state.url || getUrl(props.src);
+  const currentUrl = webview.current?.getURL() ?? getUrl(props.src);
   const blank = currentUrl === "about:blank";
-  const mock = currentUrl.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX);
   const webPage = /^https?:\/\//.test(currentUrl);
   const agentIcon = acpStatus.status === "disconnected" ? undefined : acpStatus.agent?.icon;
   const acpReady = (acpStatus.status === "connected" || acpStatus.status === "processing") &&
     !!acpStatus.sessionId && !!acpStatus.initialize?.agentCapabilities?.mcpCapabilities?.http;
-  const selecting = pickerId !== undefined;
-  const canSelect = acpReady && (mock || (webPage && shared)) && !state.loading;
-  const canToggleSelection = selecting || canSelect;
+  const canSelect = selecting || (acpReady && shared && !state.loading);
   const canToggleSharing = shared || !state.loading;
-  // A mock preview always belongs to its ACP session, so it shows the connection state without a sharing toggle.
-  const connected = shared || (mock && acpReady);
   const shareIconStyle = {
-    opacity: mock || (webPage && canToggleSharing) ? 1 : 0.5,
+    opacity: webPage && canToggleSharing ? 1 : 0.5,
     ...(agentIcon && {
-      "--color-fg": connected ? "var(--color-purple)" : "var(--color-gray)",
+      "--color-fg": shared ? "var(--color-purple)" : "var(--color-gray)",
       height: "calc(1em + 8px)",
     }),
   } as React.CSSProperties;
   const icon = state.searchengines.some(({ uri }) => uri === state.input)
     ? { color: "blue-fg", font: "" }
     : { color: "gray-fg", font: "" };
-  const color = pickerId !== undefined ? "purple" : { command: "green", visual: "purple", browser: "blue" }[mode] || "default";
+  const color = selecting ? "purple" : { command: "green", visual: "purple", browser: "blue" }[mode] || "default";
 
   React.useEffect(() => {
     Emit.on("browser:action", onBrowserAction);
@@ -106,40 +96,31 @@ export function WebviewComponent(props: Props) {
   }, []);
 
   React.useEffect(() => {
-    setSharedId(undefined);
-    setPickerId(undefined);
-    setState(state => ({ ...state, url: "" }));
     if (container.current) {
-      const guest = document.createElement("webview") as Electron.WebviewTag;
+      const webview = document.createElement("webview") as Electron.WebviewTag;
 
-      guest.setAttribute("allowpopups", "on");
-      guest.addEventListener("dom-ready", onReady);
-      if (props.requestId) guest.addEventListener("did-finish-load", onShareReady);
-      guest.src = getUrl(props.src);
-      container.current.appendChild(guest);
+      container.current.appendChild(webview);
+      webview.setAttribute("allowpopups", "on");
+      webview.addEventListener("dom-ready", onReady);
+      webview.src = getUrl(props.src);
 
       return () => {
-        guest.removeEventListener("dom-ready", onReady);
-        guest.removeEventListener("did-finish-load", onShareReady);
-        guest.removeEventListener("close", onClose);
-        guest.removeEventListener("did-start-loading", onLoad);
-        guest.removeEventListener("did-stop-loading", onLoad);
-        guest.removeEventListener("did-finish-load", onLoad);
-        guest.removeEventListener("did-navigate", onLoad);
-        guest.removeEventListener("did-navigate-in-page", onLoad);
-        guest.removeEventListener("page-title-updated", onLoad);
-        guest.removeEventListener("page-favicon-updated", onFavicon);
-        guest.remove();
-        if (webview.current === guest) webview.current = null;
+        webview.removeEventListener("did-start-loading", onLoad);
+        webview.removeEventListener("did-stop-loading", onLoad);
+        webview.removeEventListener("did-finish-load", onLoad);
+        webview.removeEventListener("did-navigate", onLoad);
+        webview.removeEventListener("did-navigate-in-page", onLoad);
+        webview.removeEventListener("page-title-updated", onLoad);
+        webview.removeEventListener("page-favicon-updated", onFavicon);
+        webview.remove();
       };
     }
 
     return;
-  }, [props.src, props.requestId]);
+  }, []);
 
   React.useEffect(() => {
-    const id = guestId();
-    id !== undefined && Emit.send(`browser:mode:${id}`, mode);
+    webview.current && Emit.send(`browser:mode:${webview.current.getWebContentsId()}`, mode);
     ["input", "search"].includes(mode) && (document.activeElement as HTMLInputElement).select();
     ["command", "visual"].includes(mode) || setState(state => state.selection ? { ...state, selection: undefined } : state);
   }, [mode]);
@@ -151,61 +132,37 @@ export function WebviewComponent(props: Props) {
       setAcpStatus(status);
     }
 
-    function finish(id: number) {
-      setPickerId(current => current === id ? undefined : current);
-    }
-
     function onShare(id: number, value: boolean) {
-      if (value) {
-        guestId() === id && setSharedId(id);
-      } else {
-        setSharedId(current => current === id ? undefined : current);
-      }
+      webview.current?.getWebContentsId() === id && setShared(value);
     }
 
-    emit.on("browser:pick:finished", finish);
-    emit.on("browser:share:status", onShare);
+    function onPickFinished(id: number) {
+      webview.current?.getWebContentsId() === id && setSelecting(false);
+    }
+
     emit.on("acp:status:changed", onAcpStatus);
+    emit.on("browser:share:status", onShare);
+    emit.on("browser:pick:finished", onPickFinished);
     void emit.send<IAcpStatus>("acp:status:get").then(status => {
       if (status && waitingForStatus) onAcpStatus(status);
     });
     return () => {
       waitingForStatus = false;
-      emit.off("browser:pick:finished", finish);
-      emit.off("browser:share:status", onShare);
       emit.off("acp:status:changed", onAcpStatus);
+      emit.off("browser:share:status", onShare);
+      emit.off("browser:pick:finished", onPickFinished);
     };
   }, [emit]);
 
-  // WebviewTag methods throw while the guest is detached or before dom-ready, so read them through these helpers.
-  function guestId(): number | undefined {
-    try {
-      return webview.current?.getWebContentsId();
-    } catch {
-      return undefined;
-    }
-  }
-
-  function guestUrl(): string | undefined {
-    try {
-      return webview.current?.getURL();
-    } catch {
-      return undefined;
-    }
-  }
-
   function toggleSharing() {
-    const id = guestId();
-    if (id !== undefined) void emit.send("browser:share:toggle", id, !shared);
+    webview.current && emit.send("browser:share:toggle", webview.current.getWebContentsId(), !shared);
   }
 
   function selectElement() {
-    const id = guestId();
-    if (id === undefined) return;
+    if (!webview.current) return;
 
-    const enable = pickerId === undefined;
-    if (enable) setPickerId(id);
-    void emit.send("browser:pick", id, enable);
+    setSelecting(!selecting);
+    emit.send("browser:pick", webview.current.getWebContentsId(), !selecting);
   }
 
   function getMode(element: Element | null) {
@@ -219,19 +176,9 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onShareReady(event: Event) {
-    const guest = event.currentTarget as Electron.WebviewTag;
-    guest.removeEventListener("did-finish-load", onShareReady);
-    try {
-      if (props.requestId) void emit.send("browser:share:ready", props.requestId, guest.getWebContentsId());
-    } catch {
-      // The guest was detached before it finished loading.
-    }
-  }
-
-  function onReady(event: Event) {
-    if (event.currentTarget) {
-      webview.current = event.currentTarget as Electron.WebviewTag;
+  function onReady () {
+    if (container.current) {
+      webview.current = container.current.querySelector("webview") as Electron.WebviewTag;
       webview.current.removeEventListener("dom-ready", onReady);
       webview.current.addEventListener("did-start-loading", onLoad);
       webview.current.addEventListener("did-stop-loading", onLoad);
@@ -241,11 +188,7 @@ export function WebviewComponent(props: Props) {
       webview.current.addEventListener("page-title-updated", onLoad);
       webview.current.addEventListener("page-favicon-updated", onFavicon);
       webview.current.addEventListener("close", onClose);
-      onLoad();
-      if (props.src.startsWith(MOCK_PREVIEW_ORIGIN_PREFIX)) {
-        const id = guestId();
-        if (id !== undefined) void emit.send("browser:mock:ready", props.src, id).catch(console.error);
-      }
+      props.requestId && emit.send("browser:share:ready", props.requestId, webview.current.getWebContentsId());
     }
   }
 
@@ -254,7 +197,7 @@ export function WebviewComponent(props: Props) {
 
     if (!input || input === "about:blank") {
       return "about:blank";
-    } else if (input.search(new RegExp(`^(((https?)|(file)|(${MOCK_PREVIEW_SCHEME})):\\/\\/)|(data:.*\\/.*;base64)`)) === 0) {
+    } else if (input.search(/^(((https?)|(file)):\/\/)|(data:.*\/.*;base64)/) === 0) {
       return input;
     } else {
       const selected = state.searchengines.find(({ selected }) => selected);
@@ -265,7 +208,7 @@ export function WebviewComponent(props: Props) {
 
   function onClose() {
     webview.current = null;
-    setSharedId(undefined);
+    setShared(false);
   }
 
   function setPointer(x: number | "max", y: number | "max") {
@@ -294,7 +237,7 @@ export function WebviewComponent(props: Props) {
     if (!webview.current || !container.current) return;
     if (state.selection?.line === line) mode = "command";
     if (mode === "visual-line") mode = "visual";
-    if (capture && state.selection) Emit.send(`browser:capture:${guestId()}`, { selected: state.selection.rect }[capture]);
+    if (capture && state.selection) Emit.send(`browser:capture:${webview.current.getWebContentsId()}`, { selected: state.selection.rect }[capture]);
 
     const rect = line ? { ...state.pointer, x: 0, width: container.current.offsetWidth } : state.pointer;
     const anchor = { ...state.pointer }
@@ -397,7 +340,7 @@ export function WebviewComponent(props: Props) {
     switch (mode) {
       case "input":
         if (state.input) {
-          const url = guestUrl() ?? "";
+          const url = webview.current.getURL();
 
           setState(state => ({ ...state, input: url === "about:blank" ? "" : url }));
           webview.current.src = getUrl(state.input);
@@ -412,8 +355,8 @@ export function WebviewComponent(props: Props) {
   }
 
   function onLoad () {
-    const url = guestUrl();
-    if (webview.current && url !== undefined) {
+    if (webview.current) {
+      const url = webview.current.getURL();
       const input = url === "about:blank" ? "" : url;
       const title = webview.current.getTitle();
       const loading = webview.current.isLoadingMainFrame();
@@ -424,7 +367,7 @@ export function WebviewComponent(props: Props) {
 
         !["blur", "command", "visual"].includes(mode) && state.loading !== loading && runAction("mode-command");
 
-        return { ...state, url, input: mode === "input" ? state.input : input, title, loading };
+        return { ...state, input: mode === "input" ? state.input : input, title, loading };
       });
     }
   }
@@ -436,13 +379,12 @@ export function WebviewComponent(props: Props) {
   }
 
   function onBrowserAction (id: number, action: string) {
-    guestId() === id && runAction(action);
+    webview.current?.getWebContentsId() === id && runAction(action);
   }
 
   function runAction(action: string) {
-    const url = guestUrl();
-    if (webview.current && url !== undefined) {
-      if (url === "about:blank") return input.current?.focus();
+    if (webview.current) {
+      if (webview.current.getURL() === "about:blank") return input.current?.focus();
 
       switch (action) {
         case "search-start": return webview.current.stopFindInPage("activateSelection");
@@ -454,7 +396,7 @@ export function WebviewComponent(props: Props) {
         case "reload": return webview.current.reloadIgnoringCache();
         case "zoom-out": return setZoom(state.zoom - 10);
         case "zoom-in": return setZoom(state.zoom + 10);
-        case "devtool": return Emit.send(`browser:devtool:${guestId()}`);
+        case "devtool": return Emit.send(`browser:devtool:${webview.current.getWebContentsId()}`);
         case "mode-browser": return webview.current.focus();
         case "mode-input": return input.current?.focus();
         case "mode-search": return search.current?.focus();
@@ -501,7 +443,7 @@ export function WebviewComponent(props: Props) {
 
   const saveEngine = async () => {
     if (webview.current) {
-      const uri = await emit.send<string>("neovim:readline", "URI", guestUrl() ?? "");
+      const uri = await emit.send<string>("neovim:readline", "URI", webview.current.getURL());
       const selected = state.searchengines.find(engine => engine.uri === uri);
       const name = uri && await emit.send<string>("neovim:readline", "Name", selected?.name || "");
       const hasquery = uri.indexOf("${query}") >= 0;
@@ -574,9 +516,9 @@ export function WebviewComponent(props: Props) {
           { state.zoom }%
           <IconComponent font="" onClick={() => runAction("zoom-in")} />
           <IconComponent font="󱁤" onClick={() => runAction("devtool")} />
-          <IconComponent font={agentIcon || uiIcons.acp} mark={!!agentIcon} color={connected ? "purple-fg" : "gray-fg"} style={shareIconStyle}
+          <IconComponent font={agentIcon || ""} mark={!!agentIcon} color={shared ? "purple-fg" : "gray-fg"} style={shareIconStyle}
             onClick={webPage && canToggleSharing ? toggleSharing : undefined} />
-          <IconComponent font={uiIcons.placing} color={selecting ? "purple-fg" : "gray-fg"} onClick={canToggleSelection ? selectElement : undefined} />
+          <IconComponent font="󰮐" color={selecting ? "purple-fg" : "gray-fg"} onClick={canSelect ? selectElement : undefined} />
         </FlexComponent>
         <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
           <div className="space" ref={container} />

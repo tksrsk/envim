@@ -34,14 +34,13 @@ export const useTabTool = {
 // A tab the browser tools can act on.
 export interface BrowserTab {
   id: number;
-  kind: "shared" | "mock";
   guest: Electron.WebContents;
   // URL prefix the page must stay on while an action runs. See runPageAction.
   scope: string;
 }
 
 export function summarizeTab(tab: BrowserTab) {
-  return { tab: tab.id, kind: tab.kind, url: tab.guest.getURL(), title: tab.guest.getTitle() };
+  return { tab: tab.id, url: tab.guest.getURL(), title: tab.guest.getTitle() };
 }
 
 function validSelector(selector: unknown): selector is string {

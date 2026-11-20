@@ -57,17 +57,17 @@ function describe(download: Download): string {
   return `${download.id}: ${download.filename} (${download.mimeType || "unknown type"}, ${size}, ${download.state})`;
 }
 
-// Saves every download in a shared tab or the mock preview to a temporary directory per endpoint, without the save dialog.
+// Saves every download in a shared tab or the mock preview to a temporary directory, without the save dialog.
 export class Downloads {
-  private readonly entries = new Map<string, Entry[]>();
-  private readonly directories = new Map<string, string>();
+  private entries: Entry[] = [];
+  private directory?: string;
   // Running actions, keyed by guest id. The latest one on a guest reports the downloads it starts.
   private readonly captures = new Map<number, Capture[]>();
   private readonly sessions = new WeakSet<Electron.Session>();
   private next = 0;
 
-  // owner returns the endpoint whose shared tab or mock preview the guest is.
-  constructor(private readonly notify: (message: string) => void, private readonly owner: (guestId: number) => string | undefined) {}
+  // owns tells whether the guest is a shared tab or the mock preview.
+  constructor(private readonly notify: (message: string) => void, private readonly owns: (guestId: number) => boolean) {}
 
   // Captures downloads in the guest's session. Call when a tab is shared.
   watch(session: Electron.Session): void {
@@ -76,15 +76,13 @@ export class Downloads {
     this.sessions.add(session);
     // Other listeners still run. Without setSavePath, Electron shows its save dialog as before.
     session.on("will-download", (_, item, contents) => {
-      const endpoint = contents && !contents.isDestroyed() ? this.owner(contents.id) : undefined;
       // A file known to be too large goes to the user's save dialog instead of being cancelled.
-      if (endpoint && item.getTotalBytes() <= MAX_SIZE) this.start(endpoint, contents.id, item);
+      if (contents && !contents.isDestroyed() && this.owns(contents.id) && item.getTotalBytes() <= MAX_SIZE) this.start(contents.id, item);
     });
   }
 
-  private start(endpoint: string, tab: number, item: Electron.DownloadItem): void {
-    const directory = this.directories.get(endpoint) ?? join(tmpdir(), "envim-downloads", randomUUID());
-    this.directories.set(endpoint, directory);
+  private start(tab: number, item: Electron.DownloadItem): void {
+    const directory = this.directory ??= join(tmpdir(), "envim-downloads", randomUUID());
 
     const filename = basename(item.getFilename()) || "download";
     const path = join(directory, `${randomUUID()}${extname(filename)}`);
@@ -95,9 +93,7 @@ export class Downloads {
       id: `d${++this.next}`, tab, filename, mimeType: item.getMimeType(), url: item.getURL(), size: item.getTotalBytes(),
       state: "downloading", path, done: new Promise(resolve => { finish = resolve; }),
     };
-    const list = this.entries.get(endpoint) ?? [];
-    list.push(entry);
-    this.entries.set(endpoint, list);
+    this.entries.push(entry);
     const capture = this.captures.get(tab)?.at(-1);
     capture?.started.push(entry);
     capture?.onStart?.();
@@ -115,7 +111,7 @@ export class Downloads {
       if (entry.state !== "too large") entry.state = state;
       finish();
       // The session closed while the file was downloading.
-      if (!this.entries.get(endpoint)?.includes(entry)) rm(path, { force: true }).catch(() => {});
+      if (!this.entries.includes(entry)) rm(path, { force: true }).catch(() => {});
       this.notify(`Downloaded ${filename} for the ACP session (${entry.state}). It is kept until the session closes.`);
     });
   }
@@ -164,12 +160,12 @@ export class Downloads {
     return download;
   }
 
-  list(endpoint: string): Download[] {
-    return (this.entries.get(endpoint) ?? []).map(Downloads.public);
+  list(): Download[] {
+    return this.entries.map(Downloads.public);
   }
 
-  async read(endpoint: string, id: string): Promise<DownloadContent[]> {
-    const entry = this.entries.get(endpoint)?.find(item => item.id === id);
+  async read(id: string): Promise<DownloadContent[]> {
+    const entry = this.entries.find(item => item.id === id);
     if (!entry) throw new Error(`No download ${id} in this session. Call downloads without id to list them.`);
     if (entry.state !== "completed") throw new Error(`Download ${describe(entry)} has no content to read.`);
 
@@ -193,10 +189,10 @@ export class Downloads {
     }];
   }
 
-  remove(endpoint: string): void {
-    this.entries.delete(endpoint);
-    const directory = this.directories.get(endpoint);
-    this.directories.delete(endpoint);
+  reset(): void {
+    this.entries = [];
+    const directory = this.directory;
+    this.directory = undefined;
     if (directory) rm(directory, { recursive: true, force: true }).catch(() => {});
   }
 }
