@@ -29,7 +29,8 @@ export class SharedBrowser {
   private readonly opening = new Map<string, OpeningTab>();
 
   constructor(private readonly emit: WorkspaceEmit, private readonly onRevoke?: (endpoint: string, guestId: number) => void,
-    private readonly openTab?: (url: string, requestId: string) => Promise<void>) {}
+    private readonly openTab?: (url: string, requestId: string) => Promise<void>,
+    private readonly onShare?: (endpoint: string, guest: Electron.WebContents) => void) {}
 
   attach(requestId: string, guestId: number): void {
     this.opening.get(requestId)?.ready(guestId);
@@ -86,6 +87,7 @@ export class SharedBrowser {
     guest.once("destroyed", close);
     guest.on("did-start-navigation", navigate);
     guest.on("did-navigate", navigated);
+    this.onShare?.(endpoint, guest);
     this.emit.send("browser:share:status", guestId, true);
     return guest.getURL();
   }
@@ -118,6 +120,14 @@ export class SharedBrowser {
     for (const [endpoint, tabs] of [...this.tabs]) {
       if (tabs.has(guestId)) this.revoke(endpoint, guestId);
     }
+  }
+
+  // Returns the endpoint the guest is shared with.
+  endpointOf(guestId: number): string | undefined {
+    for (const [endpoint, tabs] of this.tabs) {
+      if (tabs.has(guestId)) return endpoint;
+    }
+    return undefined;
   }
 
   private liveTabs(endpoint: string): SharedTab[] {

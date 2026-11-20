@@ -38,9 +38,9 @@ export class BrowserTools {
 
   constructor(workspace: Workspace, private readonly onRemove?: (endpoint: string) => void) {
     this.mock = new MockPreview(workspace);
-    this.downloads = new Downloads(message => workspace.emit.send("acp:browser:notice", message));
+    this.downloads = new Downloads(message => workspace.emit.send("acp:browser:notice", message), guestId => this.ownerOf(guestId));
     this.shared = new SharedBrowser(workspace.emit, (endpoint, guestId) => stopPicking(endpoint, guestId),
-      (url, requestId) => workspace.showBrowserTab(url, requestId));
+      (url, requestId) => workspace.showBrowserTab(url, requestId), (_, guest) => this.downloads.watch(guest.session));
   }
 
   private static toEndpoint(id: string): string {
@@ -171,10 +171,17 @@ export class BrowserTools {
     return { ...params, selector: await refToSelector(tab.guest, ref) };
   }
 
+  // The endpoint whose shared tab or mock preview the guest is.
+  private ownerOf(guestId: number): string | undefined {
+    return this.shared.endpointOf(guestId) ?? this.mock.endpoints().find(endpoint => this.mock.guest(endpoint, guestId)?.id === guestId);
+  }
+
   // Runs an action that can start downloads in the tab, and reports them with its result. A failed
   // action that downloaded a file, such as a navigation that became a download, reports the download.
-  private async withDownloads(endpoint: string, guest: Electron.WebContents, run: () => Promise<unknown>): Promise<unknown> {
-    const { value, error, downloads } = await this.downloads.capture(endpoint, guest, run);
+  private async withDownloads(guest: Electron.WebContents, run: () => Promise<unknown>): Promise<unknown> {
+    // The mock preview is never shared, so its session is watched when the agent acts on it.
+    this.downloads.watch(guest.session);
+    const { value, error, downloads } = await this.downloads.capture(guest, run);
     if (downloads.length === 0) {
       if (error !== undefined) throw error;
       return value;
@@ -194,7 +201,7 @@ export class BrowserTools {
       }
       const guest = params.new_tab === true ? undefined : this.shared.guest(endpoint, id);
       const navigate = () => this.shared.navigate(endpoint, params.url, id, params.new_tab);
-      return guest ? this.withDownloads(endpoint, guest, navigate) : navigate();
+      return guest ? this.withDownloads(guest, navigate) : navigate();
     }
 
     if (params.action === "wait") {
@@ -205,12 +212,12 @@ export class BrowserTools {
     const tab = await this.loadedTab(endpoint, id);
     if (params.action === "back" || params.action === "forward") {
       const direction = params.action;
-      return this.withDownloads(endpoint, tab.guest, () => goInHistory(tab, direction));
+      return this.withDownloads(tab.guest, () => goInHistory(tab, direction));
     }
 
     if (params.action !== "inspect") {
       const resolved = await BrowserTools.withSelector(tab, params);
-      return params.action === "scroll" ? runTabAction(tab, resolved) : this.withDownloads(endpoint, tab.guest, () => runTabAction(tab, resolved));
+      return params.action === "scroll" ? runTabAction(tab, resolved) : this.withDownloads(tab.guest, () => runTabAction(tab, resolved));
     }
 
     const url = tab.guest.getURL();
