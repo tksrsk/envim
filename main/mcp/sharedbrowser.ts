@@ -14,6 +14,7 @@ export function webOrigin(url: string): string | undefined {
 interface SharedTab {
   id: number;
   guest: Electron.WebContents;
+  sharedByUser: boolean;
   detach: () => void;
 }
 
@@ -22,7 +23,7 @@ export class SharedBrowser {
   // Tabs being opened by navigate, keyed by request id.
   private readonly opening = new Map<string, (guestId?: number) => void>();
 
-  constructor(private readonly emit: WorkspaceEmit, private readonly onRevoke?: (guest: Electron.WebContents) => void,
+  constructor(private readonly emit: WorkspaceEmit, private readonly onRelease?: (guest: Electron.WebContents) => void,
     private readonly openTab?: (url: string, requestId: string) => Promise<void>,
     private readonly onShare?: (guest: Electron.WebContents) => void) {}
 
@@ -56,11 +57,15 @@ export class SharedBrowser {
     }
   }
 
-  share(guestId: number): string {
+  share(guestId: number, sharedByUser = false): void {
     const guest = Electron.webContents.fromId(guestId);
     const origin = guest?.getType() === "webview" ? webOrigin(guest.getURL()) : undefined;
     if (!guest || !origin) throw new Error("Open an HTTP or HTTPS page before sharing its tab.");
-    if (this.tabs.has(guestId)) return guest.getURL();
+    const existing = this.tabs.get(guestId);
+    if (existing) {
+      existing.sharedByUser ||= sharedByUser;
+      return;
+    }
 
     const close = () => this.revoke(guestId);
     const navigate = (event: Electron.WebContentsDidStartNavigationEventParams) => {
@@ -69,7 +74,7 @@ export class SharedBrowser {
     const navigated = () => {
       if (!webOrigin(guest.getURL())) close();
     };
-    this.tabs.set(guestId, { id: guestId, guest, detach: () => {
+    this.tabs.set(guestId, { id: guestId, guest, sharedByUser, detach: () => {
       guest.removeListener("destroyed", close);
       guest.removeListener("did-start-navigation", navigate);
       guest.removeListener("did-navigate", navigated);
@@ -79,11 +84,14 @@ export class SharedBrowser {
     guest.on("did-navigate", navigated);
     this.onShare?.(guest);
     this.emit.send("browser:share:status", guestId, true);
-    return guest.getURL();
   }
 
-  // Revokes one tab, or every tab and pending open when guestId is omitted.
-  revoke(guestId?: number): void {
+  // Ends browser activity for all tabs while keeping those shared by the user.
+  endSession(): void {
+    this.revoke(undefined, true);
+  }
+
+  revoke(guestId?: number, keepUserShares = false): void {
     if (guestId === undefined) {
       for (const [id, ready] of [...this.opening]) {
         this.opening.delete(id);
@@ -94,9 +102,11 @@ export class SharedBrowser {
     for (const tab of [...this.tabs.values()]) {
       if (guestId !== undefined && tab.id !== guestId) continue;
 
+      this.onRelease?.(tab.guest);
+      if (keepUserShares && tab.sharedByUser) continue;
+
       this.tabs.delete(tab.id);
       tab.detach();
-      this.onRevoke?.(tab.guest);
       this.emit.send("browser:share:status", tab.id, false);
     }
   }
@@ -139,7 +149,7 @@ export class SharedBrowser {
   }
 
   // Loads url in the shared tab, or opens and shares a new tab when newTab is true or nothing is shared yet.
-  async navigate(url: unknown, tabId: number | undefined, newTab: unknown): Promise<string> {
+  async navigate(url: unknown, tabId: number | undefined, newTab: unknown, signal: AbortSignal): Promise<string> {
     const target = typeof url === "string" ? url.trim() : "";
     if (!/^https?:\/\//i.test(target) || !webOrigin(target)) {
       throw new Error("Provide an absolute HTTP or HTTPS URL.");
@@ -153,6 +163,7 @@ export class SharedBrowser {
 
     const tab = this.resolve(tabId);
     await waitForLoadOrThrow(tab.guest);
+    signal.throwIfAborted();
     await tab.guest.loadURL(destination);
     if (!this.isShared(tab)) throw new Error(`Tab ${tab.id} is no longer shared.`);
     return `Opened ${tab.guest.getURL()} in shared tab ${tab.id}.`;

@@ -35,22 +35,24 @@ export class MockPreview {
   // origin returns the origin of the browser server.
   constructor(private readonly shared: SharedBrowser, private readonly origin: () => Promise<string>) {}
 
-  show(html: unknown): Promise<string> {
+  show(html: unknown, signal: AbortSignal): Promise<string> {
     if (typeof html !== "string" || !html.trim() || Buffer.byteLength(html) > MAX_HTML_BYTES) {
       return Promise.reject(new Error("Expected show_mock with a nonempty HTML document of at most 1 MiB."));
     }
 
-    const operation = this.pending.then(() => this.update(html));
+    const operation = this.pending.then(() => this.update(html, signal));
     this.pending = operation.catch(() => {});
     return operation;
   }
 
   // Shows the document in the tab that has it, keeping the state in the page's fragment, or in a new tab.
-  private async update(html: string): Promise<string> {
-    this.html = html;
+  private async update(html: string, signal: AbortSignal): Promise<string> {
     const url = `${await this.origin()}${MOCK_PATH}`;
+    signal.throwIfAborted();
+
+    this.html = html;
     const tab = Electron.webContents.getAllWebContents().find(contents => contents.getType() === "webview" && baseUrl(contents.getURL()) === url);
-    if (!tab) return this.shared.navigate(url, undefined, true);
+    if (!tab) return this.shared.navigate(url, undefined, true, signal);
 
     const next = new URL(tab.getURL());
     next.searchParams.set("revision", randomUUID());

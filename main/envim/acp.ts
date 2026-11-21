@@ -46,19 +46,15 @@ export class Acp {
     this.workspace.emit.on("acp:terminal:exit", this.onAcpTerminalExit);
     this.workspace.emit.on("acp:terminal:output", this.onAcpTerminalOutput);
     this.workspace.emit.on("browser:pick", this.onBrowserPick);
-    this.workspace.emit.on("browser:share:toggle", this.onBrowserShare);
     this.workspace.emit.on("acp:toggle", this.onAcpToggle);
     this.workspace.emit.on("acp:status:get", () => this.state);
   }
 
   private setState(state: IAcpStatus) {
-    const previousId = this.state.sessionId;
-    // Tabs are shared with the active session only.
-    if (previousId && (state.sessionId !== previousId || state.status === "disconnected")) {
-      this.workspace.browser.tools.revokeTabs();
-      this.workspace.browser.tools.stopPicking();
-    }
     this.state = state;
+    const browserSession = this.browserEnabled && (state.status === "connected" || state.status === "processing")
+      ? state.sessionId : undefined;
+    this.workspace.browser.tools.setSession(browserSession);
 
     this.workspace.emit.update("acp:status:changed", false, this.state);
   }
@@ -356,7 +352,6 @@ export class Acp {
     this.cancelAllPendingRequests();
     this.tool = {};
     this.sessions = {};
-    this.workspace.browser.tools.reset();
 
     this.setState({ status: "disconnected" });
     if (code !== 0) this.onAcpError(`Exited code: ${code}`);
@@ -398,22 +393,6 @@ export class Acp {
       this.setState({ ...this.state, status: "connected" });
       this.onAcpError(err);
     });
-  }
-
-  private onBrowserShare = (guestId: number, share: boolean) => {
-    const browser = this.workspace.browser.tools;
-    // Unsharing works for any session, including a tab the agent of an inactive session opened.
-    if (!share) return browser.revokeTabs(guestId);
-
-    if (!this.state.sessionId || !this.browserEnabled || !this.connection || !["connected", "processing"].includes(this.state.status)) {
-      return this.workspace.emit.send("acp:browser:notice", "Open a connected ACP session with HTTP MCP support.", "warning");
-    }
-
-    try {
-      browser.shareTab(guestId);
-    } catch (error) {
-      this.workspace.emit.send("acp:browser:notice", error instanceof Error ? error.message : String(error), "warning");
-    }
   }
 
   private onBrowserPick = (guestId: number, enable: boolean) => {

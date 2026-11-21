@@ -35,13 +35,14 @@ function imageResult({ image, summary }: Screenshot): ToolResult {
 export class BrowserTools {
   public readonly mock: MockPreview;
   private readonly shared: SharedBrowser;
+  private session?: { id: string; controller: AbortController };
   private readonly downloads: Downloads;
   private readonly notify: (message: string) => void;
 
   // origin returns the origin of the browser server that serves the mock preview.
   constructor(workspace: Workspace, origin: () => Promise<string>) {
     this.notify = message => workspace.emit.send("acp:browser:notice", message);
-    this.downloads = new Downloads(this.notify, guestId => this.shared.has(guestId));
+    this.downloads = new Downloads(this.notify, guestId => this.session !== undefined && this.shared.has(guestId));
     this.shared = new SharedBrowser(workspace.emit, guest => {
       stopPicking(guest);
       // A dialog the agent has not answered goes to the user.
@@ -49,33 +50,39 @@ export class BrowserTools {
     },
       (url, requestId) => workspace.showBrowserTab(url, requestId), guest => this.downloads.watch(guest.session));
     this.mock = new MockPreview(this.shared, origin);
+
+    workspace.emit.on("browser:share:toggle", (guestId: number, share: boolean) => {
+      if (!share) return this.shared.revoke(guestId);
+
+      try {
+        this.shared.share(guestId, true);
+      } catch (error) {
+        workspace.emit.send("acp:browser:notice", error instanceof Error ? error.message : String(error), "warning");
+      }
+    });
+    workspace.emit.on("browser:share:ready", (requestId: string, guestId: number) => this.shared.attach(requestId, guestId));
   }
 
-  // Forgets the shared tabs, mock preview and downloads of the agent that has gone.
-  reset(): void {
-    this.shared.revoke();
-    this.downloads.reset();
-    this.mock.html = undefined;
-  }
+  setSession(sessionId: string | undefined): void {
+    if (this.session?.id === sessionId) return;
 
-  attachSharedTab(requestId: string, guestId: number): void {
-    this.shared.attach(requestId, guestId);
-  }
-
-  shareTab(guestId: number): string {
-    return this.shared.share(guestId);
-  }
-
-  // Revokes one shared tab, or all of them when guestId is omitted.
-  revokeTabs(guestId?: number): void {
-    this.shared.revoke(guestId);
-  }
-
-  // Stops the element picker in one tab, or in every shared tab when guestId is omitted.
-  stopPicking(guestId?: number): void {
-    for (const guest of this.shared.guests()) {
-      if (guestId === undefined || guest.id === guestId) stopPicking(guest);
+    if (this.session) {
+      this.session.controller.abort(new Error("The active ACP session changed."));
+      this.shared.endSession();
+      this.downloads.reset();
+      this.mock.html = undefined;
     }
+    this.session = sessionId === undefined ? undefined : { id: sessionId, controller: new AbortController() };
+  }
+
+  reset(): void {
+    this.setSession(undefined);
+    this.shared.revoke();
+  }
+
+  stopPicking(guestId: number): void {
+    const guest = this.shared.guest(guestId);
+    if (guest) stopPicking(guest);
   }
 
   async pick(guestId: number, onSelection: (selection: IBrowserElement) => void): Promise<void> {
@@ -126,11 +133,12 @@ export class BrowserTools {
   }
 
   // Resolves the tab after any page it is loading has finished, so the scope matches the loaded page.
-  private async loadedTab(id: number | undefined): Promise<BrowserTab> {
+  private async loadedTab(id: number | undefined, signal: AbortSignal): Promise<BrowserTab> {
     const tab = this.resolveTab(id);
     // A page blocked by a dialog does not finish loading.
     Dialogs.assertNone(tab.guest);
     await waitForLoadOrThrow(tab.guest);
+    signal.throwIfAborted();
     const loaded = this.current(tab);
     if (!loaded) throw new Error(`Tab ${tab.id} is no longer available to this session.`);
     return loaded;
@@ -183,13 +191,13 @@ export class BrowserTools {
     return BrowserTools.report(tab.id, outcome);
   }
 
-  private async useTab(params: Record<string, unknown> = {}): Promise<unknown> {
+  private async useTab(signal: AbortSignal, params: Record<string, unknown> = {}): Promise<unknown> {
     const id = BrowserTools.tabId(params.tab);
     if (params.action === "list") return this.tabs().map(summarizeTab);
 
     if (params.action === "navigate") {
       const guest = params.new_tab === true ? undefined : this.shared.guest(id);
-      const navigate = () => this.shared.navigate(params.url, id, params.new_tab);
+      const navigate = () => this.shared.navigate(params.url, id, params.new_tab, signal);
       return guest ? this.withDownloads(guest, () => this.act({ id: guest.id, guest }, navigate)) : navigate();
     }
 
@@ -197,10 +205,11 @@ export class BrowserTools {
       const tab = this.resolveTab(id);
       Dialogs.assertNone(tab.guest);
       const resolved = await BrowserTools.withSelector(tab, params);
-      return this.act(tab, () => waitInTab(tab, resolved, () => this.current(tab)));
+      signal.throwIfAborted();
+      return this.act(tab, () => waitInTab(tab, resolved, () => signal.aborted ? undefined : this.current(tab)));
     }
 
-    const tab = await this.loadedTab(id);
+    const tab = await this.loadedTab(id, signal);
     if (params.action === "back" || params.action === "forward") {
       const direction = params.action;
       return this.withDownloads(tab.guest, () => this.act(tab, () => goInHistory(tab, direction)));
@@ -212,6 +221,7 @@ export class BrowserTools {
         throw new Error(`The user is selecting an element in tab ${tab.id}. Try again after the selection ends.`);
       }
       const resolved = await BrowserTools.withSelector(tab, params);
+      signal.throwIfAborted();
       const run = () => this.act(tab, () => runTabAction(tab, resolved));
       return params.action === "scroll" ? run() : this.withDownloads(tab.guest, run);
     }
@@ -236,12 +246,12 @@ export class BrowserTools {
     });
   }
 
-  private async screenshot(params: Record<string, unknown> = {}): Promise<Screenshot> {
-    const tab = await this.loadedTab(BrowserTools.tabId(params.tab));
+  private async screenshot(signal: AbortSignal, params: Record<string, unknown> = {}): Promise<Screenshot> {
+    const tab = await this.loadedTab(BrowserTools.tabId(params.tab), signal);
     const { selector } = await BrowserTools.withSelector(tab, params);
     if (selector !== undefined && typeof selector !== "string") throw new Error("Selector must be a string.");
 
-    return captureGuest(tab.guest, selector, () => this.isAvailable(tab));
+    return captureGuest(tab.guest, selector, () => !signal.aborted && this.isAvailable(tab));
   }
 
   private readLogs(params: Record<string, unknown> = {}) {
@@ -252,24 +262,33 @@ export class BrowserTools {
   registerTools(server: Server): void {
     server.setRequestHandler("tools/list", () => ({ tools: [showMockTool, useTabTool, screenshotTool, readLogsTool, downloadsTool, handleDialogTool] }));
     server.setRequestHandler("tools/call", async ({ params }) => {
+      const signal = this.session?.controller.signal;
+      if (!signal) return textResult("Open an active ACP session to use browser tools.", true);
+
       try {
-        switch (params.name) {
-          case showMockTool.name: return textResult(await this.mock.show(params.arguments?.html));
-          case useTabTool.name: return textResult(await this.useTab(params.arguments));
-          case handleDialogTool.name: return textResult(await this.handleDialog(params.arguments));
-          case downloadsTool.name: {
-            const id = params.arguments?.id;
-            if (id === undefined) return textResult(this.downloads.list());
-            if (typeof id !== "string") return textResult("Id must be a download id such as d1.", true);
-            return { content: await this.downloads.read(id) };
-          }
-          case readLogsTool.name: return textResult(this.readLogs(params.arguments));
-          case screenshotTool.name: return imageResult(await this.screenshot(params.arguments));
-          default: return textResult(`Unknown tool: ${params.name}`, true);
-        }
+        const result = await this.callTool(signal, params.name, params.arguments);
+        signal.throwIfAborted();
+        return result;
       } catch (error) {
         return textResult(error instanceof Error ? error : String(error), true);
       }
     });
+  }
+
+  private async callTool(signal: AbortSignal, name: string, args?: Record<string, unknown>): Promise<ToolResult> {
+    switch (name) {
+      case showMockTool.name: return textResult(await this.mock.show(args?.html, signal));
+      case useTabTool.name: return textResult(await this.useTab(signal, args));
+      case handleDialogTool.name: return textResult(await this.handleDialog(args));
+      case downloadsTool.name: {
+        const id = args?.id;
+        if (id === undefined) return textResult(this.downloads.list());
+        if (typeof id !== "string") return textResult("Id must be a download id such as d1.", true);
+        return { content: await this.downloads.read(id) };
+      }
+      case readLogsTool.name: return textResult(this.readLogs(args));
+      case screenshotTool.name: return imageResult(await this.screenshot(signal, args));
+      default: return textResult(`Unknown tool: ${name}`, true);
+    }
   }
 }

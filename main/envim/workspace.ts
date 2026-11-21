@@ -40,7 +40,6 @@ export class Workspace {
     const emit = new WorkspaceEmit(this.id);
 
     emit.on("browser:open", this.onBrowserOpen);
-    emit.on("browser:share:ready", (id: string, guestId: number) => this.browser.tools.attachSharedTab(id, guestId));
     emit.on("browser:view", this.onBrowserView);
     emit.on("neovim:api", this.onNeovimApi);
     emit.on("neovim:command", this.onNeovimCommand);
