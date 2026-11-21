@@ -82,7 +82,8 @@ export class Browser {
       });
     } else {
       e.preventDefault();
-      callback(true);
+      // Electron still needs the request URL to emit the app-level certificate-error event.
+      setImmediate(() => callback(true));
     }
   }
 
