@@ -148,6 +148,42 @@ test('picker keeps an outline after choosing, supports reselection, and clears o
   }
 });
 
+test('type edits the page without a click and reports an unchanged value as an error', async () => {
+  const { JSDOM } = require('jsdom');
+  const { window } = new JSDOM('<input id="year" type="number" value="2026">', {
+    url: 'https://example.test/', runScripts: 'outside-only',
+  });
+  const { runTabAction } = loadModule('main/mcp/tabs.ts');
+  const field = window.document.getElementById('year');
+  field.getClientRects = () => [new window.DOMRect(0, 0, 100, 20)];
+  field.scrollIntoView = () => {};
+  const edits = [];
+  window.document.execCommand = (command, _, text) => {
+    assert.equal(window.document.activeElement, field);
+    edits.push(command);
+    if (text === 'ignored') return false;
+    field.value = command === 'delete' ? '' : text;
+    return true;
+  };
+  const guest = Object.assign(createTab(window.location.href), {
+    executeJavaScriptInIsolatedWorld: (_, [{ code }]) => window.eval(code),
+  });
+  const tab = { id: 1, guest, scope: window.location.href };
+  const type = text => runTabAction(tab, { action: 'type', selector: '#year', text });
+
+  try {
+    assert.equal(await type('2025'), 'Entered text in the selected element.');
+    assert.equal(field.value, '2025');
+    await assert.rejects(type('ignored'), /value did not change/);
+    assert.equal(field.value, '2025');
+    assert.equal(await type(''), 'Entered text in the selected element.');
+    assert.equal(field.value, '');
+    assert.deepEqual(edits, ['insertText', 'insertText', 'delete']);
+  } finally {
+    window.close();
+  }
+});
+
 test('shares several tabs and targets them by tab id', async () => {
   const { EventEmitter } = require('node:events');
   const urls = new Map([[1, 'https://example.test/already-open'], [2, 'https://example.test/new'], [3, 'https://example.test/other']]);

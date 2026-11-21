@@ -1,6 +1,6 @@
 import type * as Electron from "electron";
 
-import { withDebugger, type Send } from "main/mcp/cdp";
+import { withDebugger } from "main/mcp/cdp";
 import { checkPageCondition, readPageField, runPageAction, type PageActionStep } from "main/mcp/page";
 import { runInPage } from "main/mcp/inject";
 import { WaitAbort, waitForCondition, watchNavigation } from "main/mcp/wait";
@@ -71,7 +71,8 @@ export async function runTabAction(tab: BrowserTab, params: Record<string, unkno
   }
   if (action === "check" && typeof checked !== "boolean") throw new Error("Checked must be a boolean.");
 
-  const options = action === "scroll" ? { pixels } : action === "select" ? { option } : action === "check" ? { checked } : {};
+  const options = action === "scroll" ? { pixels } : action === "type" ? { text } :
+    action === "select" ? { option } : action === "check" ? { checked } : {};
   const args = JSON.stringify([tab.scope, action, selector ?? null, options]);
   const code = `(${runPageAction.toString()})(...(${args}).map(value => value ?? undefined))`;
   if (!CHANGING_ACTIONS.includes(action)) return runInPage(tab.guest, code);
@@ -79,7 +80,7 @@ export async function runTabAction(tab: BrowserTab, params: Record<string, unkno
   const navigation = watchNavigation(tab.guest);
   let result: string;
   try {
-    result = action === "type" ? await typeText(tab.guest, code, selector as string, text as string) :
+    result = action === "type" ? await runInPage<string>(tab.guest, code) :
       await clickElement(tab.guest, code, selector as string, action, checked as boolean);
   } catch (error) {
     navigation.dispose();
@@ -91,30 +92,6 @@ export async function runTabAction(tab: BrowserTab, params: Record<string, unkno
 
 function readField(guest: Electron.WebContents, selector: string): Promise<string | boolean | null> {
   return runInPage(guest, `(${readPageField.toString()})(${JSON.stringify(selector)})`);
-}
-
-async function pressKey(send: Send, key: string, code: string, keyCode: number): Promise<void> {
-  const event = { key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
-  await send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...event });
-  await send("Input.dispatchKeyEvent", { type: "keyUp", ...event });
-}
-
-// Replaces the text of the field with trusted text input, as typing or pasting would.
-function typeText(guest: Electron.WebContents, code: string, selector: string, text: string): Promise<string> {
-  return withDebugger(guest, async send => {
-    // Keeps the field focused while the tab or the window is in the background, as it would be while the user types.
-    await send("Emulation.setFocusEmulationEnabled", { enabled: true });
-    const step = await runInPage<PageActionStep>(guest, code);
-    if (typeof step === "string" || !("type" in step)) return String(step);
-
-    // Text input replaces the selected contents; deleting them clears the field.
-    if (text) await send("Input.insertText", { text }); else await pressKey(send, "Backspace", "Backspace", 8);
-    const shown = await readField(guest, selector);
-    if (shown === text) return "Entered text in the selected element.";
-    return typeof shown === "string" ?
-      `Entered text in the selected element. The page changed it, and the field now contains ${JSON.stringify(shown)}.` :
-      "Entered text in the selected element. The field is no longer on the page.";
-  });
 }
 
 // Clicks the element, or a checkbox or radio button, with trusted mouse events at the point the page found.

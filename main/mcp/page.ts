@@ -49,17 +49,15 @@ export function pageSelector(target: Element): string {
   return segments.join(" > ");
 }
 
-// What runPageAction leaves to the main process: a trusted click at a point in CSS pixels of the
-// viewport, or text input into the focused field, whose contents are selected so the input replaces them.
-export type PageActionStep = string | { click: { x: number; y: number } } | { type: true };
+// What runPageAction leaves to the main process: a trusted click at a point in CSS pixels of the viewport.
+export type PageActionStep = string | { click: { x: number; y: number } };
 
 // scope is the URL prefix the page must still be on: the origin of the tab plus "/".
-// Checks the element and prepares the action. Clicks and text input are left to the main process, which
-// sends them as trusted input events, as a user's would be.
+// Runs editing commands in the page and prepares coordinates for clicks sent by the main process.
 export function runPageAction(
   scope: string, action: BrowserPageAction, selector: string | undefined, options: BrowserPageOptions,
 ): PageActionStep {
-  const { pixels, option, checked } = options;
+  const { pixels, text = "", option, checked } = options;
   if (!window.location.href.startsWith(scope)) throw new Error("The tab left the page it was used for.");
 
   const visible = (element: Element) => element.getClientRects().length > 0 &&
@@ -108,7 +106,20 @@ export function runPageAction(
     if (document.activeElement !== element && !element.contains(document.activeElement)) {
       throw new Error("The element did not take focus.");
     }
-    return { type: true };
+    const readText = (field: HTMLElement) =>
+      field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? field.value : field.innerText;
+    const before = readText(element);
+    if (before === text) return "The selected element already contains the requested text.";
+
+    // Chromium's editor dispatches input events even when the host window lacks focus.
+    document.execCommand(text ? "insertText" : "delete", false, text);
+    const current = document.querySelector(selector || "");
+    if (!(current instanceof HTMLElement)) return "The field is no longer on the page after the input command.";
+
+    const shown = readText(current);
+    if (shown === text) return "Entered text in the selected element.";
+    if (shown === before) throw new Error("The selected element did not accept the text. Its value did not change.");
+    return `The selected element now contains ${JSON.stringify(shown)}.`;
   }
 
   if (action === "select") {
