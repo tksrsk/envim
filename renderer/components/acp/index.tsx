@@ -1,7 +1,7 @@
 import React from "react";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession, IBrowserElement } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
@@ -23,13 +23,13 @@ interface State {
   sessions: IAcpSession[];
   messages: AcpSDK.SessionNotification[];
   input: string;
+  promptContext?: { label: string; value: string };
   mode: { sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
   images: AcpSDK.ImageContent[];
   browserNotice?: { text: string; severity?: "warning" };
-  browserElement?: { sessionId: string; element: IBrowserElement };
   registry: IAcpRegistry;
   search: { query: string; highlight: boolean; active: number; ranges: Range[] };
 }
@@ -74,12 +74,11 @@ export function AcpComponent() {
   const textarea = React.useRef<HTMLTextAreaElement>(null);
   const { active } = useFocus();
   const main = active === command.current ? "normal" : active === textarea.current ? "input" : "blur";
-  const browserElement = state.browserElement?.sessionId === state.status.sessionId ? state.browserElement?.element : undefined;
   const color = main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
 
   React.useEffect(() => {
     emit.on("acp:file:add", onAcpFileAdd);
-    emit.on("acp:browser:element", onAcpBrowserElement);
+    emit.on("acp:prompt:context", onSetPromptContext);
     emit.on("acp:browser:notice", onAcpBrowserNotice);
     emit.on("acp:message:added", onAcpMessageAdded);
     emit.on("acp:session:update", onAcpSessionUpdate);
@@ -88,7 +87,7 @@ export function AcpComponent() {
 
     return () => {
       emit.off("acp:file:add", onAcpFileAdd);
-      emit.off("acp:browser:element", onAcpBrowserElement);
+      emit.off("acp:prompt:context", onSetPromptContext);
       emit.off("acp:browser:notice", onAcpBrowserNotice);
       emit.off("acp:message:added", onAcpMessageAdded);
       emit.off("acp:session:update", onAcpSessionUpdate);
@@ -180,11 +179,8 @@ export function AcpComponent() {
     }));
   }
 
-  function onAcpBrowserElement(sessionId: string, element: IBrowserElement | null) {
-    setState(state => ({
-      ...state,
-      browserElement: element ? { sessionId, element } : state.browserElement?.sessionId === sessionId ? undefined : state.browserElement,
-    }));
+  function onSetPromptContext(context?: State["promptContext"]) {
+    setState(state => ({ ...state, promptContext: context }));
   }
 
   function onAcpBrowserNotice(text?: string, severity?: "warning") {
@@ -327,10 +323,6 @@ export function AcpComponent() {
     checkAcpStatus("processing") || emit.send("acp:session:config", configId, value);
   }
 
-  function onSelectCommand(selected: string) {
-    setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
-  }
-
   function onRemoveFile(file: string) {
     setState(state => ({ ...state, files: state.files.filter(f => f !== file) }));
   }
@@ -417,14 +409,16 @@ export function AcpComponent() {
         }
 
         break;
-      case "prompt":
+      case "prompt": {
         if (checkAcpStatus("processing")) {
           return;
         }
 
-        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images, browserElement);
+        const prompt = [state.promptContext?.value, input.trim()].filter(Boolean).join(" ");
+        emit.send("acp:prompt:send", state.status.sessionId, prompt, state.files, state.images);
 
         break;
+      }
       case "search":
         search.query = input;
         search.highlight = true;
@@ -433,7 +427,11 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, search, input: "", files: [], images: [], mode: { sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
+    setState(state => ({
+      ...state, search, input: "", files: [], images: [],
+      promptContext: state.mode.sub === "prompt" ? undefined : state.promptContext,
+      mode: { sub: checkAcpStatus("connected") ? "prompt" : "package" },
+    }));
     command.current?.focus();
   }
 
@@ -703,6 +701,13 @@ export function AcpComponent() {
               </MenuComponent>
             )}
           </FlexComponent>
+          {state.promptContext && (
+            <FlexComponent>
+              <span>{state.promptContext.label}</span>
+              <div className="space" />
+              <IconComponent font={uiIcons.close} color="gray-fg" onClick={() => onSetPromptContext()} />
+            </FlexComponent>
+          )}
           <textarea
             ref={textarea}
             placeholder={getPlaceholder()}
@@ -716,7 +721,8 @@ export function AcpComponent() {
             {state.session && state.session.commands.length > 0 && (
               <MenuComponent label="" color="green-fg">
                 {state.session.commands.map((command) => (
-                  <FlexComponent key={command.name} onClick={() => onSelectCommand(command.name)} title={command.description} spacing>
+                  <FlexComponent key={command.name} title={command.description} spacing
+                    onClick={() => onSetPromptContext({ label: `/${command.name}`, value: `/${command.name}` })}>
                     /{command.name}
                   </FlexComponent>
                 ))}

@@ -22,6 +22,11 @@ interface Props {
   style: React.CSSProperties;
 }
 
+interface ElementPicker {
+  token: string;
+  pending?: { point: { x: number; y: number } | null } | "committing";
+}
+
 interface States {
   input: string;
   search: string;
@@ -52,6 +57,32 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
 };
 
+function pickerScript(token: string, point?: { x: number; y: number }, confirm = false) {
+  return `(() => {
+    const token = ${JSON.stringify(token)};
+    const point = ${JSON.stringify(point ?? null)};
+    const picking = "data-envim-picking";
+    document.querySelectorAll('[data-envim-picking="' + token + '"]')
+      .forEach(element => element.removeAttribute(picking));
+
+    const hit = point && document.elementFromPoint(point.x, point.y);
+    if (!hit || hit === document.body || hit === document.documentElement) return false;
+
+    let element = hit;
+    while (element.parentElement && !(element instanceof HTMLElement)) element = element.parentElement;
+    if (element === document.body || element === document.documentElement) element = hit;
+
+    if (${confirm}) {
+      const picked = "data-envim-picked";
+      const markers = element.getAttribute(picked);
+      element.setAttribute(picked, markers ? markers + " " + token : token);
+    } else {
+      element.setAttribute(picking, token);
+    }
+    return true;
+  })()`;
+}
+
 export function WebviewComponent(props: Props) {
   const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ input: props.src, search: "", title: "", loading: false, searchengines: Setting.searchengines, zoom: 100, pointer: { x: 0, y: 0, width: col2X(1), height: row2Y(1) } });
@@ -62,6 +93,7 @@ export function WebviewComponent(props: Props) {
   const command: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const [shared, setShared] = React.useState(false);
   const [selecting, setSelecting] = React.useState(false);
+  const picker = React.useRef<ElementPicker | null>(null);
   const [acpStatus, setAcpStatus] = React.useState<IAcpStatus>({ status: "disconnected" });
   const { active } = useFocus();
   const mode = getMode(active);
@@ -69,9 +101,7 @@ export function WebviewComponent(props: Props) {
   const blank = currentUrl === "about:blank";
   const webPage = /^https?:\/\//.test(currentUrl);
   const agentIcon = acpStatus.status === "disconnected" ? undefined : acpStatus.agent?.icon;
-  const acpReady = (acpStatus.status === "connected" || acpStatus.status === "processing") &&
-    !!acpStatus.sessionId && !!acpStatus.initialize?.agentCapabilities?.mcpCapabilities?.http;
-  const canSelect = selecting || (acpReady && shared && !state.loading);
+  const canSelect = selecting || (webPage && !state.loading);
   const canToggleSharing = shared || !state.loading;
   const shareIconStyle = {
     opacity: webPage && canToggleSharing ? 1 : 0.5,
@@ -102,9 +132,12 @@ export function WebviewComponent(props: Props) {
       container.current.appendChild(webview);
       webview.setAttribute("allowpopups", "on");
       webview.addEventListener("dom-ready", onReady);
+      webview.addEventListener("did-finish-load", onLoad);
       webview.src = getUrl(props.src);
 
       return () => {
+        stopPicker();
+        webview.removeEventListener("did-start-navigation", onPickerNavigation);
         webview.removeEventListener("did-start-loading", onLoad);
         webview.removeEventListener("did-stop-loading", onLoad);
         webview.removeEventListener("did-finish-load", onLoad);
@@ -133,16 +166,11 @@ export function WebviewComponent(props: Props) {
     }
 
     function onShare(id: number, value: boolean) {
-      webview.current?.getWebContentsId() === id && setShared(value);
-    }
-
-    function onPickFinished(id: number) {
-      webview.current?.getWebContentsId() === id && setSelecting(false);
+      if (webview.current?.getWebContentsId() === id) setShared(value);
     }
 
     emit.on("acp:status:changed", onAcpStatus);
     emit.on("browser:share:status", onShare);
-    emit.on("browser:pick:finished", onPickFinished);
     void emit.send<IAcpStatus>("acp:status:get").then(status => {
       if (status && waitingForStatus) onAcpStatus(status);
     });
@@ -150,7 +178,6 @@ export function WebviewComponent(props: Props) {
       waitingForStatus = false;
       emit.off("acp:status:changed", onAcpStatus);
       emit.off("browser:share:status", onShare);
-      emit.off("browser:pick:finished", onPickFinished);
     };
   }, [emit]);
 
@@ -158,11 +185,82 @@ export function WebviewComponent(props: Props) {
     webview.current && emit.send("browser:share:toggle", webview.current.getWebContentsId(), !shared);
   }
 
-  function selectElement() {
-    if (!webview.current) return;
+  function stopPicker() {
+    const current = picker.current;
+    if (!current) return;
 
-    setSelecting(!selecting);
-    emit.send("browser:pick", webview.current.getWebContentsId(), !selecting);
+    picker.current = null;
+    setSelecting(false);
+    void webview.current?.executeJavaScript(pickerScript(current.token)).catch(() => {});
+  }
+
+  function onPickerNavigation(event: Electron.DidStartNavigationEvent) {
+    if (event.isMainFrame) stopPicker();
+  }
+
+  function selectElement() {
+    if (picker.current) return stopPicker();
+    const guest = webview.current;
+    if (!guest || guest.isLoadingMainFrame()) return;
+
+    picker.current = { token: crypto.randomUUID() };
+    setSelecting(true);
+    command.current?.focus();
+  }
+
+  function pickerPoint(event: React.MouseEvent, guest: Electron.WebviewTag) {
+    const zoom = guest.getZoomFactor();
+    return { x: event.nativeEvent.offsetX / zoom, y: event.nativeEvent.offsetY / zoom };
+  }
+
+  async function hoverElement(event?: React.MouseEvent) {
+    const current = picker.current;
+    const guest = webview.current;
+    if (!guest || !current || current.pending === "committing") return;
+
+    const point = event ? pickerPoint(event, guest) : null;
+    if (current.pending) {
+      current.pending.point = point;
+      return;
+    }
+
+    const pending = { point };
+    current.pending = pending;
+    try {
+      let point;
+      do {
+        point = pending.point;
+        await guest.executeJavaScript(pickerScript(current.token, point ?? undefined));
+      } while (current.pending === pending && picker.current === current && pending.point !== point);
+    } catch {
+      if (current.pending === pending && picker.current === current) stopPicker();
+    } finally {
+      if (current.pending === pending) current.pending = undefined;
+    }
+  }
+
+  async function confirmElement(event: React.MouseEvent) {
+    const current = picker.current;
+    const guest = webview.current;
+    if (!guest || !current || current.pending === "committing") return;
+
+    current.pending = "committing";
+    try {
+      const written = await guest.executeJavaScript(pickerScript(current.token, pickerPoint(event, guest), true));
+      if (written !== true || picker.current !== current) return;
+
+      const selector = `[data-envim-picked~="${current.token}"]`;
+      const label = "User-selected browser element (page data)";
+      emit.share("acp:prompt:context", {
+        label,
+        value: `${label}:\n${JSON.stringify({ selector, tab: guest.getWebContentsId() })}\n\n`,
+      });
+      stopPicker();
+    } catch {
+      if (picker.current === current) stopPicker();
+    } finally {
+      current.pending = undefined;
+    }
   }
 
   function getMode(element: Element | null) {
@@ -180,9 +278,9 @@ export function WebviewComponent(props: Props) {
     if (container.current) {
       webview.current = container.current.querySelector("webview") as Electron.WebviewTag;
       webview.current.removeEventListener("dom-ready", onReady);
+      webview.current.addEventListener("did-start-navigation", onPickerNavigation);
       webview.current.addEventListener("did-start-loading", onLoad);
       webview.current.addEventListener("did-stop-loading", onLoad);
-      webview.current.addEventListener("did-finish-load", onLoad);
       webview.current.addEventListener("did-navigate", onLoad);
       webview.current.addEventListener("did-navigate-in-page", onLoad);
       webview.current.addEventListener("page-title-updated", onLoad);
@@ -207,6 +305,7 @@ export function WebviewComponent(props: Props) {
   }
 
   function onClose() {
+    stopPicker();
     webview.current = null;
     setShared(false);
   }
@@ -270,6 +369,7 @@ export function WebviewComponent(props: Props) {
     e.preventDefault();
 
     if (!webview.current || e.nativeEvent.isComposing) return;
+    if (e.key === "Escape" && picker.current) return stopPicker();
 
     switch (modkey && e.key) {
       case "r": return runAction("reload");
@@ -354,8 +454,13 @@ export function WebviewComponent(props: Props) {
     }
   }
 
-  function onLoad () {
+  function onLoad (event: Event) {
     if (webview.current) {
+      if (event.type === "did-finish-load") {
+        void webview.current.insertCSS("[data-envim-picking] { outline: 2px dotted #9968cc !important; }").catch(() => {});
+      }
+
+
       const url = webview.current.getURL();
       const input = url === "about:blank" ? "" : url;
       const title = webview.current.getTitle();
@@ -379,7 +484,10 @@ export function WebviewComponent(props: Props) {
   }
 
   function onBrowserAction (id: number, action: string) {
-    webview.current?.getWebContentsId() === id && runAction(action);
+    if (webview.current?.getWebContentsId() !== id) return;
+
+    if (action === "mode-command") stopPicker();
+    runAction(action);
   }
 
   function runAction(action: string) {
@@ -521,8 +629,15 @@ export function WebviewComponent(props: Props) {
           <IconComponent font="󰮐" color={selecting ? "purple-fg" : "gray-fg"} onClick={canSelect ? selectElement : undefined} />
         </FlexComponent>
         <FlexComponent color={color} margin={[2]} padding={[2]} border={[1]} rounded={[2]} grow={1} shadow>
-          <div className="space" ref={container} />
-          { renderRect() }
+          <FlexComponent grow={1}>
+            <div className="space" ref={container} />
+            {selecting && (
+              <FlexComponent position="absolute" inset={[0]} style={{ cursor: "crosshair" }}
+                onMouseDown={event => event.preventDefault()}
+                onMouseMove={hoverElement} onMouseLeave={() => hoverElement()} onClick={confirmElement} />
+            )}
+          </FlexComponent>
+          {!selecting && renderRect()}
         </FlexComponent>
       </FlexComponent>
     </FocusProvider>

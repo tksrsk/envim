@@ -1,15 +1,12 @@
 import type * as Electron from "electron";
 import type { Server } from "@modelcontextprotocol/server";
 
-import type { IBrowserElement } from "common/interface";
-
 import { refToSelector, snapshotTab } from "main/mcp/axtree";
 import { captureGuest, screenshotTool, type Screenshot } from "main/mcp/capture";
 import { Dialogs, handleDialogTool, type ActionOutcome } from "main/mcp/dialogs";
 import { Downloads, downloadsTool, type DownloadContent } from "main/mcp/downloads";
 import { MockPreview, showMockTool } from "main/mcp/preview";
 import { SharedBrowser, webOrigin } from "main/mcp/sharedbrowser";
-import { isPicking, pickElement, stopPicking } from "main/mcp/picker";
 import { goInHistory, runTabAction, summarizeTab, useTabTool, waitInTab, type BrowserTab } from "main/mcp/tabs";
 import { waitForLoadOrThrow } from "main/mcp/wait";
 import { readLogsTool, TabLogs } from "main/mcp/tablog";
@@ -44,7 +41,6 @@ export class BrowserTools {
     this.notify = message => workspace.emit.send("acp:browser:notice", message);
     this.downloads = new Downloads(this.notify, guestId => this.session !== undefined && this.shared.has(guestId));
     this.shared = new SharedBrowser(workspace.emit, guest => {
-      stopPicking(guest);
       // A dialog the agent has not answered goes to the user.
       Dialogs.release(guest.id);
     },
@@ -78,20 +74,6 @@ export class BrowserTools {
   reset(): void {
     this.setSession(undefined);
     this.shared.revoke();
-  }
-
-  stopPicking(guestId: number): void {
-    const guest = this.shared.guest(guestId);
-    if (guest) stopPicking(guest);
-  }
-
-  async pick(guestId: number, onSelection: (selection: IBrowserElement) => void): Promise<void> {
-    const guest = this.shared.guest(guestId);
-    if (!guest) throw new Error("Share this tab with the active ACP session before selecting an element.");
-
-    await pickElement(guest, () => this.shared.guest(guestId) === guest, selection => {
-      onSelection({ ...selection, url: guest.getURL(), tab: guestId });
-    });
   }
 
   // The shared tabs.
@@ -216,10 +198,6 @@ export class BrowserTools {
     }
 
     if (params.action !== "inspect") {
-      // The element picker takes trusted clicks as the user's selection.
-      if ((params.action === "click" || params.action === "check") && isPicking(tab.guest)) {
-        throw new Error(`The user is selecting an element in tab ${tab.id}. Try again after the selection ends.`);
-      }
       const resolved = await BrowserTools.withSelector(tab, params);
       signal.throwIfAborted();
       const run = () => this.act(tab, () => runTabAction(tab, resolved));

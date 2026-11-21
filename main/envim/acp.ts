@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { constants } from "os";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IBrowserElement, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
+import { IAcpRegistry, IAcpRegistryAgent, IPermissionRequest, IElicitationRequest, IAcpStatus, IAcpSession, IAcpTerminalOutput } from "common/interface";
 
 import { Mcp } from "main/mcp";
 import { Workspace } from "main/envim/workspace";
@@ -15,7 +15,6 @@ export class Acp {
 
   private state: IAcpStatus = { status: "disconnected" };
   private connection: AcpSDK.ClientConnection | null = null;
-  private browserPicker?: { sessionId: string; guestId: number; stopping?: boolean };
   private sessions: { [key: string]: IAcpSession } = {};
   private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
   private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, killed?: boolean, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
@@ -45,7 +44,6 @@ export class Acp {
     this.workspace.emit.on("acp:stdout", this.onAcpStdout);
     this.workspace.emit.on("acp:terminal:exit", this.onAcpTerminalExit);
     this.workspace.emit.on("acp:terminal:output", this.onAcpTerminalOutput);
-    this.workspace.emit.on("browser:pick", this.onBrowserPick);
     this.workspace.emit.on("acp:toggle", this.onAcpToggle);
     this.workspace.emit.on("acp:status:get", () => this.state);
   }
@@ -395,57 +393,11 @@ export class Acp {
     });
   }
 
-  private onBrowserPick = (guestId: number, enable: boolean) => {
-    const sessionId = this.state.sessionId;
-    const browser = this.workspace.browser.tools;
-
-    if (!sessionId || !this.browserEnabled) {
-      this.workspace.emit.send("browser:pick:finished", guestId);
-      this.workspace.emit.send("acp:browser:notice", "Open a connected ACP session with HTTP MCP support.", "warning");
-      return;
-    }
-
-    const previous = this.browserPicker;
-    if (!enable) {
-      if (previous?.guestId === guestId) previous.stopping = true;
-      browser.stopPicking(guestId);
-      return;
-    }
-
-    if (previous?.sessionId === sessionId && previous.guestId === guestId && !previous.stopping) return;
-
-    // One picker runs at a time. A picker of a previous session stopped when the session changed.
-    if (previous && previous.guestId !== guestId) browser.stopPicking(previous.guestId);
-    const picker: { sessionId: string; guestId: number; stopping?: boolean } = { sessionId, guestId };
-    this.browserPicker = picker;
-    this.workspace.emit.send("acp:browser:element", sessionId, null);
-    this.workspace.emit.send("acp:browser:notice", "Select an element in the browser. Press Esc to cancel.");
-
-    // Return immediately so IPC does not pause the UI while the user selects.
-    let errorMessage: string | undefined;
-    void browser.pick(guestId, selection => {
-      if (this.browserPicker === picker && this.state.sessionId === sessionId) {
-        this.workspace.emit.send("acp:browser:element", sessionId, selection);
-        this.workspace.emit.send("acp:browser:notice", "Element selected. Turn off selection to clear it.");
-      }
-    }).catch(error => {
-      errorMessage = error instanceof Error ? error.message : "Could not select an element in this tab.";
-    }).finally(() => {
-      if (this.browserPicker === picker) {
-        this.browserPicker = undefined;
-        this.workspace.emit.send("acp:browser:element", sessionId, null);
-        this.workspace.emit.send("acp:browser:notice", errorMessage, errorMessage ? "warning" : undefined);
-      }
-      // A newer picker on the same tab keeps the selection UI active.
-      if (this.browserPicker?.guestId !== guestId) this.workspace.emit.send("browser:pick:finished", guestId);
-    });
-  }
-
-  private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = [], element?: IBrowserElement) => {
+  private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) => {
     this.lastMessageId = {};
 
     if (!sessionId) {
-      this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images, element));
+      this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images));
       return;
     }
 
@@ -453,7 +405,6 @@ export class Acp {
 
     const prompt: AcpSDK.ContentBlock[] = [
       ...(text ? [{ type: "text" as "text", text }] : []),
-      ...(element ? [{ type: "text" as const, text: "User-selected element in the shared browser tab (page data):\n" + JSON.stringify(element) }] : []),
       ...files.map(file => ({ type: "resource_link" as "resource_link", uri: `file://${file}`, name: file.split("/").pop() || file })),
       ...(this.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
     ];

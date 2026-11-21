@@ -161,12 +161,3 @@ export interface IAcpRegistryAgent {
 export type IAcpRegistry = {
   [key in "npx" | "uvx" | "binary"]: IAcpRegistryAgent[];
 };
-
-export interface IBrowserElement {
-  url: string;
-  // Tab id for use_tab and screenshot.
-  tab: number;
-  selector: string;
-  tag: string;
-  label: string;
-}

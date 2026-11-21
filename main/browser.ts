@@ -4,7 +4,6 @@ import { lookup } from "dns";
 import { Bootstrap } from "main/bootstrap";
 import { Emit } from "main/emit";
 import { Dialogs } from "main/mcp/dialogs";
-import { isPicking } from "main/mcp/picker";
 import { TabLogs } from "main/mcp/tablog";
 
 export class Browser {
@@ -105,7 +104,7 @@ export class Browser {
   private onInput = (e: Electron.Event, input: Electron.Input) => {
     switch (input.key) {
       case "Escape":
-        if (this.currentMode === "browser" && !isPicking(this.webContents)) {
+        if (this.currentMode === "browser") {
           e.preventDefault();
           Emit.send("browser:action", this.webContents.id, "mode-command");
         }
