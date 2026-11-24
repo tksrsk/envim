@@ -28,11 +28,10 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
 };
 
-export function InputComponent () {
+export function InputComponent({ input }: { input: React.RefObject<HTMLInputElement | null> }) {
   const { busy, mode } = useEditor();
   const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy });
-  const input: React.RefObject<HTMLInputElement | null> = React.useRef<HTMLInputElement>(null);
   const { active, targets } = useFocus();
   const focused = active === input.current;
 

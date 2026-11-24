@@ -4,6 +4,7 @@ import { ISetting, ITab, IMode, IMenu } from "common/interface";
 
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
+import type { BrowserWorkspace } from "renderer/context/browser";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
@@ -11,12 +12,17 @@ import { icons, uiIcons } from "renderer/utils/icons";
 
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
+import { SurfaceSwitchComponent, WorkspaceTabComponent } from "renderer/components/tab";
+import { BrowserTablineComponent } from "renderer/components/browser/tabline";
 import { MenuComponent } from "renderer/components/menu";
 
 interface Props {
   width: number;
   height: number;
   paddingLeft: number;
+  onToggleSurface: () => void;
+  onFocusEditor: () => void;
+  browserState?: BrowserWorkspace;
 }
 
 interface States {
@@ -29,15 +35,7 @@ interface States {
   enabled: boolean;
 }
 
-const styles: { [k: string]: React.CSSProperties } = {
-  tab: {
-    width: 150,
-    minWidth: "2rem",
-    cursor: "pointer",
-  },
-};
-
-export function TablineComponent(props: Props) {
+export function TablineComponent({ onToggleSurface, onFocusEditor, browserState, ...props }: Props) {
   const { options, mode, tabs, menus  } = useEditor();
   const { workspace, workspaces, emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
@@ -143,10 +141,11 @@ export function TablineComponent(props: Props) {
     }
 
     return (
-      <FlexComponent key={i} animate="fade-in hover" color={icon.color} active={tab.active} title={tab.name} shrink={tab.active ? 0 : 2} margin={[4, 2, 0]} padding={[0, 8]} rounded={[4, 4, 0, 0]} shadow={tab.active} style={styles.tab} onClick={e => runCommand(e, `tabnext ${i + 1}`)} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop} >
-        <IconComponent font={icon.font} text={tab.name.replace(/.*\//, "…/")} />
-        { state.tabs.length > 1 && <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => runCommand(e, `confirm tabclose ${i + 1}`)} hover /> }
-      </FlexComponent>
+      <WorkspaceTabComponent key={i} color={icon.color} active={tab.active} title={tab.name}
+        font={icon.font} text={tab.name.replace(/.*\//, "…/")}
+        onClick={event => runCommand(event, `tabnext ${i + 1}`)}
+        onClose={state.tabs.length > 1 ? event => runCommand(event, `confirm tabclose ${i + 1}`) : undefined}
+        onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop} />
     );
   }
 
@@ -162,7 +161,10 @@ export function TablineComponent(props: Props) {
         </MenuComponent>
       ) : (
         menu.mappings[sname]?.enabled && menu.mappings[sname]?.rhs
-          ? <FlexComponent key={i} onClick={e => runCommand(e, `emenu ${command.join(".")}`)} spacing>{ menu.name }</FlexComponent>
+          ? <FlexComponent key={i} onClick={event => {
+            onFocusEditor();
+            runCommand(event, `emenu ${command.join(".")}`);
+          }} spacing>{ menu.name }</FlexComponent>
           : <FlexComponent key={i} color="gray-fg" spacing>{ menu.name }</FlexComponent>
       );
     });
@@ -202,8 +204,13 @@ export function TablineComponent(props: Props) {
 
   return (
     <FlexComponent color="default" overflow="visible" zIndex={1} style={props} shadow>
-      {state.enabled && state.tabs.map((tab, i) => renderTab(i, tab))}
-      <IconComponent color="green-fg" font={uiIcons.add} onClick={e => runCommand(e, "$tab split")} />
+      <SurfaceSwitchComponent onClick={onToggleSurface} />
+      {browserState
+        ? <BrowserTablineComponent state={browserState} />
+        : <>
+          {state.enabled && state.tabs.map((tab, i) => renderTab(i, tab))}
+          <IconComponent color="green-fg" font={uiIcons.add} onClick={e => runCommand(e, "$tab split")} />
+        </>}
       <MenuComponent label={renderBookmark}>
         { renderBookmarkMenu("") }
       </MenuComponent>

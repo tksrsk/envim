@@ -19,8 +19,6 @@ export const WorkspaceProvider: React.FC<{ workspace: string; workspaces: { [id:
   const highlights = React.useMemo(() => new Highlights(), []);
   const canvas = React.useMemo(() => new Canvas(highlights), [highlights]);
 
-  React.useEffect(() => () => emit.dispose(), []);
-
   return (
     <WorkspaceContext.Provider value={{ workspace, workspaces, active, emit, highlights, canvas }}>
       {children}

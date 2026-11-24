@@ -12,7 +12,8 @@ async function setup(t) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>');
   global.window = dom.window;
   global.document = dom.window.document;
-  global.HTMLElement = dom.window.HTMLElement;
+  const elementTypes = ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'HTMLButtonElement'];
+  for (const type of elementTypes) global[type] = dom.window[type];
   global.CSS = { highlights: new Map() };
   global.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
@@ -50,12 +51,12 @@ async function setup(t) {
   t.after(async () => {
     await React.act(async () => root.unmount());
     dom.window.close();
-    for (const key of ['window', 'document', 'HTMLElement', 'CSS', 'IS_REACT_ACT_ENVIRONMENT']) delete global[key];
+    for (const key of ['window', 'document', ...elementTypes, 'CSS', 'IS_REACT_ACT_ENVIRONMENT']) delete global[key];
   });
   return {
     container,
     receive,
-    notice: notice => receive('acp:status:changed', { status: 'connected', sessionId: 'active', notice }),
+    notice: notice => receive('acp:notice:changed', notice),
     message: (update, sessionId = 'active') => receive('acp:message:added', { sessionId, update }),
     get compactions() { return [...container.querySelectorAll('details')].filter(element => element.querySelector('summary')?.textContent.includes('context') || element.querySelector('summary')?.textContent.includes('Context')); }
   };
@@ -130,7 +131,7 @@ test('matching compaction IDs in another session do not overwrite the active dis
 });
 
 
-test('the notice area replaces the previous notice and clears with status', async t => {
+test('the notice area replaces the previous notice and clears independently of status', async t => {
   const ui = await setup(t);
   await ui.notice({ severity: 'error', title: 'Previous error', description: 'Old detail' });
   await ui.notice({ severity: 'warning', title: 'Latest warning' });
@@ -138,13 +139,16 @@ test('the notice area replaces the previous notice and clears with status', asyn
   assert.equal(ui.container.querySelectorAll('strong').length, 1);
   assert.equal(ui.container.querySelector('strong').textContent, 'Latest warning');
   await ui.receive('acp:status:changed', { status: 'connected', sessionId: 'active' });
+  assert.equal(ui.container.querySelector('strong').textContent, 'Latest warning');
+  await ui.notice();
   assert.equal(ui.container.querySelector('strong'), null);
 });
 
 test('notice area is available without a session during startup and authentication', async t => {
   const ui = await setup(t);
   for (const status of ['connecting', 'authenticating', 'disconnected']) {
-    await ui.receive('acp:status:changed', { status, notice: { severity: 'error', title: 'Startup failed' } });
+    await ui.receive('acp:status:changed', { status });
+    await ui.notice({ severity: 'error', title: 'Startup failed' });
     assert.match(ui.container.querySelector('[role="alert"]').textContent, /Startup failed/);
   }
 });
@@ -155,7 +159,7 @@ test('compaction errors remain in the compaction UI when notices change or clear
   await ui.notice({ severity: 'warning', title: 'Independent notice' });
   assert.match(ui.compactions[0].textContent, /Compaction failure/);
   assert.doesNotMatch(ui.compactions[0].textContent, /Independent notice/);
-  await ui.receive('acp:status:changed', { status: 'connected', sessionId: 'active' });
+  await ui.notice();
   assert.match(ui.compactions[0].textContent, /Compaction failure/);
   assert.doesNotMatch(ui.container.textContent, /Independent notice/);
 });

@@ -20,9 +20,11 @@ import { ElicitationComponent } from "renderer/components/acp/elicitation";
 interface State {
   visible: boolean;
   status: IAcpStatus;
+  notice?: AcpSDK.Notice;
   sessions: IAcpSession[];
   messages: AcpSDK.SessionNotification[];
   input: string;
+  promptContext?: { label: string; value: string };
   mode: { sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
@@ -76,15 +78,19 @@ export function AcpComponent() {
 
   React.useEffect(() => {
     emit.on("acp:file:add", onAcpFileAdd);
+    emit.on("acp:prompt:context", onSetPromptContext);
     emit.on("acp:message:added", onAcpMessageAdded);
     emit.on("acp:session:update", onAcpSessionUpdate);
+    emit.on("acp:notice:changed", onAcpNoticeChanged);
     emit.on("acp:status:changed", onAcpStatusChanged);
     emit.on("acp:toggle", onAcpToggle);
 
     return () => {
       emit.off("acp:file:add", onAcpFileAdd);
+      emit.off("acp:prompt:context", onSetPromptContext);
       emit.off("acp:message:added", onAcpMessageAdded);
       emit.off("acp:session:update", onAcpSessionUpdate);
+      emit.off("acp:notice:changed", onAcpNoticeChanged);
       emit.off("acp:status:changed", onAcpStatusChanged);
       emit.off("acp:toggle", onAcpToggle);
     };
@@ -173,6 +179,10 @@ export function AcpComponent() {
     }));
   }
 
+  function onSetPromptContext(context?: State["promptContext"]) {
+    setState(state => ({ ...state, promptContext: context }));
+  }
+
   function onAcpMessageAdded(message: AcpSDK.SessionNotification) {
     setState(state => ({
       ...state,
@@ -190,6 +200,10 @@ export function AcpComponent() {
 
       return { ...state, sessions, session, messages };
     });
+  }
+
+  function onAcpNoticeChanged(notice?: AcpSDK.Notice) {
+    setState(state => ({ ...state, notice }));
   }
 
   function onAcpStatusChanged(status: IAcpStatus) {
@@ -309,10 +323,6 @@ export function AcpComponent() {
     checkAcpStatus("processing") || emit.send("acp:session:config", configId, value);
   }
 
-  function onSelectCommand(selected: string) {
-    setState(state => ({ ...state, input: `${state.input}/${selected} ` }));
-  }
-
   function onRemoveFile(file: string) {
     setState(state => ({ ...state, files: state.files.filter(f => f !== file) }));
   }
@@ -399,14 +409,16 @@ export function AcpComponent() {
         }
 
         break;
-      case "prompt":
+      case "prompt": {
         if (checkAcpStatus("processing")) {
           return;
         }
 
-        emit.send("acp:prompt:send", state.status.sessionId, input.trim(), state.files, state.images);
+        const prompt = [state.promptContext?.value, input.trim()].filter(Boolean).join(" ");
+        emit.send("acp:prompt:send", state.status.sessionId, prompt, state.files, state.images);
 
         break;
+      }
       case "search":
         search.query = input;
         search.highlight = true;
@@ -415,7 +427,11 @@ export function AcpComponent() {
         break;
     }
 
-    setState(state => ({ ...state, search, input: "", files: [], images: [], mode: { sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
+    setState(state => ({
+      ...state, search, input: "", files: [], images: [],
+      promptContext: state.mode.sub === "prompt" ? undefined : state.promptContext,
+      mode: { sub: checkAcpStatus("connected") ? "prompt" : "package" },
+    }));
     command.current?.focus();
   }
 
@@ -584,16 +600,16 @@ export function AcpComponent() {
         </FlexComponent>
 
         <FlexComponent direction="column" padding={[4]}>
-          {state.status.notice && (
-            <FlexComponent color={({ error: "red", warning: "yellow" } as Record<string, string>)[state.status.notice.severity] ?? "blue"} padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
-              <IconComponent font={({ error: uiIcons.error, warning: uiIcons.warning } as Record<string, string>)[state.status.notice.severity] ?? uiIcons.info} />
-              <div role={state.status.notice.severity === "error" ? "alert" : "status"}>
-                <strong>{state.status.notice.title}</strong>
-                {state.status.notice.description && <div>{state.status.notice.description}</div>}
+          {state.notice && (
+            <FlexComponent color={({ error: "red", warning: "yellow" } as Record<string, string>)[state.notice.severity] ?? "blue"} padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
+              <IconComponent font={({ error: uiIcons.error, warning: uiIcons.warning } as Record<string, string>)[state.notice.severity] ?? uiIcons.info} />
+              <div role={state.notice.severity === "error" ? "alert" : "status"}>
+                <strong>{state.notice.title}</strong>
+                {state.notice.description && <div>{state.notice.description}</div>}
               </div>
             </FlexComponent>
           )}
-          {state.status.notice && <div className="divider color-gray" /> }
+          {state.notice && <div className="divider color-gray" /> }
           {state.status.elicitation && (
             <CollapseComponent label="󰋗 Elicitation" style={{marginBottom: 4}} open>
               <ElicitationComponent request={state.status.elicitation} />
@@ -679,6 +695,13 @@ export function AcpComponent() {
               </MenuComponent>
             )}
           </FlexComponent>
+          {state.promptContext && (
+            <FlexComponent>
+              <span>{state.promptContext.label}</span>
+              <div className="space" />
+              <IconComponent font={uiIcons.close} color="gray-fg" onClick={() => onSetPromptContext()} />
+            </FlexComponent>
+          )}
           <textarea
             ref={textarea}
             placeholder={getPlaceholder()}
@@ -692,7 +715,8 @@ export function AcpComponent() {
             {state.session && state.session.commands.length > 0 && (
               <MenuComponent label="" color="green-fg">
                 {state.session.commands.map((command) => (
-                  <FlexComponent key={command.name} onClick={() => onSelectCommand(command.name)} title={command.description} spacing>
+                  <FlexComponent key={command.name} title={command.description} spacing
+                    onClick={() => onSetPromptContext({ label: `/${command.name}`, value: `/${command.name}` })}>
                     /{command.name}
                   </FlexComponent>
                 ))}

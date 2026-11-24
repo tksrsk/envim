@@ -1,8 +1,8 @@
 export class WorkspaceEmit {
-  constructor(private readonly workspace: string) {}
+  constructor(readonly workspaceId: string) {}
 
   event(base: string) {
-    return `${this.workspace}:${base}`;
+    return `${this.workspaceId}:${base}`;
   }
 
   on(event: string, callback: (...args: any[]) => void) {
@@ -23,10 +23,6 @@ export class WorkspaceEmit {
 
   share(event: string, ...args: any[]) {
     return Emit.share(this.event(event), ...args);
-  }
-
-  dispose() {
-    Emit.clear(this.workspace);
   }
 }
 
@@ -63,9 +59,5 @@ export class Emit {
     if (Emit.events[event]) {
       Emit.events[event] = Emit.events[event].filter(stored => callback !== stored);
     }
-  }
-
-  static clear(prefix: string) {
-    window.envimIPC.clear(prefix);
   }
 }

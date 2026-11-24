@@ -6,6 +6,7 @@ import { FlexComponent } from "renderer/components/flex";
 
 interface Props {
   font: string;
+  glyph?: React.ReactNode;
   color?: string;
   style?: React.CSSProperties;
   text?: number | string;
@@ -47,6 +48,7 @@ export function IconComponent(props: Props) {
   }
 
   const icon = (() => {
+    if (props.glyph !== undefined) return props.glyph;
     if (props.mark) return <i style={{ ...styles.mark, maskImage: `url(${props.font})` }} />;
     if (url) return <img src={props.font} height={Setting.font.size} />;
     return <i>{ props.font }</i>;

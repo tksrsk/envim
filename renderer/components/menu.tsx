@@ -42,10 +42,40 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
 };
 
+const openMenus = new Set<HTMLDivElement>();
+export const menuLayoutEvent = "envim:menu-layout";
+
+export function menuOverlaps(bounds: DOMRectReadOnly): boolean {
+  for (const menu of openMenus) {
+    const rect = menu.getBoundingClientRect();
+    if (rect.left < bounds.right && rect.right > bounds.left &&
+        rect.top < bounds.bottom && rect.bottom > bounds.top) return true;
+  }
+  return false;
+}
+
 export function MenuComponent(props: React.PropsWithChildren<Props>) {
   const [state, setState] = React.useState<States>({ position: null });
   const timer: React.RefObject<number> = React.useRef<number>(0);
   const div: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
+  const menu = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    const element = menu.current;
+    if (!element) return;
+    const notify = () => document.dispatchEvent(new Event(menuLayoutEvent));
+    openMenus.add(element);
+    notify();
+    const observer = new ResizeObserver(notify);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      openMenus.delete(element);
+      notify();
+    };
+  }, [state.position]);
+
+  React.useEffect(() => () => clearTimeout(timer.current), []);
 
   function onClick() { }
 
@@ -86,7 +116,7 @@ export function MenuComponent(props: React.PropsWithChildren<Props>) {
     const direction = props.horizontal ? "row" : "column";
 
     return createPortal((
-      <FlexComponent color="default" animate="fade-in" direction={direction} position="fixed" zIndex={20} rounded={[2]} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} shadow>
+      <FlexComponent ref={menu} color="default" animate="fade-in" direction={direction} position="fixed" zIndex={20} rounded={[2]} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} shadow>
         { props.children }
       </FlexComponent>
     ), document.getElementById("theme") || document.body);

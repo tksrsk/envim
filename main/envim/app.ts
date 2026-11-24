@@ -28,11 +28,10 @@ export class App {
       case "redraw": return this.redraw(args);
       case "envim_clipboard": return this.workspace.clipboard.copy(args[0], args[1]);
       case "envim_setbackground": return Emit.share("neovim:theme", args[0]);
-      case "envim_openurl": return args.length && this.workspace.emit.share("browser:open", args[0], args[1] || "");
-      case "envim_webview": return args.length === 3 && this.workspace.emit.share("browser:view", args[0], args[1], args[2]);
+      case "envim_openurl": return args.length && this.workspace.emit.share("browser:open", args[0]);
       case "envim_acp_stdout": return this.workspace.emit.share("acp:stdout", args[0]);
       case "envim_acp_exited": return this.workspace.emit.share("acp:exited", args[0]);
-      case "envim_acp_error": return this.workspace.emit.share("acp:error", args[0]);
+      case "envim_acp_notice": return this.workspace.emit.update("acp:notice:changed", false, args[0]);
       case "envim_acp_file_add": return this.workspace.emit.send("acp:file:add", args[0]);
       case "envim_acp_terminal_output": return this.workspace.emit.share("acp:terminal:output", args[0]);
       case "envim_acp_terminal_exit": return this.workspace.emit.share("acp:terminal:exit", args[0]);

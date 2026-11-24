@@ -30,7 +30,6 @@ export class Acp {
     this.workspace.emit.on("acp:auth:authenticate", this.onAcpAuthAuthenticate);
     this.workspace.emit.on("acp:auth:logout", this.onAcpAuthLogout);
     this.workspace.emit.on("acp:elicitation:response", this.onAcpElicitationResponse);
-    this.workspace.emit.on("acp:error", this.onAcpError);
     this.workspace.emit.on("acp:exited", this.onAcpExited);
     this.workspace.emit.on("acp:follow:toggle", this.onAcpFollowToggle);
     this.workspace.emit.on("acp:permission:response", this.onAcpPermissionResponse);
@@ -47,9 +46,12 @@ export class Acp {
     this.workspace.emit.on("acp:toggle", this.onAcpToggle);
   }
 
+  private setNotice(notice?: AcpSDK.Notice) {
+    this.workspace.emit.update("acp:notice:changed", false, notice);
+  }
+
   private setState(state: IAcpStatus) {
     this.state = state;
-
     this.workspace.emit.update("acp:status:changed", false, this.state);
   }
 
@@ -115,7 +117,7 @@ export class Acp {
     if (!params.sessionId || params.sessionId !== this.state.sessionId) return;
 
     if (params.update.sessionUpdate === "notice") {
-      this.setState({ ...this.state, notice: params.update });
+      this.setNotice(params.update);
       return;
     }
 
@@ -164,6 +166,7 @@ export class Acp {
       .flatMap(content => content.type === "terminal" && this.terminal[content.terminalId] ? [content.terminalId] : [])
       .reduce((terminals, terminalId) => {
         const { output, truncated, exitStatus } = this.terminal[terminalId];
+        // eslint-disable-next-line no-control-regex -- ANSI escape sequences use control characters.
         const display = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
 
         return { ...terminals, [terminalId]: { output: display, truncated, exitStatus } };
@@ -216,18 +219,17 @@ export class Acp {
   ): Promise<AcpSDK.AgentRequestResponsesByMethod[M] | void> {
     if (!this.connection) return Promise.resolve();
 
-    this.setState({ ...this.state, notice: undefined });
-
     return (this.connection.agent.request(method, params)).catch(err => {
       const autherror = this.state.initialize?.authMethods?.length && err instanceof AcpSDK.RequestError && err.code === -32000;
       const status = autherror || this.state.agent?.auth ? "authenticating" : "connected";
 
       this.setState({ ...this.state, status });
-      this.onAcpError(err);
+      this.setNotice({ severity: "error", title: err instanceof Error ? err.message : String(err) });
     });
   }
 
   private onAcpAgentStart = async (agent: IAcpRegistryAgent) => {
+    this.setNotice();
     this.setState({ status: agent.auth ? "authenticating" : "connecting", agent });
 
     const result = await this.workspace.emit.share("neovim:function", "EnvimAcpStart", [agent]);
@@ -266,6 +268,7 @@ export class Acp {
   }
 
   private onAcpAgentStop = () => {
+    this.setNotice();
     this.setState({ status: "disconnected" });
 
     this.workspace.emit.share("neovim:function", "EnvimAcpStop", []);
@@ -281,6 +284,7 @@ export class Acp {
         this.onAcpAgentStart(selectedAgent);
       });
     } else {
+      this.setNotice();
       this.setState({ ...this.state, agent: selectedAgent });
       this.callAgent(AcpSDK.methods.agent.authenticate, { methodId }).then(response => {
         this.setState({ ...this.state, agent, status: response ? "connected" : "authenticating" });
@@ -292,6 +296,7 @@ export class Acp {
   private onAcpAuthLogout = () => {
     if (!this.connection) return;
 
+    this.setNotice();
     this.callAgent(AcpSDK.methods.agent.logout, {}).then(() => {
       this.setState({ ...this.state, status: "authenticating" });
     });
@@ -333,10 +338,6 @@ export class Acp {
     }
   }
 
-  private onAcpError = (error: unknown) => {
-    this.setState({ ...this.state, notice: { severity: "error", title: error instanceof Error ? error.message : String(error) } });
-  }
-
   private onAcpExited = (code: number) => {
     if ((this.state.agent?.auth as { type?: string } | undefined)?.type === "terminal" && code === 0) {
       const { auth, ...agent } = this.state.agent!;
@@ -348,7 +349,7 @@ export class Acp {
     this.sessions = {};
 
     this.setState({ status: "disconnected" });
-    if (code !== 0) this.onAcpError(`Exited code: ${code}`);
+    if (code === 0) this.setNotice();
     this.notifySessionUpdate();
   }
 
@@ -385,7 +386,7 @@ export class Acp {
 
     this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
       this.setState({ ...this.state, status: "connected" });
-      this.onAcpError(err);
+      this.setNotice({ severity: "error", title: err instanceof Error ? err.message : String(err) });
     });
   }
 
@@ -405,6 +406,7 @@ export class Acp {
       ...(this.state.initialize?.agentCapabilities?.promptCapabilities?.image ? images.map(image => ({ ...image, type: "image" as "image" })) : [] ),
     ];
 
+    this.setNotice();
     prompt.forEach(content => this.addMessage({ sessionId, update: { sessionUpdate: "user_message_chunk", content }}));
     this.setState({ ...this.state, status: "processing" });
     this.callAgent(AcpSDK.methods.agent.session.prompt, { sessionId, prompt }).then(result => {
@@ -441,6 +443,7 @@ export class Acp {
   private onAcpSessionCreate = async () => {
     if (!this.connection) return;
 
+    this.setNotice();
     this.setState({ ...this.state, status: "processing" });
 
     if (this.state.sessionId && this.state.initialize?.agentCapabilities?.sessionCapabilities?.close) {
@@ -449,7 +452,7 @@ export class Acp {
 
     return this.callAgent(AcpSDK.methods.agent.session.new, {
       cwd: this.workspace.cwd,
-      mcpServers: await Mcp.servers(this.workspace),
+      mcpServers: await Mcp.servers(this.workspace, this.state.initialize),
     }).then(response => {
       if (!response) return;
 
@@ -486,7 +489,7 @@ export class Acp {
     return this.callAgent(AcpSDK.methods.agent.session.fork, {
       sessionId,
       cwd: this.workspace.cwd,
-      mcpServers: await Mcp.servers(this.workspace),
+      mcpServers: await Mcp.servers(this.workspace, this.state.initialize),
     }).then(response => {
       if (!response) return;
 
@@ -519,9 +522,10 @@ export class Acp {
       (session.loaded && this.state.initialize?.agentCapabilities?.sessionCapabilities?.resume) ||
       (!session.loaded && this.state.initialize?.agentCapabilities?.loadSession)
     ) {
-      const mcpServers = await Mcp.servers(this.workspace);
+      const mcpServers = await Mcp.servers(this.workspace, this.state.initialize);
       const method = session.loaded ? AcpSDK.methods.agent.session.resume : AcpSDK.methods.agent.session.load;
 
+      if (sessionId !== this.state.sessionId) this.setNotice();
       this.setState({ ...this.state, status: "processing", sessionId });
       this.callAgent(method, {
         sessionId, cwd: this.workspace.cwd, mcpServers
@@ -535,6 +539,7 @@ export class Acp {
 
       session.loaded = true;
     } else {
+      if (sessionId !== this.state.sessionId) this.setNotice();
       this.setState({ ...this.state, sessionId });
       this.notifySessionUpdate();
     }
@@ -569,7 +574,7 @@ export class Acp {
         const bytes = Buffer.from(terminal.output);
         let start = bytes.length - terminal.outputByteLimit;
 
-        while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+        while (start < bytes.length && bytes[start] >= 0x80 && bytes[start] <= 0xbf) start++;
 
         terminal.output = bytes.subarray(start).toString();
         terminal.truncated = true;

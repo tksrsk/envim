@@ -4,7 +4,6 @@ import { existsSync } from "fs";
 import { lookup } from "mime-types";
 
 import { Emit } from "main/emit";
-import { Browser } from "main/browser";
 
 export class Bootstrap {
   static win?: Electron.BrowserWindow;
@@ -45,7 +44,6 @@ export class Bootstrap {
       titleBarStyle: "hidden",
       titleBarOverlay: true,
       webPreferences: {
-        webviewTag: true,
         spellcheck: false,
         preload: join(__dirname, "../preload/index.js"),
       },
@@ -57,7 +55,6 @@ export class Bootstrap {
     Bootstrap.win.on("resize", () => Bootstrap.win && Emit.update("app:resize", true, ...Bootstrap.win.getSize()));
     Bootstrap.win.on("leave-full-screen", () => Bootstrap.win && Emit.send("app:resize", ...Bootstrap.win.getSize()));
     Bootstrap.win.once("ready-to-show", () => Emit.share("neovim:theme"));
-    Bootstrap.win.webContents.on("did-attach-webview", (_, webContents) => new Browser(webContents));
     Bootstrap.win.webContents.on("will-navigate", (e, url) => {
       const { protocol } = new URL(url);
 
@@ -65,11 +62,6 @@ export class Bootstrap {
 
       if (["file:"].includes(protocol)) Emit.share("neovim:function", "EnvimOpenFile", [url]);
       if (["http:", "https:"].includes(protocol)) Emit.share("browser:open", url);
-    });
-    Bootstrap.win.webContents.on("will-attach-webview", (_, webPreferences) => {
-      delete(webPreferences.preload);
-      webPreferences.nodeIntegration = false;
-      webPreferences.transparent = false;
     });
     Electron.session.defaultSession.protocol.handle("file", async (request) => {
       const filePath = decodeURIComponent(new URL(request.url).pathname);

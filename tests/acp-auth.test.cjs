@@ -15,6 +15,13 @@ loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText, filename);
 const { Acp } = loaded.exports;
+const appFilename = path.resolve(__dirname, '../main/envim/app.ts');
+const appModule = new Module(appFilename);
+appModule.require = name => name === 'main/emit' ? {} : require(name);
+appModule._compile(ts.transpileModule(fs.readFileSync(appFilename, 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText, appFilename);
+const { App } = appModule.exports;
 const agent = { name: 'fixture', package: { command: ['fixture', '--base'] } };
 const terminal = { id: 'terminal', name: 'Terminal', type: 'terminal', args: ['--login'], env: { TEST: 'value' } };
 const initialize = { authMethods: [terminal, { id: 'agent', name: 'Agent' }], agentCapabilities: {} };
@@ -26,10 +33,13 @@ function setup() {
   const invoke = async (name, args) => { calls.push([name, args]); return rpc(name, args); };
   const emit = {
     on: (name, fn) => { handlers[name] = fn; },
-    share: async (name, fn, args) => name === 'neovim:function' ? invoke(fn, args) : undefined,
+    share: async (name, fn, args) => name === 'neovim:function' ? invoke(fn, args) : handlers[name]?.(fn, args),
     send: (...args) => sent.push(args), update: (...args) => sent.push(args)
   };
-  const acp = new Acp({ emit, nvim: { call: invoke }, cwd: '/workspace' });
+  const workspace = { emit, nvim: { call: invoke }, cwd: '/workspace' };
+  const acp = new Acp(workspace);
+  const notifications = {};
+  new App({ ...workspace, nvim: { call: async () => [], on: (event, handler) => { notifications[event] = handler; } } });
   let request = async method => method === sdk.methods.agent.initialize ? structuredClone(initialize) : {};
   let closes = 0, connects = 0;
   const makeConnection = () => ({ close: () => { closes++; }, agent: {
@@ -42,7 +52,8 @@ function setup() {
   acp.state = { status: 'authenticating', agent, initialize: structuredClone(initialize) };
   acp.buildApp = () => ({ connect: () => { connects++; return makeConnection(); } });
   acp.createStream = () => ({});
-  return { acp, calls, sent, requests, handlers, dispatch, defaults, setRpc: fn => { rpc = fn; }, setRequest: fn => { request = fn; },
+  return { acp, calls, sent, requests, handlers, dispatch, defaults, notify: notifications.notification, setRpc: fn => { rpc = fn; }, setRequest: fn => { request = fn; },
+    get notice() { return sent.findLast(([event]) => event === 'acp:notice:changed')?.[2]; },
     get closes() { return closes; }, get connects() { return connects; } };
 }
 
@@ -89,7 +100,7 @@ test('failed or interrupted authentication disconnects without restarting either
     await flush();
     assert.equal(h.acp.state.status, 'disconnected');
     assert.equal(h.acp.state.agent, undefined);
-    assert.match(h.acp.state.notice.title, new RegExp(String(code)));
+    assert.equal(h.notice, undefined);
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 1);
     assert.equal(h.requests.length, 0);
     assert.equal(cancelled, 1);
@@ -104,7 +115,7 @@ test('terminal startup failure disconnects without reinitializing', async () => 
   h.handlers['acp:auth:authenticate']('terminal');
   await flush();
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.notice, undefined);
+  assert.equal(h.notice, undefined);
   assert.equal(h.acp.state.agent, undefined);
   assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 1);
   assert.equal(h.requests.length, 0);
@@ -150,10 +161,8 @@ test('Neovim + real SDK: failure, cancellation, retry and authenticated session'
     await nvim.command(`luafile ${path.resolve(__dirname, '../lua/acp.lua')}`);
     nvim.on('notification', (method, args) => {
       if (method !== 'envim_test') return;
-      const [event, data] = args[0];
-      const mapping = { envim_acp_stdout: 'acp:stdout', envim_acp_exited: 'acp:exited',
-        envim_acp_error: 'acp:error' };
-      if (mapping[event]) h.handlers[mapping[event]](data);
+      const [event, ...params] = args[0];
+      h.notify(event, params);
     });
     h.setRpc(async (name, args) => {
       if (name === 'EnvimAcpStart' && args?.[0]?.auth) assert.equal(await nvim.executeLua('return _G.envim_acp == nil', []), true);
@@ -177,7 +186,7 @@ test('Neovim + real SDK: failure, cancellation, retry and authenticated session'
     assert.equal(await nvim.executeLua('return _G.envim_acp == nil', []), true);
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 2);
     assert.equal(await nvim.call('bufexists', [failedBuffer]), 1);
-    assert.match(h.acp.state.notice.title, /7/);
+    assert.equal(h.notice, undefined);
     // A new attempt begins only after an explicit user start.
     await h.handlers['acp:agent:start'](fixture);
     await wait(() => h.acp.state.status === 'authenticating' && h.acp.state.initialize);
@@ -188,7 +197,7 @@ test('Neovim + real SDK: failure, cancellation, retry and authenticated session'
     await wait(() => h.acp.state.status === 'disconnected');
     assert.equal(await nvim.executeLua('return _G.envim_acp == nil', []), true);
     assert.equal(h.calls.filter(([name]) => name === 'EnvimAcpStart').length, 4);
-    assert.match(h.acp.state.notice.title, /Exited code/);
+    assert.equal(h.notice, undefined);
     await h.handlers['acp:agent:start'](fixture);
     await wait(() => h.acp.state.status === 'authenticating' && h.acp.state.initialize);
     h.handlers['acp:auth:authenticate']('fixture-login');
@@ -243,20 +252,20 @@ test('UI start resolves after process launch while initialization is still pendi
   h.setRequest(() => new Promise(resolve => { initialized = resolve; }));
   await h.dispatch['acp:agent:start'](agent);
   assert.equal(h.acp.state.status, 'connecting');
-  h.handlers['acp:error']('existing startup warning');
+  h.notify('envim_acp_notice', [{ severity: 'warning', title: 'existing startup warning' }]);
   initialized(structuredClone(initialize));
   await flush();
   assert.equal(h.acp.state.status, 'connected');
-  assert.equal(h.acp.state.notice.title, 'existing startup warning');
+  assert.deepEqual(h.notice, { severity: 'warning', title: 'existing startup warning' });
 });
 
-test('normal process failure disconnects and reports its exit code', async () => {
+test('process failure disconnects without publishing an exit-code notice', async () => {
   const h = setup();
   h.acp.connection = null;
   h.acp.state = { status: 'connecting', agent };
   await h.handlers['acp:exited'](1);
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.notice.title, 'Exited code: 1');
+  assert.equal(h.notice, undefined);
 });
 
 
@@ -274,7 +283,7 @@ test('normal process successful exit disconnects without an error', () => {
   h.acp.state.status = 'connected';
   h.handlers['acp:exited'](0);
   assert.equal(h.acp.state.status, 'disconnected');
-  assert.equal(h.acp.state.notice, undefined);
+  assert.equal(h.notice, undefined);
 });
 
 test('agent authentication records selection while pending and clears it after success', async () => {
@@ -300,7 +309,7 @@ test('failed agent authentication clears selection and stays at authentication c
     assert.equal(h.acp.state.status, 'authenticating');
     assert.equal(h.acp.state.agent.auth, undefined);
     assert.equal(h.acp.state.agent, agent);
-    assert.equal(h.acp.state.notice.title, error.message);
+    assert.equal(h.notice.title, error.message);
     assert.equal(h.calls.length, 0);
     assert.equal(h.requests.length, 1);
     h.setRequest(async () => ({}));
@@ -329,7 +338,7 @@ test('initialization advertises notices and compaction support', async () => {
   assert.deepEqual(initialize[1].clientCapabilities.session, { notices: {}, compaction: {} });
 });
 
-test('session notices update status while compaction updates reach message history', () => {
+test('session notices use their own event while compaction updates reach message history', () => {
   const h = setup();
   h.acp.state.sessionId = 'active';
   const updates = [
@@ -341,34 +350,86 @@ test('session notices update status while compaction updates reach message histo
   for (const update of updates) h.acp.onSessionUpdate({ sessionId: 'active', update });
   h.acp.onSessionUpdate({ sessionId: 'other', update: updates[0] });
   assert.deepEqual(h.sent.filter(([event]) => event === 'acp:message:added').map(([, value]) => value.update), updates.slice(1));
-  assert.deepEqual(h.acp.state.notice, updates[0]);
+  assert.deepEqual(h.notice, updates[0]);
 });
 
-test('application errors and agent notices replace the same status without entering history', () => {
+test('application errors and agent notices replace the same notice without entering history', async () => {
   const h = setup();
   h.acp.state.sessionId = 'active';
-  h.handlers['acp:error'](new Error('Prompt failed'));
-  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Prompt failed' });
+  h.setRequest(async () => { throw new Error('Prompt failed'); });
+  await h.acp.callAgent(sdk.methods.agent.session.prompt, { sessionId: 'active', prompt: [] });
+  assert.deepEqual(h.notice, { severity: 'error', title: 'Prompt failed' });
   const notice = { sessionUpdate: 'notice', severity: 'warning', title: 'Warning', description: 'Details' };
   h.acp.onSessionUpdate({ sessionId: 'active', update: notice });
-  assert.deepEqual(h.acp.state.notice, notice);
-  h.handlers['acp:error']('Latest error');
-  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Latest error' });
+  assert.deepEqual(h.notice, notice);
+  h.notify('envim_acp_notice', [{ severity: 'error', title: 'Latest error' }]);
+  assert.deepEqual(h.notice, { severity: 'error', title: 'Latest error' });
   assert.equal(h.sent.filter(([event]) => event === 'acp:message:added').length, 0);
 });
 
-test('startup and exit errors use status without requiring a session', () => {
+test('abnormal exit preserves the startup notice without a session', () => {
   const h = setup();
-  h.handlers['acp:error']('Startup failed');
-  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Startup failed' });
+  const notice = { severity: 'error', title: 'Startup failed', description: 'Startup details' };
+  h.notify('envim_acp_notice', [notice]);
+  assert.deepEqual(h.notice, notice);
   h.handlers['acp:exited'](1);
-  assert.deepEqual(h.acp.state.notice, { severity: 'error', title: 'Exited code: 1' });
+  assert.deepEqual(h.notice, notice);
   assert.equal(h.sent.filter(([event]) => event === 'acp:message:added').length, 0);
 });
 
-test('the next agent request clears the current notice as it did for errors', async () => {
+test('automatic session listing keeps the current notice', async () => {
   const h = setup();
-  h.handlers['acp:error']('Previous error');
-  await h.acp.callAgent(sdk.methods.agent.authenticate, { methodId: 'agent' });
-  assert.equal(h.acp.state.notice, undefined);
+  h.acp.state.initialize.agentCapabilities.sessionCapabilities = { list: {} };
+  h.setRequest(async () => ({ sessions: [] }));
+  const notice = { severity: 'warning', title: 'Startup warning' };
+  h.notify('envim_acp_notice', [notice]);
+
+  h.acp.listSession();
+  await flush();
+
+  assert.equal(h.requests[0][0], sdk.methods.agent.session.list);
+  assert.deepEqual(h.notice, notice);
+});
+
+test('failed launch keeps the notice received during startup', async () => {
+  const h = setup();
+  const notice = { severity: 'error', title: 'Installation failed' };
+  h.setRpc(async () => {
+    h.notify('envim_acp_notice', [notice]);
+    return null;
+  });
+  await h.handlers['acp:agent:start'](agent);
+  assert.equal(h.acp.state.status, 'disconnected');
+  assert.deepEqual(h.notice, notice);
+});
+
+test('a new prompt clears the notice after validating the session', async () => {
+  const h = setup();
+  const notice = { severity: 'error', title: 'Previous error' };
+  h.notify('envim_acp_notice', [notice]);
+  h.handlers['acp:prompt:send']('missing', 'Hello');
+  assert.deepEqual(h.notice, notice);
+
+  h.acp.sessions.active = { id: 'active' };
+  h.handlers['acp:prompt:send']('active', 'Hello');
+  await flush();
+
+  assert.equal(h.requests[0][0], sdk.methods.agent.session.prompt);
+  assert.equal(h.notice, undefined);
+});
+
+test('switching sessions locally clears the notice only when the active session changes', async () => {
+  const h = setup();
+  h.acp.state.sessionId = 'active';
+  h.acp.sessions.active = { id: 'active' };
+  h.acp.sessions.other = { id: 'other' };
+  const notice = { severity: 'warning', title: 'Previous session warning' };
+  h.notify('envim_acp_notice', [notice]);
+
+  await h.handlers['acp:session:switch']('active');
+  assert.deepEqual(h.notice, notice);
+  await h.handlers['acp:session:switch']('other');
+  assert.equal(h.acp.state.sessionId, 'other');
+  assert.equal(h.notice, undefined);
+  assert.equal(h.requests.length, 0);
 });

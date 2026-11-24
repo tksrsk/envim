@@ -143,3 +143,11 @@ button[type=submit] {
     background: color-mix(in srgb, var(--form-accent) 85%, var(--color-fg));
   }
 }
+
+input[type=text].browser-toolbar-input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}

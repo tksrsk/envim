@@ -12,7 +12,6 @@ import { y2Row, x2Col } from "renderer/utils/size";
 import { FlexComponent } from "renderer/components/flex";
 import { IconComponent } from "renderer/components/icon";
 import { MenuComponent } from "renderer/components/menu";
-import { WebviewComponent } from "renderer/components/webview";
 
 interface Props {
   gid: number;
@@ -36,7 +35,6 @@ interface States {
   dragging: boolean;
   hidden: boolean;
   scrolling: number;
-  webview: { src: string; active: boolean; };
   scroll: {
     total: number;
     height: string;
@@ -47,7 +45,7 @@ interface States {
 export function EditorComponent(props: Props) {
   const { busy, options, mode, bufs, drag } = useEditor();
   const { emit, canvas: canvasApi } = useWorkspace();
-  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.gid, dragging: false, hidden: false, scrolling: 0, webview: { src: "", active: false }, scroll: { total: 0, height: "100%", transform: "" } });
+  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.gid, dragging: false, hidden: false, scrolling: 0, scroll: { total: 0, height: "100%", transform: "" } });
   const canvas: React.RefObject<HTMLCanvasElement | null> = React.useRef<HTMLCanvasElement>(null);
   const timer: React.RefObject<number> = React.useRef(0);
   const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
@@ -56,7 +54,6 @@ export function EditorComponent(props: Props) {
   const { height, scale } = Setting.font;
 
   React.useEffect(() => {
-    emit.on(`browser:view:${props.gid}`, onBrowserView);
     emit.on(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
     emit.on(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
     emit.on(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
@@ -64,7 +61,6 @@ export function EditorComponent(props: Props) {
     return () => {
       clearInterval(timer.current);
       canvasApi.delete(props.gid);
-      emit.off(`browser:view:${props.gid}`, onBrowserView);
       emit.off(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
       emit.off(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
       emit.off(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
@@ -187,10 +183,6 @@ export function EditorComponent(props: Props) {
     runCommand(e, `${line} | redraw`);
   }
 
-  function onBrowserView(src: string, active: boolean) {
-    setState(state => ({ ...state, webview: { src, active } }));
-  }
-
   function onNeovimUiGridClear() {
     canvasApi.clear(props.gid, x2Col(props.style.width), y2Row(props.style.height));
   }
@@ -271,11 +263,6 @@ export function EditorComponent(props: Props) {
     );
   }
 
-  function renderPreview() {
-    const { src, active } = state.webview;
-    return active && <WebviewComponent src={src} active={props.focus} style={!state.hidden ? {} : { display: "none" }} />;
-  }
-
   return (
     <FlexComponent animate="fade-in hover" position="absolute" overflow="visible" nomouse={state.nomouse} style={{ ...props.style, ...(state.hidden ? { height: 0 } : {}) }} shadow={props.shadow && !state.hidden}
       onMouseDown={state.dragging ? undefined : onMouseDown}
@@ -288,7 +275,6 @@ export function EditorComponent(props: Props) {
       <FlexComponent nomouse>
         <canvas width={props.style.width * scale} height={props.style.height * scale} ref={canvas} />
       </FlexComponent>
-      { props.gid === 1 || renderPreview() }
       { props.gid === 1 || !props.focusable ? null : (
         <>
           <FlexComponent color="default" grow={1} position="absolute" inset={[0, -3, 0, "auto"]} onMouseDown={onScroll} hover={state.scrolling === 0}>
@@ -315,7 +301,7 @@ export function EditorComponent(props: Props) {
                 { font: "󰉡", onClick: e => runCommand(e, "wincmd =") },
               ],
             ]) }
-            { !state.webview.active && props.type === "normal" && <IconComponent color="gray-fg" font={uiIcons.save} onClick={e => runCommand(e, "write")} /> }
+            { props.type === "normal" && <IconComponent color="gray-fg" font={uiIcons.save} onClick={e => runCommand(e, "write")} /> }
             { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
             { props.type === "external" && !state.hidden && (
               <>

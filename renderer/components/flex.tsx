@@ -1,6 +1,7 @@
 import React from "react";
 
 interface Props {
+  ref?: React.Ref<HTMLDivElement>;
   selectable?: boolean;
   animate?: string;
   hover?: boolean;
@@ -85,6 +86,7 @@ export function FlexComponent(props: React.PropsWithChildren<Props>)  {
 
   return (
     <div
+      ref={props.ref}
       className={getClassName()}
       title={props.title}
       onClick={props.onClick}

@@ -1,6 +1,7 @@
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
 import { Workspace } from "main/envim/workspace";
+import { BROWSER_TOOLS_SERVER_NAME } from "main/browser/mcp/tools";
 import { Setting } from "main/setting";
 
 type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
@@ -8,19 +9,22 @@ type HttpMcpServer = Extract<AcpSDK.McpServer, { type: "http" }>;
 export class Mcp {
   private static syncPromise: Promise<void> = Promise.resolve();
 
-  static servers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
-    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace));
+  static servers(workspace: Workspace, initialize?: AcpSDK.InitializeResponse): Promise<AcpSDK.McpServer[]> {
+    const operation = Mcp.syncPromise.then(() => Mcp.syncServers(workspace, initialize));
 
     Mcp.syncPromise = operation.then(() => undefined, () => undefined);
 
     return operation;
   }
 
-  private static async syncServers(workspace: Workspace): Promise<AcpSDK.McpServer[]> {
+  private static async syncServers(workspace: Workspace, initialize?: AcpSDK.InitializeResponse): Promise<AcpSDK.McpServer[]> {
     const servers = (Setting.get()?.acp?.mcpServers || [])
       .filter(mcp => mcp.enabled)
       .map(mcp => mcp.server);
-    const httpServers = servers.filter(Mcp.isHttpServer);
+    const browserServer: HttpMcpServer | undefined = initialize?.agentCapabilities?.mcpCapabilities?.http
+      ? await workspace.browser.url().then(url => ({ type: "http", name: BROWSER_TOOLS_SERVER_NAME, url, headers: [] }), () => undefined)
+      : undefined;
+    const httpServers = [...servers.filter(Mcp.isHttpServer), ...(browserServer ? [browserServer] : [])];
     const gateway = workspace.mcpGateway;
 
     if (httpServers.length === 0) {
@@ -40,15 +44,18 @@ export class Mcp {
       return servers;
     }
 
-    return servers.map(server => {
+    const viaGateway = (server: AcpSDK.McpServer): AcpSDK.McpServer | undefined => {
       const upstream = upstreams.get(server);
 
-      if (!upstream) return server;
+      if (!upstream) return undefined;
 
       const url = `${gatewayUrl}/mcp/${encodeURIComponent(upstream.id)}`;
 
       return { type: "http", name: server.name, url, headers: [] };
-    });
+    };
+    const browserViaGateway = browserServer && viaGateway(browserServer);
+
+    return [...servers.map(server => viaGateway(server) ?? server), ...(browserViaGateway ? [browserViaGateway] : [])];
   }
 
   private static isHttpServer(server: AcpSDK.McpServer): server is HttpMcpServer {

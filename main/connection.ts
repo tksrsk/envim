@@ -147,6 +147,7 @@ export class Connection {
 
     Connection.workspaces.forEach(workspace => {
       workspaces[workspace.id] = workspace.bookmark;
+      workspace.browserTabs.activate(workspace === current);
     });
 
     Setting.set({ ...setting, bookmarks: setting.bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark.path === current?.bookmark })) });

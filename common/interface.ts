@@ -137,7 +137,6 @@ export interface IAcpSession {
 export interface IAcpStatus {
   status: "disconnected" | "connecting" | "connected" | "processing" | "authenticating";
   sessionId?: string;
-  notice?: AcpSDK.Notice;
   initialize?: AcpSDK.InitializeResponse;
   agent?: IAcpRegistryAgent;
   elicitation?: IElicitationRequest;
@@ -161,3 +160,39 @@ export interface IAcpRegistryAgent {
 export type IAcpRegistry = {
   [key in "npx" | "uvx" | "binary"]: IAcpRegistryAgent[];
 };
+
+export interface IBrowserViewport {
+  device?: string;
+  style: { width: number; height: number };
+}
+
+export interface IWorkspaceBrowserTab {
+  id: number;
+  favicon?: string;
+  shared: boolean;
+  focused: boolean;
+  url: string;
+  title: string;
+  loading: boolean;
+  zoom: number;
+}
+
+export interface IWorkspaceBrowserState {
+  selected?: number;
+  tabs: IWorkspaceBrowserTab[];
+}
+
+type BrowserRectangle = { x: number; y: number; width: number; height: number };
+
+export type BrowserTabCommand =
+  | [action: "back" | "forward" | "reload" | "stop" | "stop-find" | "send-escape" | "focus" | "devtools"]
+  | [action: "navigate", url: string]
+  | [action: "find", text: string, forward?: boolean]
+  | [action: "zoom", level: number]
+  | [action: "selection", bounds: BrowserRectangle | null]
+  | [action: "capture", bounds?: BrowserRectangle]
+  | [action: "cursor", position: { point: BrowserRectangle; selection: BrowserRectangle }]
+  | [action: "cursor-click", position: BrowserRectangle]
+  | [action: "scroll", direction: "h" | "j" | "k" | "l" | "u" | "d"]
+  | [action: "scroll-edge", edge: "top" | "bottom"]
+  | [action: "pick", token: string | null];

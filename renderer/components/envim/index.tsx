@@ -6,7 +6,6 @@ import { EditorProvider } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 import { FocusProvider } from "renderer/context/focus";
 
-import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
@@ -21,6 +20,10 @@ import { NotificateComponent } from "renderer/components/envim/notificate";
 import { AcpComponent } from "renderer/components/acp";
 import { InputComponent } from "renderer/components/envim/input";
 
+import { BrowserPaneComponent } from "renderer/components/browser/pane";
+import { useBrowserWorkspace } from "renderer/context/browser";
+import { useSurface } from "renderer/components/envim/surface";
+
 interface Props {
   header: { width: number; height: number; paddingLeft: number };
   main: { width: number; height: number; };
@@ -28,7 +31,6 @@ interface Props {
 }
 
 interface States {
-  pause: boolean;
   acp: boolean;
   grids: { [k: number]: {
     gid: number;
@@ -48,30 +50,24 @@ interface States {
   }};
 }
 
-const styles: { [k: string]: React.CSSProperties } = {
-  backdrop: {
-    opacity: 0.2,
-    cursor: "wait",
-  }
-};
-
 export function EnvimComponent(props: Props) {
-  const [state, setState] = React.useState<States>({ pause: false, acp: false, grids: {} });
+  const [state, setState] = React.useState<States>({ acp: false, grids: {} });
   const { active, emit, highlights } = useWorkspace();
   const acp = { width: state.acp ? 400 : 0, height: row2Y(y2Row(props.main.height) - 1) };
   const editor = { width: col2X(x2Col(props.main.width - acp.width) - 2), height: acp.height };
   const timer: React.RefObject<number> = React.useRef<number>(0);
+  const browserState = useBrowserWorkspace();
+  const editorInput = React.useRef<HTMLInputElement>(null);
+  const { browser, toggle: toggleSurface, focusEditor } = useSurface(editorInput, browserState.tabs.length);
 
   React.useEffect(() => {
     highlights.setHighlight("0", true, {  });
-    Emit.on("app:pause", onAppPause);
     emit.on("acp:toggle", onAcpToggle);
     emit.on("neovim:ui:highlight:set", onNeovimUiHighlightSet);
     emit.on("neovim:ui:window:position", onNeovimUiWindowPosition);
     emit.send("neovim:ui:attach", x2Col(editor.width), y2Row(editor.height), Setting.options);
 
     return () => {
-      Emit.off("app:pause", onAppPause);
       emit.off("acp:toggle", onAcpToggle);
       emit.off("neovim:ui:highlight:set", onNeovimUiHighlightSet);
       emit.off("neovim:ui:window:position", onNeovimUiWindowPosition);
@@ -84,10 +80,6 @@ export function EnvimComponent(props: Props) {
 
   function onAcpToggle() {
     setState(state => ({ ...state, acp: !state.acp }));
-  }
-
-  function onAppPause(pause: boolean) {
-    setState(state => ({ ...state, pause }));
   }
 
   function onNeovimUiHighlightSet(hls: {id: string, ui: boolean, hl: IHighlight}[]) {
@@ -134,21 +126,29 @@ export function EnvimComponent(props: Props) {
     <FocusProvider>
       <EditorProvider>
         <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
-          <TablineComponent {...props.header} />
+          <TablineComponent {...props.header} onToggleSurface={toggleSurface} onFocusEditor={focusEditor} browserState={browser ? browserState : undefined} />
           <FlexComponent zIndex={0} direction="column" style={props.main}>
             <FlexComponent color="default" grow={1} />
             <FlexComponent overflow="visible">
               <FlexComponent zIndex={0} grow={1} shrink={1} overflow="visible">
                 <FlexComponent color="default" zIndex={-1} grow={1} />
-                <FlexComponent zIndex={0} overflow="visible" style={editor}>
+                <FlexComponent zIndex={0} overflow="visible" style={{ ...editor, ...(browser ? { display: "none" } : {}) }}>
                   { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
                     <EditorComponent key={grid.gid} { ...grid } />
                   )) }
                   <PopupmenuComponent />
-                  <InputComponent />
+                  <InputComponent input={editorInput} />
                 </FlexComponent>
+                {browser && (
+                  <FlexComponent color="default" position="relative" style={editor}>
+                    {browserState.current && (
+                      <BrowserPaneComponent key={browserState.current.id} tab={browserState.current}
+                        visible={active} />
+                    )}
+                  </FlexComponent>
+                )}
                 <FlexComponent color="default" zIndex={-1} grow={1} />
-                <CmdlineComponent />
+                {!browser && <CmdlineComponent />}
                 <NotificateComponent />
               </FlexComponent>
               <FlexComponent style={acp}>
@@ -157,11 +157,6 @@ export function EnvimComponent(props: Props) {
             </FlexComponent>
           </FlexComponent>
           <HistoryComponent {...props.footer} />
-          { state.pause && (
-            <FlexComponent direction="column" horizontal="center" vertical="center" color="default" position="absolute" zIndex={100} inset={[0]} style={styles.backdrop}>
-              <div className="animate loading" />
-            </FlexComponent>
-          ) }
         </div>
       </EditorProvider>
     </FocusProvider>

@@ -14,11 +14,12 @@ import { Function } from "main/envim/function";
 import { Grids } from "main/envim/grid";
 import { Messages } from "main/envim/message";
 import { Highlights } from "main/envim/highlight";
+import { BrowserTabs } from "main/browser/tabs";
+import { BrowserServer } from "main/browser/mcp/server";
 import { McpGateway } from "main/mcp/gateway";
 
 export class Workspace {
   public readonly id = randomUUID();
-  private readonly timers = new Map<number, ReturnType<typeof setInterval>>();
   public readonly emit: WorkspaceEmit;
   public readonly highlights: Highlights;
   public readonly grids: Grids;
@@ -28,6 +29,8 @@ export class Workspace {
   public readonly clipboard: Clipboard;
   public readonly function: Function;
   public readonly mcpGateway: McpGateway;
+  public readonly browser: BrowserServer;
+  public readonly browserTabs: BrowserTabs;
   public readonly app: App;
   public cwd = "";
 
@@ -38,7 +41,6 @@ export class Workspace {
     const emit = new WorkspaceEmit(this.id);
 
     emit.on("browser:open", this.onBrowserOpen);
-    emit.on("browser:view", this.onBrowserView);
     emit.on("neovim:api", this.onNeovimApi);
     emit.on("neovim:command", this.onNeovimCommand);
     emit.on("neovim:cwd", this.onNeovimCwd);
@@ -64,37 +66,18 @@ export class Workspace {
     this.grids = new Grids(this);
     this.acp = new Acp(this);
     this.mcpGateway = new McpGateway(this);
+    this.browserTabs = new BrowserTabs(this.id, emit);
+    this.browser = new BrowserServer(this);
   }
 
-  private onBrowserOpen = (src: string, command?: string) => {
-    command = ["new", "vnew", "tabnew"].find(val => val === command) || "tabnew";
-    const encoded = encodeURIComponent(src).replace(/%/g, "\\%");
+  private onBrowserOpen = async (src: string) => { await this.browserTabs.open(src); };
 
-    this.nvim.command(`${command} +setlocal\\ buftype=nofile\\ bufhidden=wipe\\ filetype=browser\\ nobuflisted envim-browser://${encoded}`);
+  private onNeovimApi = (fname: string, args: any[]) => {
+    return this.nvim.request(fname, args);
   }
 
-  private onBrowserView = (winid: number, active: boolean, src: string) => {
-    if (this.timers.has(winid)) clearInterval(this.timers.get(winid));
-
-    const timer = setInterval(() => {
-      const { gid } = this.grids.findByWinId(winid)?.getInfo() || {};
-
-      if (gid) {
-        this.emit.update(`browser:view:${gid}`, false, decodeURIComponent(src), active);
-        clearInterval(timer);
-        this.timers.delete(winid);
-      }
-    }, 200);
-
-    this.timers.set(winid, timer);
-  }
-
-  private onNeovimApi = async (fname: string, args: any[]) => {
-    return await this.nvim.request(fname, args);
-  }
-
-  private onNeovimCommand = async (command: string) => {
-    return await this.nvim.command(command);
+  private onNeovimCommand = (command: string) => {
+    return this.nvim.command(command);
   }
 
   private onNeovimCwd = (cwd: string) => {
@@ -110,8 +93,8 @@ export class Workspace {
     return this.nvim.request("nvim_call_function", [name, args]);
   }
 
-  private onNeovimInput =  async(input: string) => {
-    return await this.nvim.input(input);
+  private onNeovimInput = (input: string) => {
+    return this.nvim.input(input);
   }
 
   private onNeovimLuafile = (path: string) => {
@@ -120,20 +103,20 @@ export class Workspace {
     });
   }
 
-  private onNeovimMouse = async (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
-    return await this.nvim.inputMouse(button, action, modifier, gid, row, col);
+  private onNeovimMouse = (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
+    return this.nvim.inputMouse(button, action, modifier, gid, row, col);
   }
 
-  private onNeovimReadline = async (prompt: string, value: string = "") => {
-    return await this.emit.share("neovim:function", "EnvimInput", [prompt, value]);
+  private onNeovimReadline = (prompt: string, value: string = "") => {
+    return this.emit.share("neovim:function", "EnvimInput", [prompt, value]);
   }
 
   private onNeovimUiAttach = async (width: number, height: number, options: UiAttachOptions) => {
     await this.nvim.uiAttach(width, height, { ...{ ext_linegrid: true }, ...options });
   }
 
-  private onNeovimUiOption = async (name: string, value: boolean) => {
-    return await this.nvim.uiSetOption(name, value);
+  private onNeovimUiOption = (name: string, value: boolean) => {
+    return this.nvim.uiSetOption(name, value);
   }
 
   private onNeovimUiPosition = (gid: number, x: number, y: number) => {
@@ -158,8 +141,9 @@ export class Workspace {
   }
 
   dispose() {
-    this.timers.forEach(timer => clearInterval(timer));
     this.emit.dispose();
+    this.browser.dispose();
+    this.browserTabs.dispose();
     this.mcpGateway.dispose();
   }
 }

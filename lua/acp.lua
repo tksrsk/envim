@@ -37,7 +37,7 @@ local function envim_acp_download(pkg, name, version)
     end
     if request_error then
       vim.fn.delete(archive)
-      envim_connect(0, { "envim_acp_error", { error = tostring(request_error) } })
+      envim_connect(0, { "envim_acp_notice", { severity = "error", title = tostring(request_error) } })
       return nil
     end
 
@@ -56,7 +56,7 @@ local function envim_acp_download(pkg, name, version)
     vim.fn.delete(archive)
 
     if output ~= "" then
-      envim_connect(0, { "envim_acp_error", { error = output } })
+      envim_connect(0, { "envim_acp_notice", { severity = "error", title = output } })
       return nil
     end
     if vim.fn.has("win32") == 0 then
@@ -135,7 +135,7 @@ _G.envim_acp_send = function(message)
     local success, error = pcall(vim.fn.chansend, _G.envim_acp, message .. "\n")
 
     if not success then
-      envim_connect(0, { "envim_acp_error", { error = tostring(error) } })
+      envim_connect(0, { "envim_acp_notice", { severity = "error", title = tostring(error) } })
     end
   end
 end

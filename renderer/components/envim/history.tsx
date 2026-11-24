@@ -154,7 +154,6 @@ export function HistoryComponent(props: Props) {
             <IconComponent color="yellow-fg" active={state.theme === "dark"} font="" />
           </FlexComponent>
         </MenuComponent>
-        { state.options.ext_multigrid && <IconComponent color="lightblue-fg" font="󰖟" onClick={() => emit.send("browser:open", "", "tabnew")} /> }
         <IconComponent color="purple-fg" font="" onClick={() => emit.send("acp:toggle")} />
         <IconComponent color="green-fg" active={state.debug.length > 0} font={uiIcons.debug} onClick={toggleDebug} />
       </FlexComponent>

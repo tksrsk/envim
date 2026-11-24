@@ -45,24 +45,24 @@ export class Envim {
     return Connection.active()?.emit.share("browser:open", url);
   }
 
-  private onNeovimApi = async (fname: string, args: any[]) => {
-    return await Connection.active()?.emit.share("neovim:api", fname, args);
+  private onNeovimApi = (fname: string, args: any[]) => {
+    return Connection.active()?.emit.share("neovim:api", fname, args);
   }
 
-  private onNeovimCommand = async (command: string) => {
-    return await Connection.active()?.emit.share("neovim:command", command);
+  private onNeovimCommand = (command: string) => {
+    return Connection.active()?.emit.share("neovim:command", command);
   }
 
   private onNeovimConnect = (setting: ISetting, bookmark: string) => {
     Connection.connect(setting, bookmark);
   }
 
-  private onNeovimFunction = async (name: string, args: any[]) => {
-    return await Connection.active()?.emit.share("neovim:function", name, args);
+  private onNeovimFunction = (name: string, args: any[]) => {
+    return Connection.active()?.emit.share("neovim:function", name, args);
   }
 
-  private onNeovimReadline = async (prompt: string, value?: string) => {
-    return await Connection.active()?.emit.share("neovim:readline", prompt, value);
+  private onNeovimReadline = (prompt: string, value?: string) => {
+    return Connection.active()?.emit.share("neovim:readline", prompt, value);
   }
 
   private onNeovimTheme = (theme?: "dark" | "light") => {
