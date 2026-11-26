@@ -90,11 +90,7 @@ export function BrowserPaneComponent({ tab, visible }: { tab: IWorkspaceBrowserT
   }
 
   function navigate(value: string) {
-    const text = value.trim();
-    const engine = searchEngines.engines.find(item => item.selected);
-    const url = !text ? "about:blank" : /^(?:https?:\/\/|file:\/\/|about:|data:)/i.test(text)
-      ? text : engine?.uri.replace("${query}", encodeURIComponent(text)) ?? "about:blank";
-    void command("navigate", url);
+    void command("navigate", value);
   }
 
   function togglePicker() {

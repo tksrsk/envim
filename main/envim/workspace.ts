@@ -70,7 +70,16 @@ export class Workspace {
     this.browser = new BrowserServer(this);
   }
 
-  private onBrowserOpen = async (src: string) => { await this.browserTabs.open(src); };
+  private onBrowserOpen = async (src: string) => {
+    const text = src.trim();
+    const opened = text && await this.nvim.lua(`
+      local uri = vim.uri_from_fname(vim.fn.fnamemodify(..., ":p"))
+      if vim.fn.getftype(vim.uri_to_fname((uri:gsub("#.*$", "")))) == "" then return false end
+      envim_open_file(uri)
+      return true
+    `, [text]);
+    if (!opened) await this.browserTabs.open(src);
+  };
 
   private onNeovimApi = (fname: string, args: any[]) => {
     return this.nvim.request(fname, args);

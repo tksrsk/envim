@@ -2,6 +2,7 @@ import * as Electron from "electron";
 
 import type { BrowserTabCommand, IWorkspaceBrowserTab, IWorkspaceBrowserState } from "common/interface";
 import { Bootstrap } from "main/bootstrap";
+import { Setting } from "main/setting";
 import { BrowserPage } from "main/browser/page";
 import type { WorkspaceEmit } from "main/emit";
 import { registerBrowserOwner } from "main/browser/mcp/sharedbrowser";
@@ -194,9 +195,10 @@ export class BrowserTabs {
   }
 
   private destination(url: string): string {
-    if (!url) return "about:blank";
-    if (["http:", "https:", "file:", "data:", "about:"].includes(new URL(url).protocol)) return url;
-    throw new Error("This address cannot be opened in the browser.");
+    const text = url.trim();
+    const engine = Setting.get()?.searchengines?.find(item => item.selected);
+    return !text ? "about:blank" : /^(?:https?:\/\/|file:\/\/|about:|data:)/i.test(text)
+      ? text : engine?.uri.replace("${query}", encodeURIComponent(text)) ?? "about:blank";
   }
 
   private pageRect(tab: Tab, rect: unknown): Electron.Rectangle | undefined {

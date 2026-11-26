@@ -19,6 +19,7 @@ export function useSearchEngines() {
 
   function save(next: typeof engines) {
     Setting.searchengines = next;
+    Emit.send("app:setting", Setting.get());
     Emit.share("browser:searchengines");
   }
 
