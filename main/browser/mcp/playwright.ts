@@ -86,6 +86,7 @@ export class PlaywrightWorkspace {
       const child = this.children.get(sessionId);
       const target = child?.target ?? this.sessions.get(sessionId);
       if (!target || !this.available(target.guest)) throw new Error("This tab is no longer shared in this workspace.");
+      if (method === "Target.setAutoAttach") params = { ...params, waitForDebuggerOnStart: false };
       const result = await target.guest.debugger.sendCommand(method, params, child?.id);
       if (!child && method === "Page.bringToFront" && this.targets.has(target.guest)) this.active = target;
       return result;
@@ -161,15 +162,10 @@ export class PlaywrightWorkspace {
     if (!child && method === "Page.frameNavigated" && !(params as { frame: { parentId?: string } }).frame.parentId) {
     }
     if (method === "Target.attachedToTarget" || method === "Target.detachedFromTarget") {
-      const event = params as { sessionId: string; targetInfo?: TargetInfo; waitingForDebugger?: boolean };
+      const event = params as { sessionId: string; targetInfo?: TargetInfo };
       const sessionId = `${target.sessionId}/${event.sessionId}`;
       if (method === "Target.attachedToTarget") {
-        if (!["iframe", "worker"].includes(event.targetInfo?.type ?? "")) {
-          if (event.waitingForDebugger) {
-            void target.guest.debugger.sendCommand("Runtime.runIfWaitingForDebugger", {}, event.sessionId).catch(() => {});
-          }
-          return;
-        }
+        if (!["iframe", "worker"].includes(event.targetInfo?.type ?? "")) return;
         this.children.set(sessionId, { target, id: event.sessionId });
       } else if (!this.children.delete(sessionId)) return;
       params = { ...event, sessionId };
