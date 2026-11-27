@@ -43,16 +43,25 @@ ifdef TARGET_FILE_NAME
 	mv release/Envim-1.0.0.AppImage $(TARGET_FILE_NAME)
 endif
 
+.PHONY: mac mac-arm windows
+
 mac: build
-	$(RELEASE_CMD) --mac zip
+	$(RELEASE_CMD) --mac dir --x64
 ifdef TARGET_FILE_NAME
-	rm -rf $(TARGET_FILE_NAME)
-	mv release/mac/Envim.app $(TARGET_FILE_NAME)
+	rm -rf "$(TARGET_FILE_NAME)"
+	mv release/mac/Envim.app "$(TARGET_FILE_NAME)"
+endif
+
+mac-arm: build
+	$(RELEASE_CMD) --mac dir --arm64
+ifdef TARGET_FILE_NAME
+	rm -rf "$(TARGET_FILE_NAME)"
+	mv release/mac-arm64/Envim.app "$(TARGET_FILE_NAME)"
 endif
 
 windows: build
-	$(RELEASE_CMD) --win zip
+	$(RELEASE_CMD) --win dir
 ifdef TARGET_FILE_NAME
-	rm -rf $(TARGET_FILE_NAME)
-	mv release/win-unpacked $(TARGET_FILE_NAME)
+	rm -rf "$(TARGET_FILE_NAME)"
+	mv release/win-unpacked "$(TARGET_FILE_NAME)"
 endif

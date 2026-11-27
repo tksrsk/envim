@@ -14,10 +14,14 @@ Neovim frontend writen by electron.
 ## Build
 
 ```sh
-make linux   # for Linux
-make mac     # for Mac
-make windows # for Windows
+make linux   # Linux AppImage
+make mac     # Intel Mac
+make mac-arm # Apple Silicon Mac
+make windows # Windows
 ```
+
+The macOS and Windows targets produce unpacked apps under `release/`. If
+`TARGET_FILE_NAME` is set, the build moves the app to that path.
 
 ## Concept
 
