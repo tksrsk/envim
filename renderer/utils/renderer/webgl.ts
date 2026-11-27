@@ -532,5 +532,6 @@ export class WebGL2 extends Renderer {
     this.gl.deleteBuffer(this.buffer);
     this.gl.deleteTexture(this.texture);
     this.gl.deleteProgram(this.program);
+    this.gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 }
