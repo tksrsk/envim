@@ -34,6 +34,7 @@ interface States {
   acp: boolean;
   grids: { [k: number]: {
     gid: number;
+    revision: number;
     winid: number;
     order: number;
     focusable: boolean;
@@ -91,7 +92,7 @@ export function EnvimComponent(props: Props) {
   function onNeovimUiWindowPosition(wins: IWindow[]) {
     setState(({ grids, ...state }) => {
       const nextOrder = Object.values(grids).reduce((order, grid) => Math.max(order, grid.order), 1);
-      const refresh = wins.reverse().filter(({ gid, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
+      const refresh = wins.reverse().filter(({ gid, revision, winid, x, y, width, height, zIndex, focusable, focus, shadow, type, status }, i) => {
         const curr = grids[gid]?.style;
         const order = grids[gid]?.order || i + nextOrder;
         const next = {
@@ -104,8 +105,8 @@ export function EnvimComponent(props: Props) {
 
         if (status === "delete") {
           delete(grids[gid]);
-        } else if (JSON.stringify(curr) !== JSON.stringify(next)) {
-          grids[gid] = { gid, winid, order, focusable, focus, shadow, type, style: next };
+        } else if (grids[gid]?.revision !== revision || JSON.stringify(curr) !== JSON.stringify(next)) {
+          grids[gid] = { gid, revision, winid, order, focusable, focus, shadow, type, style: next };
         }
 
         return type === "normal" && curr && (curr.visibility !== next.visibility || curr.width !== next.width || curr.height !== next.height);

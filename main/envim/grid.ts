@@ -10,11 +10,10 @@ class Grid {
   private flush: { cells: ICell[], scroll?: IScroll }[] = [];
   private dirty: { [k: string]: ICell } = {};
   private viewport: { top: number; bottom: number; total: number; } = { top: 0, bottom: 0, total: 0 };
-  private ready: "init" | "resize" | true = "init";
-  private size?: { width: number; height: number; };
+  private ready = false;
 
   constructor(private workspace: Workspace, gid: number, width: number, height: number) {
-    this.info = { gid, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
+    this.info = { gid, revision: 0, winid: 0, x: 0, y: 0, width: 0, height: 0, zIndex: 1, focusable: true, focus: false, shadow: true, type: "normal", status: "hide" };
     this.resize(width, height);
   }
 
@@ -25,7 +24,7 @@ class Grid {
 
     if (update) {
       this.resize(next.width, next.height);
-      this.info = { gid, ...next };
+      this.info = { gid, ...next, revision: this.info.revision };
     }
 
     return update;
@@ -36,11 +35,14 @@ class Grid {
   }
 
   resize(width: number, height: number, clear: boolean = false) {
-    if (clear === false && this.info.width === width && this.info.height === height) return;
+    const resized = this.info.width !== width || this.info.height !== height;
+    if (!clear && !resized) return;
     const old = clear ? [] : this.lines;
 
-    this.size = this.size || { width: this.info.width, height: this.info.height };
-    this.ready = this.ready === "init" ? "init" : this.size.width === width && this.size.height === height || "resize";
+    if (resized) {
+      this.info.revision++;
+      this.ready = false;
+    }
     this.info.width = width;
     this.info.height = height;
     this.lines = [];
@@ -142,7 +144,7 @@ class Grid {
   }
 
   getFlush() {
-    if (this.ready !== true) return {};
+    if (!this.ready) return {};
 
     const { flush, viewport } = this;
     this.flush = [];
@@ -153,9 +155,14 @@ class Grid {
     return { flush, viewport };
   }
 
-  onReady() {
+  onReady(revision: number) {
+    if (revision !== this.info.revision || this.ready) return false;
+
+    this.flush = [];
+    this.dirty = {};
+    this.refresh();
     this.ready = true;
-    delete(this.size);
+    return true;
   }
 }
 
@@ -176,6 +183,10 @@ export class Grids {
     }
 
     return curr;
+  }
+
+  onReady(gid: number, revision: number) {
+    if (this.grids[gid]?.onReady(revision)) this.flush();
   }
 
   findByWinId(winid: number) {

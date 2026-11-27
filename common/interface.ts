@@ -15,6 +15,7 @@ export interface ISetting {
 
 export interface IWindow {
   gid: number;
+  revision: number;
   winid: number;
   x: number;
   y: number;

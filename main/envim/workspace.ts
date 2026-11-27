@@ -134,8 +134,8 @@ export class Workspace {
     this.grids.flush();
   }
 
-  private onNeovimUiReady = (gid: number) => {
-    this.onNeovimUiResized(gid);
+  private onNeovimUiReady = (gid: number, revision: number) => {
+    this.onNeovimUiResized(gid, revision);
   }
 
   private onNeovimUiResize = (gid: number, width: number, height: number) => {
@@ -144,9 +144,8 @@ export class Workspace {
       : this.nvim.uiTryResize(width, height);
   }
 
-  private onNeovimUiResized = (gid: number) => {
-    this.grids.get(gid).onReady();
-    this.grids.flush();
+  private onNeovimUiResized = (gid: number, revision: number) => {
+    this.grids.onReady(gid, revision);
   }
 
   dispose() {

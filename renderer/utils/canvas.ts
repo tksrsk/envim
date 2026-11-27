@@ -1,21 +1,27 @@
 import { ICell, IScroll } from "common/interface";
 
-import { Context2D } from "renderer/utils/context2d";
 import { Highlights } from "renderer/utils/highlight";
+
+import type { Renderer } from "./renderer";
+import { Context2D } from "./renderer/context2d";
+import { WebGL2 } from "./renderer/webgl";
 
 export class Canvas {
   private processing = false;
-  private renderers: { [k: string]: Context2D } = {};
+  private frame?: number;
+  private renderers: { [k: string]: Renderer } = {};
 
   constructor(private highlights: Highlights) {}
 
-  create(
-    id: number,
-    canvas: HTMLCanvasElement,
-    ctx: CanvasRenderingContext2D,
-    lighten: boolean,
-  ) {
-    this.renderers[id] = new Context2D(canvas, ctx, lighten, this.highlights);
+  create(id: number, canvas: HTMLCanvasElement, lighten: boolean) {
+    const gl = canvas.getContext("webgl2", { antialias: false, depth: false });
+    if (gl) {
+      const webgl = WebGL2.create(canvas, gl, lighten, this.highlights);
+      if (webgl) this.renderers[id] = webgl;
+    } else {
+      const context = canvas.getContext("2d");
+      if (context) this.renderers[id] = new Context2D(context, lighten, this.highlights);
+    }
   }
 
   update(id: number, lighten: boolean) {
@@ -24,8 +30,14 @@ export class Canvas {
   }
 
   delete(id: number) {
+    this.renderers[id]?.dispose?.();
     delete this.renderers[id];
-    this.render();
+    if (!Object.keys(this.renderers).length) {
+      if (this.frame !== undefined) cancelAnimationFrame(this.frame);
+      this.frame = undefined;
+    } else {
+      this.render();
+    }
   }
 
   clear(id: number, width: number, height: number) {
@@ -42,14 +54,24 @@ export class Canvas {
     return this.renderers[id]?.link(row, col);
   }
 
-  private render = () => {
+  private render = (time = performance.now()) => {
     if (this.processing) return;
 
-    const result: boolean[] = [];
-
     this.processing = true;
-    Object.values(this.renderers).forEach((renderer) => result.push(renderer.render()));
-    this.processing = false;
-    result.some(r => r) && requestAnimationFrame(this.render);
-  }
+    let animating = false;
+    try {
+      for (const renderer of Object.values(this.renderers)) {
+        if (renderer.render(time)) animating = true;
+      }
+    } finally {
+      this.processing = false;
+    }
+
+    if (animating && this.frame === undefined) {
+      this.frame = requestAnimationFrame(time => {
+        this.frame = undefined;
+        this.render(time);
+      });
+    }
+  };
 }

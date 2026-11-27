@@ -16,7 +16,7 @@ function grid() {
   const grids = new Grids({ highlights: { get: id => ({ fg: Number(id), bg: 0, sp: 0 }) } });
   const grid = grids.get();
   grid.setInfo({ width: 8, height: 1, status: 'show' });
-  grid.onReady();
+  grid.onReady(grid.getInfo().revision);
   return grid;
 }
 
@@ -55,4 +55,34 @@ test('moving the cursor over a wide glyph preserves its width', () => {
   g.getFlush();
   assert.equal(g.getCursorPos(0, 2).width, 1);
   assert.equal(g.getCursorPos(0, 0).width, 2);
+});
+
+test('an intermediate resize acknowledgment cannot release the final grid update', () => {
+  const g = grid();
+  g.setInfo({ height: 37 });
+  const intermediate = g.getInfo().revision;
+
+  g.setInfo({ height: 62 });
+  const final = g.getInfo().revision;
+  g.setCell(61, 0, 'x', '0');
+
+  assert.equal(g.onReady(intermediate), false);
+  assert.equal(g.getFlush().flush, undefined);
+  assert.equal(g.onReady(final), true);
+  const { flush } = g.getFlush();
+  assert.ok(flush[0].cells.some(cell => cell.row === 61 && cell.text === 'x'));
+});
+
+test('resizing back to the original size still waits for a fresh acknowledgment', () => {
+  const g = grid();
+  const original = g.getInfo().revision;
+  g.resize(8, 2);
+  g.resize(8, 1);
+  const final = g.getInfo().revision;
+  assert.notEqual(final, original);
+  assert.equal(g.getFlush().flush, undefined);
+  assert.equal(g.onReady(original), false);
+  assert.equal(g.onReady(final), true);
+  assert.equal(g.getFlush().flush[0].cells.length, 8);
+  assert.equal(g.onReady(final), false);
 });

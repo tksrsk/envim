@@ -15,6 +15,7 @@ import { MenuComponent } from "renderer/components/menu";
 
 interface Props {
   gid: number;
+  revision: number;
   winid: number;
   focusable: boolean;
   focus: boolean;
@@ -68,18 +69,16 @@ export function EditorComponent(props: Props) {
   }, []);
 
   React.useEffect(() => {
-    const ctx = canvas.current?.getContext("2d");
-
-    if (canvas.current && ctx) {
-      canvasApi.create(props.gid, canvas.current, ctx, props.type === "normal");
-      emit.send("neovim:ui:ready", props.gid);
+    if (canvas.current) {
+      canvasApi.create(props.gid, canvas.current, props.type === "normal");
+      emit.send("neovim:ui:ready", props.gid, props.revision);
     }
   }, []);
 
   React.useEffect(() => {
       canvasApi.update(props.gid, props.type === "normal");
-      emit.send("neovim:ui:resized", props.gid);
-  }, [props.style.width, props.style.height]);
+      emit.send("neovim:ui:resized", props.gid, props.revision);
+  }, [props.revision, props.style.width, props.style.height]);
 
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
