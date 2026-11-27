@@ -315,12 +315,15 @@ export class BrowserTabs {
         break;
       }
       case "scroll": {
-        const distance = new Map([
-          ["h", "-100, 0"], ["j", "0, 100"], ["k", "0, -100"], ["l", "100, 0"],
-          ["u", "0, -innerHeight"], ["d", "0, innerHeight"],
-        ]);
-        const offset = typeof arg === "string" ? distance.get(arg) : undefined;
-        if (this.visible === tab && offset) void page.executeJavaScript(`window.scrollBy(${offset})`).catch(() => {});
+        if (this.visible !== tab || !arg || typeof arg !== "object") break;
+        const { direction, point } = arg as { direction?: unknown; point?: unknown };
+        const bounds = this.pageRect(tab, point);
+        const height = tab.view.getBounds().height;
+        const delta = new Map([
+          ["h", [100, 0]], ["j", [0, -100]], ["k", [0, 100]], ["l", [-100, 0]],
+          ["u", [0, height]], ["d", [0, -height]],
+        ]).get(String(direction));
+        if (bounds && delta) page.sendInputEvent({ type: "mouseWheel", x: bounds.x, y: bounds.y, deltaX: delta[0], deltaY: delta[1] });
         break;
       }
       case "scroll-edge":

@@ -73,7 +73,7 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
         case "r": return void command("reload");
         case "o": return void command("back");
         case "i": return void command("forward");
-        case "h": case "j": case "k": case "l": case "u": case "d": return void command("scroll", event.key);
+        case "h": case "j": case "k": case "l": case "u": case "d": return void command("scroll", { direction: event.key, point: cursorRect() });
         case "t": return void emit.send("browser:open", "");
       }
       return;

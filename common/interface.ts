@@ -194,6 +194,6 @@ export type BrowserTabCommand =
   | [action: "capture", bounds?: BrowserRectangle]
   | [action: "cursor", position: { point: BrowserRectangle; selection: BrowserRectangle }]
   | [action: "cursor-click", position: BrowserRectangle]
-  | [action: "scroll", direction: "h" | "j" | "k" | "l" | "u" | "d"]
+  | [action: "scroll", scroll: { direction: "h" | "j" | "k" | "l" | "u" | "d"; point: BrowserRectangle }]
   | [action: "scroll-edge", edge: "top" | "bottom"]
   | [action: "pick", token: string | null];
