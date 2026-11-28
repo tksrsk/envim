@@ -15,12 +15,13 @@ export class Acp {
 
   private state: IAcpStatus = { status: "disconnected" };
   private connection: AcpSDK.ClientConnection | null = null;
-  private sessions: { [key: string]: IAcpSession } = {};
-  private tool: { [key: string]: AcpSDK.ToolCallUpdate } = {};
+  private sessions: Record<string, IAcpSession> = Object.create(null);
+  private tool: Record<string, { sessionId: string; update: AcpSDK.ToolCallUpdate }> = {};
+  private readonly attachingSessions = new Map<string, "load" | "resume">();
   private terminal: { [key: string]: IAcpTerminalOutput & { sessionId: string, promise: Promise<AcpSDK.WaitForTerminalExitResponse>, pid: number, killed?: boolean, outputByteLimit?: number | null, timer?: NodeJS.Timeout, resolve?: (response: AcpSDK.WaitForTerminalExitResponse) => void } } = {};
-  private permission: { [key: string]: (response: AcpSDK.RequestPermissionResponse) => void } = {};
+  private permission: Record<string, { sessionId: string; resolve: (response: AcpSDK.RequestPermissionResponse) => void }> = {};
   private elicitation: { [key: string]: { request: IElicitationRequest, resolve: (response: AcpSDK.CreateElicitationResponse) => void } } = {};
-  private lastMessageId: { [k: string]: string } = {};
+  private readonly lastMessageIds = new Map<string, { kind: string; id: string }>();
   private stdoutPush?: (data: string) => void;
 
   constructor(private readonly workspace: Workspace) {
@@ -114,9 +115,34 @@ export class Acp {
   }
 
   private onSessionUpdate(params: AcpSDK.SessionNotification): void {
-    if (!params.sessionId || params.sessionId !== this.state.sessionId) return;
+    const { sessionId, update } = params;
+    const session = this.sessions[sessionId];
+    const isSubagentEvent = update.sessionUpdate === "subagent_update"
+      || update.sessionUpdate === "session_message" || update.sessionUpdate === "session_message_chunk";
+    if (!sessionId || (sessionId !== this.state.sessionId && !session?.subagent && !(isSubagentEvent && session?.loaded))) return;
 
-    if (params.update.sessionUpdate === "notice") {
+    if (update.sessionUpdate === "subagent_update") {
+      const { sessionUpdate: _, ...patch } = update;
+      const child = this.sessions[patch.sessionId];
+      if (patch.sessionId === sessionId || (child && child.subagent?.parentId !== sessionId)) return;
+      const attaching = this.attachingSessions.get(this.rootSessionId(sessionId));
+      const subagent = { ...child?.subagent, ...patch, parentId: sessionId };
+      if (attaching === "load") {
+        subagent.state = undefined;
+        subagent.capabilities = undefined;
+      }
+      const childSession = child ?? { id: patch.sessionId, loaded: true, commands: [], configOptions: [], plan: [] };
+      this.sessions[patch.sessionId] = { ...childSession, name: subagent.title || patch.sessionId, subagent };
+      if (subagent.state?.state !== child?.subagent?.state?.state) this.lastMessageIds.delete(patch.sessionId);
+      if (subagent.state?.state === "idle" && subagent.state.stopReason === "cancelled") {
+        this.cancelPendingRequests(patch.sessionId);
+      }
+      this.notifySessionUpdate();
+      if (!child) this.addMessage(params);
+      return;
+    }
+
+    if (params.update.sessionUpdate === "notice" && sessionId === this.state.sessionId) {
       this.setNotice(params.update);
       return;
     }
@@ -135,8 +161,13 @@ export class Acp {
     this.notifySessionUpdate();
   }
 
+  private toolKey(sessionId: string, toolCallId: string): string {
+    return JSON.stringify([sessionId, toolCallId]);
+  }
+
   private processToolUpdate(sessionId: string, toolCall: AcpSDK.ToolCallUpdate) {
-    const prev = this.tool[toolCall.toolCallId] || { _meta: {} };
+    const key = this.toolKey(sessionId, toolCall.toolCallId);
+    const prev = this.tool[key]?.update || { _meta: {} };
 
     toolCall = this.withTerminalOutput({ ...prev, ...toolCall, _meta: { ...prev._meta, ...(toolCall._meta || {}) } });
 
@@ -147,9 +178,9 @@ export class Acp {
       toolCall._meta!.executionTime = ((Date.now() - (toolCall._meta!.start as number)) / 1000).toFixed(1);
     }
 
-    this.tool[toolCall.toolCallId] = toolCall;
+    this.tool[key] = { sessionId, update: toolCall };
 
-    this.followToolCall(toolCall);
+    if (sessionId === this.state.sessionId) this.followToolCall(toolCall);
 
     this.addMessage({
       sessionId,
@@ -157,7 +188,7 @@ export class Acp {
     });
 
     if (toolCall.status === "completed" || toolCall.status === "failed") {
-      delete(this.tool[toolCall.toolCallId]);
+      delete this.tool[key];
     }
   }
 
@@ -185,12 +216,13 @@ export class Acp {
     clearTimeout(terminal.timer);
     terminal.timer = undefined;
 
-    Object.values(this.tool)
-      .filter(toolCall => toolCall.content?.some(content => content.type === "terminal" && content.terminalId === terminalId))
-      .forEach(toolCall => {
-        this.tool[toolCall.toolCallId] = this.withTerminalOutput(toolCall);
-        this.addMessage({ sessionId: terminal.sessionId, update: { sessionUpdate: "tool_call_update", ...this.tool[toolCall.toolCallId] } });
-      });
+    for (const entry of Object.values(this.tool)) {
+      if (entry.sessionId !== terminal.sessionId || !entry.update.content?.some(content =>
+        content.type === "terminal" && content.terminalId === terminalId)) continue;
+
+      entry.update = this.withTerminalOutput(entry.update);
+      this.addMessage({ sessionId: entry.sessionId, update: { sessionUpdate: "tool_call_update", ...entry.update } });
+    }
   }
 
   private followToolCall(toolCall: AcpSDK.ToolCallUpdate) {
@@ -248,6 +280,8 @@ export class Acp {
           auth: { terminal: true },
           elicitation: { form: {}, url: {} },
           session: { notices: {}, compaction: {} },
+          plan: {},
+          subagents: {},
           terminal: true
         },
         clientInfo: {
@@ -326,10 +360,9 @@ export class Acp {
       this.setState({ ...this.state, elicitation: undefined });
     }
 
-    const tool = Object.values(this.tool).find(t => {
-      const elicitationRequest = t._meta?.elicitationRequest as IElicitationRequest | undefined;
-      return elicitationRequest?.requestId === requestId;
-    });
+    const tool = Object.values(this.tool).find(({ update }) =>
+      (update._meta?.elicitationRequest as IElicitationRequest | undefined)?.requestId === requestId
+    )?.update;
 
     if (tool && "sessionId" in params) {
       delete(tool._meta!.elicitationRequest);
@@ -352,9 +385,11 @@ export class Acp {
       void this.onAcpAgentStart(agent);
       return;
     }
-    this.cancelAllPendingRequests();
+    this.cancelPendingRequests();
     this.tool = {};
-    this.sessions = {};
+    this.attachingSessions.clear();
+    this.lastMessageIds.clear();
+    this.sessions = Object.create(null);
 
     this.setState({ status: "disconnected" });
     if (code === 0) this.setNotice();
@@ -366,47 +401,43 @@ export class Acp {
   }
 
   private onAcpPermissionResponse = (requestId: string, optionId: string): void => {
-    const resolver = this.permission[requestId];
-    const outcome = optionId ? "selected" : "cancelled";
+    const pending = this.permission[requestId];
+    if (!pending) return;
 
-    if (!resolver) {
-      return;
-    }
+    pending.resolve(optionId ? { outcome: { outcome: "selected", optionId } } : { outcome: { outcome: "cancelled" } });
+    delete this.permission[requestId];
 
-    resolver({ outcome: { outcome, optionId } });
-    delete(this.permission[requestId]);
-
-    const tool = Object.values(this.tool).find(t => {
-      const permissionRequest = t._meta?.permissionRequest as IPermissionRequest | undefined;
-      return permissionRequest?.requestId === requestId;
-    });
-
+    const tool = Object.values(this.tool).find(({ update }) =>
+      (update._meta?.permissionRequest as IPermissionRequest | undefined)?.requestId === requestId
+    );
     if (tool) {
-      delete(this.tool[tool.toolCallId]._meta!.permissionRequest);
-      this.processToolUpdate(this.state.sessionId!, tool);
+      delete tool.update._meta!.permissionRequest;
+      this.processToolUpdate(tool.sessionId, tool.update);
     }
   }
 
   private onAcpPromptCancel = (sessionId: string) => {
     if (!this.connection) return;
 
-    this.cancelAllPendingRequests();
+    const child = this.sessions[sessionId]?.subagent;
+    if (child ? !child.capabilities?.cancel || this.attachingSessions.has(this.rootSessionId(sessionId)) : sessionId !== this.state.sessionId) return;
+    this.cancelPendingRequests(sessionId);
 
     this.connection.agent.notify(AcpSDK.methods.agent.session.cancel, { sessionId }).catch(err => {
-      this.setState({ ...this.state, status: "connected" });
+      if (!child) this.setState({ ...this.state, status: "connected" });
       this.setNotice({ severity: "error", title: err instanceof Error ? err.message : String(err) });
     });
   }
 
   private onAcpPromptSend = (sessionId: string, text: string, files: string[] = [], images: AcpSDK.ImageContent[] = []) => {
-    this.lastMessageId = {};
+    this.lastMessageIds.delete(sessionId);
 
     if (!sessionId) {
       this.onAcpSessionCreate()?.then(() => this.onAcpPromptSend(this.state.sessionId!, text, files, images));
       return;
     }
 
-    if (!this.connection || !this.sessions[sessionId]) return;
+    if (!this.connection || !this.sessions[sessionId] || this.sessions[sessionId].subagent) return;
 
     const prompt: AcpSDK.ContentBlock[] = [
       ...(text ? [{ type: "text" as "text", text }] : []),
@@ -424,7 +455,7 @@ export class Acp {
         this.addMessage({ sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: result.stopReason } } });
       }
       this.tool = {};
-      this.cancelAllPendingRequests();
+      this.cancelPendingRequests();
       this.setState({ ...this.state, status: "connected" });
     });
   }
@@ -454,9 +485,7 @@ export class Acp {
     this.setNotice();
     this.setState({ ...this.state, status: "processing" });
 
-    if (this.state.sessionId && this.state.initialize?.agentCapabilities?.sessionCapabilities?.close) {
-      await this.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: this.state.sessionId });
-    }
+    await this.closeActiveSession();
 
     return this.callAgent(AcpSDK.methods.agent.session.new, {
       cwd: this.workspace.cwd,
@@ -479,18 +508,60 @@ export class Acp {
     });
   }
 
+  private rootSessionId(sessionId: string): string {
+    let parentId = this.sessions[sessionId]?.subagent?.parentId;
+    while (parentId) {
+      sessionId = parentId;
+      parentId = this.sessions[sessionId]?.subagent?.parentId;
+    }
+    return sessionId;
+  }
+
+  private resetChildActivity(rootId: string, cancelRequests = false) {
+    for (const session of Object.values(this.sessions)) {
+      if (!session.subagent || this.rootSessionId(session.id) !== rootId) continue;
+      session.subagent = { ...session.subagent, state: undefined, capabilities: undefined };
+      session.configOptions = [];
+      if (cancelRequests) this.cancelPendingRequests(session.id);
+    }
+    this.notifySessionUpdate();
+  }
+
+  private async closeActiveSession() {
+    const sessionId = this.state.sessionId;
+    if (!sessionId || !this.connection || !this.state.initialize?.agentCapabilities?.sessionCapabilities?.close) return;
+    this.cancelPendingRequests(sessionId);
+    this.resetChildActivity(sessionId, true);
+    await this.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId });
+    this.resetChildActivity(sessionId, true);
+  }
+
+  private removeSession(sessionId: string) {
+    this.attachingSessions.delete(sessionId);
+    this.cancelPendingRequests(sessionId);
+    this.lastMessageIds.delete(sessionId);
+    for (const [key, tool] of Object.entries(this.tool)) {
+      if (tool.sessionId === sessionId) delete this.tool[key];
+    }
+    delete this.sessions[sessionId];
+    for (const session of Object.values(this.sessions)) {
+      if (session.subagent?.parentId === sessionId) this.removeSession(session.id);
+    }
+  }
+
   private onAcpSessionDelete = (sessionId: string) => {
+    if (this.sessions[sessionId]?.subagent) return;
     if (!this.connection) return;
 
     this.callAgent(AcpSDK.methods.agent.session.delete, { sessionId });
-    delete(this.sessions[sessionId]);
+    this.removeSession(sessionId);
 
     this.setState({ ...this.state, status: "connected", ...(this.state.sessionId === sessionId ? { sessionId: undefined } : {}) });
     this.notifySessionUpdate();
   }
 
   private onAcpSessionFork = async (sessionId: string) => {
-    if (!this.connection || !this.sessions[sessionId]) return;
+    if (!this.connection || !this.sessions[sessionId] || this.sessions[sessionId].subagent) return;
 
     this.setState({ ...this.state, status: "processing" });
 
@@ -520,32 +591,39 @@ export class Acp {
   private onAcpSessionSwitch = async (sessionId: string) => {
     const session = this.sessions[sessionId];
 
-    if (!session || !this.connection) return;
+    if (!session || session.subagent || !this.connection || this.attachingSessions.size) return;
 
-    if (this.state.sessionId && this.state.initialize?.agentCapabilities?.sessionCapabilities?.close) {
-      await this.connection.agent.request(AcpSDK.methods.agent.session.close, { sessionId: this.state.sessionId });
-    }
+    await this.closeActiveSession();
 
     if (
       (session.loaded && this.state.initialize?.agentCapabilities?.sessionCapabilities?.resume) ||
       (!session.loaded && this.state.initialize?.agentCapabilities?.loadSession)
     ) {
       const mcpServers = await Mcp.servers(this.workspace, this.state.initialize);
-      const method = session.loaded ? AcpSDK.methods.agent.session.resume : AcpSDK.methods.agent.session.load;
+      const operation = session.loaded ? "resume" : "load";
+      const method = AcpSDK.methods.agent.session[operation];
+      this.resetChildActivity(sessionId);
+      this.attachingSessions.set(sessionId, operation);
+      const connection = this.connection;
 
       if (sessionId !== this.state.sessionId) this.setNotice();
       this.setState({ ...this.state, status: "processing", sessionId });
       this.callAgent(method, {
         sessionId, cwd: this.workspace.cwd, mcpServers
       }).then(response => {
-        if (!response) return;
+        if (connection !== this.connection || this.attachingSessions.get(sessionId) !== operation) return;
+        this.attachingSessions.delete(sessionId);
+        if (!response) {
+          this.resetChildActivity(sessionId, true);
+          return;
+        }
 
+        session.loaded = true;
         session.configOptions = response.configOptions || [];
         this.setState({ ...this.state, status: "connected" });
         this.notifySessionUpdate();
       });
 
-      session.loaded = true;
     } else {
       if (sessionId !== this.state.sessionId) this.setNotice();
       this.setState({ ...this.state, sessionId });
@@ -602,10 +680,10 @@ export class Acp {
 
     if (isChunk) {
       if (!update.messageId) {
-        const key = `${update.sessionUpdate}_${update.content.type}`;
-
-        update.messageId = this.lastMessageId[key] || `msg_${randomBytes(8).toString("hex")}`;
-        this.lastMessageId = { [key]: update.messageId };
+        const kind = `${update.sessionUpdate}_${update.content.type}`;
+        const previous = this.lastMessageIds.get(notification.sessionId);
+        update.messageId = previous?.kind === kind ? previous.id : `msg_${randomBytes(8).toString("hex")}`;
+        this.lastMessageIds.set(notification.sessionId, { kind, id: update.messageId });
       }
     }
 
@@ -644,18 +722,26 @@ export class Acp {
   }
 
   private onPlanUpdate(params: AcpSDK.SessionNotification): boolean {
-    if (params.update.sessionUpdate !== "plan") {
-      return false;
+    const { update, sessionId } = params;
+    const session = this.sessions[sessionId];
+    switch (update.sessionUpdate) {
+      case "plan":
+        if (session) session.plan = update.entries;
+        return true;
+      case "plan_update":
+        if (session) {
+          const plans = [...(session.plans ?? [])];
+          const index = plans.findIndex(plan => plan.planId === update.plan.planId);
+          plans[index < 0 ? plans.length : index] = update.plan;
+          session.plans = plans;
+        }
+        return true;
+      case "plan_removed":
+        if (session) session.plans = session.plans?.filter(plan => plan.planId !== update.planId);
+        return true;
+      default:
+        return false;
     }
-
-    const session = this.sessions[params.sessionId];
-
-    if (session) {
-      session.plan = params.update.entries;
-      this.notifySessionUpdate();
-    }
-
-    return true;
   }
 
   private onAvailableCommandsUpdate(params: AcpSDK.SessionNotification): boolean {
@@ -738,7 +824,16 @@ export class Acp {
     const terminalId = `term_${randomBytes(8).toString("hex")}`;
     const command = params.args?.length ? [params.command, ...params.args] : params.command;
     const env = params.env?.reduce((envs, v) => ({ ...envs, [v.name]: v.value }), {} as Record<string, string>);
-    const opts = { cwd: params.cwd || undefined, env };
+    let cwd = params.cwd || undefined;
+    if (!cwd && this.sessions[params.sessionId]?.subagent) {
+      let child = this.sessions[params.sessionId]?.subagent;
+      while (child && !cwd) {
+        cwd = child.cwd ?? undefined;
+        child = this.sessions[child.parentId]?.subagent;
+      }
+      cwd ??= this.workspace.cwd || undefined;
+    }
+    const opts = { cwd, env };
 
     let resolve!: (response: AcpSDK.WaitForTerminalExitResponse) => void;
     const promise = new Promise<AcpSDK.WaitForTerminalExitResponse>((res) => { resolve = res; });
@@ -845,20 +940,31 @@ export class Acp {
       .onRequest(AcpSDK.methods.client.terminal.waitForExit, ctx => this.onWaitForTerminalExit(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.kill, ctx => this.onKillTerminal(ctx.params))
       .onRequest(AcpSDK.methods.client.terminal.release, ctx => this.onReleaseTerminal(ctx.params))
-      .onRequest(AcpSDK.methods.client.session.requestPermission, ctx => this.onRequestPermission(ctx.params))
+      .onRequest(AcpSDK.methods.client.session.requestPermission, ctx => this.onRequestPermission(ctx.params, ctx.signal))
       .onRequest(AcpSDK.methods.client.elicitation.create, ctx => this.onCreateElicitation(ctx.params, ctx.signal))
       .onNotification(AcpSDK.methods.client.elicitation.complete, ctx => this.onCompleteElicitation(ctx.params))
       .onNotification(AcpSDK.methods.client.session.update, ctx => this.onSessionUpdate(ctx.params));
   }
 
-  private async onRequestPermission(params: AcpSDK.RequestPermissionRequest): Promise<AcpSDK.RequestPermissionResponse> {
+  private async onRequestPermission(params: AcpSDK.RequestPermissionRequest, signal: AbortSignal): Promise<AcpSDK.RequestPermissionResponse> {
     const requestId = `perm_${randomBytes(16).toString("hex")}`;
 
     params.toolCall._meta = params.toolCall._meta || {};
     params.toolCall._meta.permissionRequest = { requestId, options: params.options };
-    this.processToolUpdate(this.state.sessionId!, params.toolCall);
+    this.processToolUpdate(params.sessionId, params.toolCall);
 
-    return new Promise((resolve) => this.permission[requestId] = resolve);
+    return new Promise(resolve => {
+      const cancel = () => this.onAcpPermissionResponse(requestId, "");
+      this.permission[requestId] = {
+        sessionId: params.sessionId,
+        resolve: response => {
+          signal.removeEventListener("abort", cancel);
+          resolve(response);
+        }
+      };
+      if (signal.aborted) cancel();
+      else signal.addEventListener("abort", cancel, { once: true });
+    });
   }
 
   private async onCreateElicitation(elicitation: AcpSDK.CreateElicitationRequest, signal: AbortSignal): Promise<AcpSDK.CreateElicitationResponse> {
@@ -871,7 +977,7 @@ export class Acp {
     const request: IElicitationRequest = { requestId, params };
 
     if ("sessionId" in params) {
-      const toolCall = (params.toolCallId && this.tool[params.toolCallId]) || {
+      const toolCall = (params.toolCallId && this.tool[this.toolKey(params.sessionId, params.toolCallId)]?.update) || {
         toolCallId: requestId,
         title: params.message,
         kind: "other",
@@ -890,19 +996,21 @@ export class Acp {
   }
 
   private onCompleteElicitation(params: AcpSDK.CompleteElicitationNotification) {
-    const tool = Object.values(this.tool).find(t => t._meta?.elicitationId === params.elicitationId);
+    const tool = Object.values(this.tool).find(({ update }) => update._meta?.elicitationId === params.elicitationId);
 
     if (tool) {
-      this.processToolUpdate(this.state.sessionId!, { ...tool, status: "completed" });
+      this.processToolUpdate(tool.sessionId, { ...tool.update, status: "completed" });
     }
   }
 
-  private cancelAllPendingRequests() {
-    Object.keys(this.permission).forEach(requestId => {
-      this.onAcpPermissionResponse(requestId, "");
-    });
-    Object.keys(this.elicitation).forEach(requestId => {
-      this.onAcpElicitationResponse(requestId, "cancel");
-    });
+  private cancelPendingRequests(sessionId?: string) {
+    for (const [requestId, pending] of Object.entries(this.permission)) {
+      if (sessionId === undefined || pending.sessionId === sessionId) this.onAcpPermissionResponse(requestId, "");
+    }
+    for (const [requestId, { request: { params } }] of Object.entries(this.elicitation)) {
+      if (sessionId === undefined || ("sessionId" in params && params.sessionId === sessionId)) {
+        this.onAcpElicitationResponse(requestId, "cancel");
+      }
+    }
   }
 }

@@ -1,12 +1,12 @@
 import React from "react";
-import { Alert, Box, Button, Group, Loader, Paper, Stack, Tabs } from "@mantine/core";
+import { Alert, Badge, Box, Button, Group, Loader, Paper, Stack, Tabs, Text } from "@mantine/core";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHilight from "rehype-highlight";
 import { diffLines } from "diff";
 
-import { IPermissionRequest, IElicitationRequest, IAcpTerminalOutput } from "common/interface";
+import { IPermissionRequest, IElicitationRequest, IAcpSession, IAcpTerminalOutput } from "common/interface";
 
 import { uiIcons } from "renderer/utils/icons";
 
@@ -29,7 +29,7 @@ const kindIcons: Record<string, string> = {
   other: "\u{F1064}",
 };
 
-const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotification }) => {
+const MessageMemo = React.memo(({ message, sessions }: { message: AcpSDK.SessionNotification; sessions?: ReadonlyMap<string, IAcpSession> }) => {
   const { emit } = useWorkspace();
   const [toolTab, setToolTab] = React.useState<string | null>(null);
 
@@ -133,6 +133,8 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
         return renderContent(content.content);
       case "diff":
         return renderDiffLines(content.path, content.oldText || "", content.newText || "") ;
+      case "session":
+        return <Box>Session {sessions?.get(content.sessionId)?.name ?? content.sessionId}</Box>;
       case "terminal":
         return renderTerminal(((message.update._meta?.terminals || {}) as Record<string, IAcpTerminalOutput>)[content.terminalId]);
       default:
@@ -171,6 +173,19 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   }
 
   switch (message.update.sessionUpdate) {
+    case "session_message": {
+      const { senderSessionId, recipientSessionId, content } = message.update;
+      const sender = senderSessionId && (sessions?.get(senderSessionId)?.name ?? senderSessionId);
+      const recipient = recipientSessionId && (sessions?.get(recipientSessionId)?.name ?? recipientSessionId);
+      return (
+        <Stack gap={2}>
+          <Box c="dimmed">{sender || "Unknown sender"} → {recipient || "Unknown recipient"}</Box>
+          {content?.map((block, index) => <React.Fragment key={index}>{renderContent(block)}</React.Fragment>)}
+        </Stack>
+      );
+    }
+    case "notice":
+      return <Alert title={message.update.title}>{message.update.description}</Alert>;
     case "compaction_update":
       const compaction = message.update;
       const compactionLabel = compaction.status === "in_progress" ? "Compacting context…"
@@ -220,7 +235,7 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
                   {input && <Tabs.Tab value="input">Input</Tabs.Tab>}
                   {output && <Tabs.Tab value="output">Output</Tabs.Tab>}
                 </Tabs.List>
-                {hasContent && <Tabs.Panel value="content">{toolContent?.map(renderToolCallContent)}</Tabs.Panel>}
+                {hasContent && <Tabs.Panel value="content">{toolContent?.map((content, index) => <React.Fragment key={index}>{renderToolCallContent(content)}</React.Fragment>)}</Tabs.Panel>}
                 {[["input", input], ["output", output]].map(([value, data]) => data && (
                   <Tabs.Panel key={value} value={value!} className="selectable">
                     <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{data}</Markdown>
@@ -252,57 +267,186 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   return null;
 });
 
-export const MessageComponent = React.memo(({ messages, sessionId }: { messages: AcpSDK.SessionNotification[]; sessionId: string; }) => {
-  type Entry = { message: AcpSDK.SessionNotification; index: number };
-  type Group = { entries: Entry[]; toolCount: number; failedCount: number };
+export function AgentIcon({ icon }: { icon?: string | null }) {
+  return icon ? <i className="agent-icon" style={{ maskImage: `url(${icon})` }} /> : <i>{"\uEC1E"}</i>;
+}
+
+function getStatusIcon(status?: string | null) {
+  switch (status) {
+    case "pending": return <Box component="i" c="dimmed">{uiIcons.pending}</Box>;
+    case "in_progress": return <Loader size="1em" mx={4} />;
+    case "completed": return <Box component="i" c="green">{uiIcons.success}</Box>;
+    case "failed": return <Box component="i" c="red">{uiIcons.error}</Box>;
+    default: return null;
+  }
+}
+
+function getPriorityColor(priority: AcpSDK.PlanEntry["priority"]) {
+  switch (priority) {
+    case "high": return "red";
+    case "medium": return "yellow";
+    case "low": return "gray";
+    default: return "gray";
+  }
+}
+
+function renderPlanEntries(entries: AcpSDK.PlanEntry[]) {
+  return entries.map((entry, index) => (
+    <Group key={index} gap={6} wrap="nowrap" py={2}>
+      {getStatusIcon(entry.status)}
+      <Text size="xs" style={{ flex: 1, whiteSpace: "pre-wrap" }} td={entry.status === "completed" ? "line-through" : undefined} c={entry.status === "completed" ? "dimmed" : undefined}>{entry.content}</Text>
+      <Badge size="xs" variant="dot" color={getPriorityColor(entry.priority)}>{entry.priority}</Badge>
+    </Group>
+  ));
+}
+
+export function SessionPlans({ session }: { session: IAcpSession }) {
+  const plans = session.plans ?? [];
+  if (!session.plan.length && !plans.length) return null;
+
+  const entries = [...session.plan, ...plans.flatMap(plan => plan.type === "items" ? plan.entries : [])];
+  const completed = entries.filter(entry => ["completed", "failed"].includes(entry.status)).length;
+
+  return (
+    <CollapseComponent label={session.subagent ? "Plans" : "Session plans"} icon={<i></i>} badge={entries.length ? `${completed} / ${entries.length}` : undefined} open>
+      {renderPlanEntries(session.plan)}
+      {plans.map(plan => (
+        <Box key={plan.planId}>
+          {plan.type === "items" ? renderPlanEntries(plan.entries) : (
+            <div className="selectable"><Markdown remarkPlugins={[remarkGfm]}>{plan.content}</Markdown></div>
+          )}
+        </Box>
+      ))}
+    </CollapseComponent>
+  );
+}
+
+function SubagentMessage({ session, messages, sessions, open }: Pick<MessageProps, "messages" | "sessions"> & { session: IAcpSession; open: boolean }) {
+  const { emit } = useWorkspace();
+  const child = session.subagent!;
+  const workState = child.state?.state;
+  const stopReason = workState === "idle" && child.state && "stopReason" in child.state ? child.state.stopReason : undefined;
+  const [label, color, icon] = workState === "running" ? ["Running", "dimmed", getStatusIcon("in_progress")]
+    : workState === "requires_action" ? ["Awaiting action", "yellow", <Box component="i" c="yellow">{uiIcons.pending}</Box>]
+    : workState === "idle" && stopReason === "error" ? ["Failed", "red", getStatusIcon("failed")]
+    : workState === "idle" && stopReason === "cancelled" ? ["Cancelled", "dimmed", <i>{uiIcons.stop}</i>]
+    : workState === "idle" && stopReason === "end_turn" ? ["Completed", "green", getStatusIcon("completed")]
+    : workState === "idle" ? ["Idle", "dimmed", null]
+    : [null, "dimmed", null];
+  return (
+    <CollapseComponent variant="row" label={session.name} icon={<AgentIcon />} open={open}
+      badge={label ? () => <Group gap={4} wrap="nowrap" c={color}>{icon}<Text size="xs" c={color}>{label}</Text></Group> : undefined}
+    >
+      <Stack gap={4} pl="xs">
+        {child.description && <Text size="xs">{child.description}</Text>}
+        {child.capabilities?.cancel && (
+          <Button size="compact-xs" variant="subtle" color="red" onClick={() => emit.send("acp:prompt:cancel", session.id)}>
+            Cancel work
+          </Button>
+        )}
+        <SessionPlans session={session} />
+        <MessageComponent messages={messages} sessionId={session.id} sessions={sessions} />
+      </Stack>
+    </CollapseComponent>
+  );
+}
+
+interface MessageProps {
+  messages: AcpSDK.SessionNotification[];
+  sessionId: string;
+  sessions?: ReadonlyMap<string, IAcpSession>;
+}
+
+export const MessageComponent = React.memo(({ messages, sessionId, sessions }: MessageProps) => {
+  type Entry = { message: AcpSDK.SessionNotification; index: number; subagent?: IAcpSession };
+  type Group = { entries: Entry[]; toolCount: number; subagentCount: number; failedCount: number };
   const groups: Group[] = [];
   let pendingThoughts: Entry[] = [];
 
+  function hasPendingRequest(update: AcpSDK.SessionUpdate) {
+    return (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update")
+      && (update._meta?.permissionRequest || update._meta?.elicitationRequest);
+  }
+
+  function canGroupSubagent(session: IAcpSession): boolean {
+    const workState = session.subagent?.state?.state;
+    if (workState === "running" || workState === "requires_action") return false;
+    if (messages.some(message => message.sessionId === session.id && hasPendingRequest(message.update))) return false;
+
+    for (const child of sessions?.values() ?? []) {
+      if (child.subagent?.parentId === session.id && !canGroupSubagent(child)) return false;
+    }
+    return true;
+  }
+
   function flushThoughts() {
-    for (const thought of pendingThoughts) groups.push({ entries: [thought], toolCount: 0, failedCount: 0 });
+    for (const thought of pendingThoughts) groups.push({ entries: [thought], toolCount: 0, subagentCount: 0, failedCount: 0 });
     pendingThoughts = [];
   }
 
   messages.forEach((message, index) => {
     if (message.sessionId !== sessionId) return;
 
-    const entry = { message, index };
     const update = message.update;
+    const subagent = update.sessionUpdate === "subagent_update" ? sessions?.get(update.sessionId) : undefined;
+    if (update.sessionUpdate === "subagent_update" && !subagent?.subagent) return;
+    const entry = { message, index, subagent };
     const last = groups.at(-1);
-    if (update.sessionUpdate === "agent_thought_chunk" && last?.toolCount) {
+    const continuesGroup = last && (last.toolCount || last.subagentCount);
+    if (update.sessionUpdate === "agent_thought_chunk" && continuesGroup) {
       pendingThoughts.push(entry);
       return;
     }
 
-    const canGroup = (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update")
+    const finishedTool = (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update")
       && (update.status === "completed" || update.status === "failed")
-      && !update._meta?.permissionRequest && !update._meta?.elicitationRequest;
-    if (canGroup && last?.toolCount) {
+      && !hasPendingRequest(update);
+    const toolCount = finishedTool ? 1 : 0;
+    const subagentCount = subagent && canGroupSubagent(subagent) ? 1 : 0;
+    const workState = subagent?.subagent?.state;
+    const failedSubagent = subagentCount && workState?.state === "idle" && "stopReason" in workState && workState.stopReason === "error";
+    const failedCount = (finishedTool && update.status === "failed") || failedSubagent ? 1 : 0;
+
+    if ((toolCount || subagentCount) && continuesGroup) {
       last.entries.push(...pendingThoughts, entry);
-      last.toolCount++;
-      if (update.status === "failed") last.failedCount++;
+      last.toolCount += toolCount;
+      last.subagentCount += subagentCount;
+      last.failedCount += failedCount;
       pendingThoughts = [];
     } else {
       flushThoughts();
-      groups.push({ entries: [entry], toolCount: canGroup ? 1 : 0, failedCount: canGroup && update.status === "failed" ? 1 : 0 });
+      groups.push({ entries: [entry], toolCount, subagentCount, failedCount });
     }
   });
   flushThoughts();
 
-  function renderMessage({ message, index }: Entry) {
+  function renderMessage({ message, index, subagent }: Entry, grouped = false) {
     return (
       <Stack key={index} gap={0} px={2} py={4} className="animate fade-in acp-message" data-kind={message.update.sessionUpdate}>
-        <MessageMemo message={message} />
+        {subagent
+          ? <SubagentMessage session={subagent} messages={messages} sessions={sessions} open={!grouped} />
+          : <MessageMemo message={message} sessions={sessions} />}
       </Stack>
     );
   }
 
-  return groups.map(group => group.toolCount > 1 ? (
-    <Stack key={group.entries[0].index} gap={0} px={2} className="acp-message">
-      <CollapseComponent variant="row" label={`${group.toolCount} tool calls · ${group.failedCount ? `${group.failedCount} failed` : "Completed"}`}
-        icon={<Box component="i" c={group.failedCount ? "red" : undefined}>{kindIcons.other}</Box>}>
-        {group.entries.map(renderMessage)}
-      </CollapseComponent>
-    </Stack>
-  ) : renderMessage(group.entries[0]));
+  return groups.map(group => {
+    if (group.toolCount + group.subagentCount < 2) return renderMessage(group.entries[0]);
+
+    const counts = [
+      group.toolCount && `${group.toolCount} tool call${group.toolCount === 1 ? "" : "s"}`,
+      group.subagentCount && `${group.subagentCount} subagent${group.subagentCount === 1 ? "" : "s"}`
+    ].filter(Boolean).join(", ");
+    const unconfirmed = group.entries.some(({ subagent }) => subagent && subagent.subagent?.state?.state !== "idle");
+    const outcome = group.failedCount ? `${group.failedCount} failed`
+      : unconfirmed ? undefined : group.subagentCount ? "Finished" : "Completed";
+    return (
+      <Stack key={group.entries[0].index} gap={0} px={2} className="acp-message">
+        <CollapseComponent variant="row" label={outcome ? `${counts} · ${outcome}` : counts}
+          icon={<Box component="i" c={group.failedCount ? "red" : undefined}>{kindIcons.other}</Box>}>
+          {group.entries.map(entry => renderMessage(entry, true))}
+        </CollapseComponent>
+      </Stack>
+    );
+  });
 });

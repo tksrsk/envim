@@ -93,8 +93,8 @@ test('failed or interrupted authentication disconnects without restarting either
     h.handlers['acp:auth:authenticate']('terminal');
     await flush();
     let cancelled = 0;
-    h.acp.permission.pending = () => { cancelled++; };
-    h.acp.tool = { old: {} };
+    h.acp.permission.pending = { sessionId: "active", resolve: () => { cancelled++; } };
+    h.acp.tool = { old: { sessionId: "active", update: {} } };
     h.acp.sessions = { old: {} };
     h.handlers['acp:exited'](code);
     await flush();
@@ -105,7 +105,7 @@ test('failed or interrupted authentication disconnects without restarting either
     assert.equal(h.requests.length, 0);
     assert.equal(cancelled, 1);
     assert.deepEqual(h.acp.tool, {});
-    assert.deepEqual(h.acp.sessions, {});
+    assert.deepEqual(Object.keys(h.acp.sessions), []);
   }
 });
 
@@ -124,8 +124,8 @@ test('terminal startup failure disconnects without reinitializing', async () => 
 test('old process exit performs the existing reset before terminal authentication', async () => {
   const h = setup();
   let cancelled = 0;
-  h.acp.permission.pending = () => { cancelled++; };
-  h.acp.tool = { old: {} };
+  h.acp.permission.pending = { sessionId: "active", resolve: () => { cancelled++; } };
+  h.acp.tool = { old: { sessionId: "active", update: {} } };
   h.acp.sessions = { old: {} };
   h.setRpc(async name => {
     if (name === 'EnvimAcpStop') await h.handlers['acp:exited'](143);
@@ -137,7 +137,7 @@ test('old process exit performs the existing reset before terminal authenticatio
   assert.equal(h.connects, 0);
   assert.equal(cancelled, 1);
   assert.deepEqual(h.acp.tool, {});
-  assert.deepEqual(h.acp.sessions, {});
+  assert.deepEqual(Object.keys(h.acp.sessions), []);
 });
 
 test('Neovim + real SDK: failure, cancellation, retry and authenticated session', { timeout: 15000 }, async () => {
@@ -330,12 +330,114 @@ test('normal startup failure clears state, while initialized keeps the existing 
   }
 });
 
-test('initialization advertises notices and compaction support', async () => {
+test('initialization advertises notices, compaction, plans, and subagents', async () => {
   const h = setup();
   await h.handlers['acp:agent:start'](agent);
   await flush();
   const initialize = h.requests.find(([method]) => method === sdk.methods.agent.initialize);
   assert.deepEqual(initialize[1].clientCapabilities.session, { notices: {}, compaction: {} });
+  assert.deepEqual(initialize[1].clientCapabilities.plan, {});
+  assert.deepEqual(initialize[1].clientCapabilities.subagents, {});
+});
+
+test('legacy and identified plans update independently by session and plan ID', () => {
+  const { acp } = setup();
+  acp.state.sessionId = 'active';
+  acp.sessions.active = { id: 'active', plan: [] };
+  const update = (fields, sessionId = 'active') => acp.onSessionUpdate({ sessionId, update: fields });
+  const entry = { content: 'Legacy task', priority: 'high', status: 'pending' };
+  const items = { type: 'items', planId: 'first', entries: [entry] };
+  const other = { type: 'markdown', planId: 'second', content: 'Keep this' };
+  const replacement = { type: 'markdown', planId: 'first', content: '# Updated' };
+
+  update({ sessionUpdate: 'plan', entries: [entry] });
+  update({ sessionUpdate: 'plan_update', plan: items });
+  update({ sessionUpdate: 'plan_update', plan: other });
+  update({ sessionUpdate: 'subagent_update', sessionId: 'child' });
+  update({ sessionUpdate: 'plan_update', plan: items }, 'child');
+  update({ sessionUpdate: 'plan_update', plan: replacement });
+  assert.deepEqual(acp.sessions.active.plans, [replacement, other]);
+  update({ sessionUpdate: 'plan_removed', planId: 'first' });
+  assert.deepEqual(acp.sessions.active.plans, [other]);
+  assert.deepEqual(acp.sessions.active.plan, [entry]);
+  assert.deepEqual(acp.sessions.child.plans, [items]);
+});
+
+test('child updates stay scoped and cancellation resolves only that child’s pending requests', async () => {
+  const { acp, sent, requests, handlers } = setup();
+  acp.state.sessionId = 'root';
+  acp.sessions.root = { id: 'root', plan: [] };
+  const notifications = [];
+  acp.connection.agent.notify = async (...args) => { notifications.push(args); };
+  const update = (sessionId, fields) => acp.onSessionUpdate({ sessionId, update: fields });
+  update('root', { sessionUpdate: 'subagent_update', sessionId: 'child', title: 'Worker', capabilities: { cancel: {} }, state: { state: 'running' } });
+  update('child', { sessionUpdate: 'subagent_update', sessionId: 'grandchild' });
+  update('root', { sessionUpdate: 'subagent_update', sessionId: 'child', description: 'Handles a task' });
+  assert.equal(acp.sessions.child.name, 'Worker');
+  assert.equal(acp.sessions.grandchild.subagent.parentId, 'child');
+
+  for (const sessionId of ['root', 'child']) {
+    update(sessionId, { sessionUpdate: 'tool_call', toolCallId: 'same', title: sessionId, status: 'pending' });
+  }
+  const permission = sessionId => acp.onRequestPermission({
+    sessionId, toolCall: { toolCallId: 'same' }, options: []
+  }, new AbortController().signal);
+  const parentPermission = permission('root');
+  const childPermission = permission('child');
+  await handlers['acp:session:switch']('child');
+  await handlers['acp:session:fork']('child');
+  handlers['acp:session:delete']('child');
+  handlers['acp:prompt:cancel']('grandchild');
+  assert.deepEqual(requests, []);
+  assert.deepEqual(notifications, []);
+  handlers['acp:prompt:cancel']('child');
+  assert.deepEqual(await childPermission, { outcome: { outcome: 'cancelled' } });
+  assert.deepEqual(notifications, [[sdk.methods.agent.session.cancel, { sessionId: 'child' }]]);
+  const pending = Object.entries(acp.permission);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0][1].sessionId, 'root');
+  handlers['acp:permission:response'](pending[0][0], 'allow');
+  assert.deepEqual(await parentPermission, { outcome: { outcome: 'selected', optionId: 'allow' } });
+  const messages = sent.filter(([event]) => event === 'acp:message:added').map(([, message]) => message);
+  const announcements = messages.filter(message => message.update.sessionUpdate === 'subagent_update');
+  assert.deepEqual(announcements.map(message => [message.sessionId, message.update.sessionId]), [
+    ['root', 'child'], ['child', 'grandchild']
+  ]);
+  const toolMessages = messages.filter(message => message.update.sessionUpdate === 'tool_call_update');
+  assert.ok(toolMessages.every(message => message.sessionId === message.update.title));
+
+  update('root', { sessionUpdate: 'subagent_update', sessionId: 'child', capabilities: null, state: null });
+  handlers['acp:prompt:cancel']('child');
+  assert.equal(notifications.length, 1);
+  assert.equal(acp.sessions.child.subagent.state, null);
+});
+
+test('a loaded child only gains cancel capability from live updates after replay', async () => {
+  const { acp, handlers, setRequest } = setup();
+  acp.state.initialize.agentCapabilities.loadSession = true;
+  acp.sessions.root = { id: 'root', plan: [], loaded: false };
+  const announced = {
+    sessionId: 'root',
+    update: { sessionUpdate: 'subagent_update', sessionId: 'child', title: 'Worker',
+      state: { state: 'running' }, capabilities: { cancel: {} } }
+  };
+  let completeLoad;
+  setRequest(() => new Promise(resolve => { completeLoad = resolve; }));
+  const notifications = [];
+  acp.connection.agent.notify = async (...args) => { notifications.push(args); };
+
+  await handlers['acp:session:switch']('root');
+  acp.onSessionUpdate(announced);
+  assert.equal(acp.sessions.child.name, 'Worker');
+  assert.equal(acp.sessions.child.subagent.state, undefined);
+  completeLoad({});
+  await flush();
+
+  handlers['acp:prompt:cancel']('child');
+  assert.equal(notifications.length, 0);
+  acp.onSessionUpdate(announced);
+  handlers['acp:prompt:cancel']('child');
+  assert.deepEqual(notifications, [[sdk.methods.agent.session.cancel, { sessionId: 'child' }]]);
 });
 
 test('session notices use their own event while compaction updates reach message history', () => {

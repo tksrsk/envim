@@ -12,8 +12,7 @@ import { useApp } from "renderer/context/app";
 import { uiIcons } from "renderer/utils/icons";
 
 import { MenuComponent, SubMenuComponent, MenuItemComponent, TreeMenuItems, trackMenu } from "renderer/components/menu";
-import { CollapseComponent } from "renderer/components/collapse";
-import { MessageComponent } from "renderer/components/acp/message";
+import { AgentIcon, MessageComponent, SessionPlans } from "renderer/components/acp/message";
 import { McpAppsComponent } from "renderer/components/acp/app";
 import { ElicitationComponent } from "renderer/components/acp/elicitation";
 
@@ -213,6 +212,28 @@ export function AcpComponent() {
 
   function filterMessages(messages: AcpSDK.SessionNotification[], curr: AcpSDK.SessionNotification): AcpSDK.SessionNotification[] {
     const update = curr.update;
+
+    if (update.sessionUpdate === "session_message" || update.sessionUpdate === "session_message_chunk") {
+      const index = messages.findIndex(msg => msg.sessionId === curr.sessionId
+        && msg.update.sessionUpdate === "session_message" && msg.update.messageId === update.messageId);
+      const previous = messages[index]?.update;
+      const base = previous?.sessionUpdate === "session_message" ? previous : undefined;
+      let merged: AcpSDK.SessionMessage & { sessionUpdate: "session_message" };
+      if (update.sessionUpdate === "session_message_chunk") {
+        const content = [...(base?.content ?? [])];
+        const last = content.at(-1);
+        if (last?.type === "text" && update.content.type === "text") {
+          content[content.length - 1] = { ...last, text: last.text + update.content.text };
+        } else {
+          content.push(update.content);
+        }
+        merged = { ...base, sessionUpdate: "session_message", messageId: update.messageId, content };
+      } else {
+        merged = { ...base, ...update };
+      }
+      const notification = { ...curr, update: merged };
+      return index < 0 ? [...messages, notification] : messages.map((msg, i) => i === index ? notification : msg);
+    }
 
     if (update.sessionUpdate === "compaction_update" || update.sessionUpdate === "compaction_summary_chunk") {
       const index = messages.findIndex(msg => msg.sessionId === curr.sessionId && msg.update.sessionUpdate === "compaction_update" && msg.update.compactionId === update.compactionId);
@@ -495,24 +516,7 @@ export function AcpComponent() {
     setState(s => ({ ...s, search: { ...s.search, highlight: false } }));
   }
 
-  function getStatusIcon(status?: string | null) {
-    switch (status) {
-      case "pending": return <Box component="i" c="dimmed">{uiIcons.pending}</Box>;
-      case "in_progress": return <Loader size="1em" mx={4} />;
-      case "completed": return <Box component="i" c="green">{uiIcons.success}</Box>;
-      case "failed": return <Box component="i" c="red">{uiIcons.error}</Box>;
-      default: return null;
-    }
-  }
-
-  function getPriorityColor (priority: AcpSDK.PlanEntry["priority"]) {
-    switch (priority) {
-      case "high": return "red";
-      case "medium": return "yellow";
-      case "low": return "gray";
-      default: return "gray";
-    }
-  }
+  const sessionsById = React.useMemo(() => new Map(state.sessions.map(session => [session.id, session])), [state.sessions]);
 
   function checkAcpStatus(type: "connected" | "processing"): boolean {
     const status = type === "connected"
@@ -610,7 +614,7 @@ export function AcpComponent() {
                 </Button>
               </Menu.Target>
               <Menu.Dropdown ref={trackMenu} style={{ maxHeight: "50vh", maxWidth: "50vw", overflowY: "auto" }}>
-                {state.sessions.map(session => (
+                {state.sessions.filter(session => !session.subagent).map(session => (
                   <MenuItemComponent key={session.id} active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)}
                     rightSection={<>
                       {state.status.initialize?.agentCapabilities?.sessionCapabilities?.fork && <ActionIcon color="pink" onClick={e => onAcpSessionFork(e, session.id)}><i>󰘬</i></ActionIcon>}
@@ -666,7 +670,7 @@ export function AcpComponent() {
           ) : state.status.sessionId ? (
             <>
               <Stack gap={0} p={6} style={{ flex: "1 1 auto", overflow: "auto" }} onScroll={onScrollContainer}>
-                <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
+                <MessageComponent messages={state.messages} sessionId={state.status.sessionId} sessions={sessionsById} />
 
                 <div ref={scroll} />
               </Stack>
@@ -693,21 +697,7 @@ export function AcpComponent() {
         {state.status.elicitation && (
           <ElicitationComponent key={state.status.elicitation.requestId} request={state.status.elicitation} />
         )}
-        {state.session?.plan && state.session.plan.length > 0 && (
-          <CollapseComponent
-            label=" Plans"
-            badge={`${state.session.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.session.plan.length}`}
-            open
-          >
-            {state.session.plan.map((entry, index) => (
-              <Group key={index} gap={6} wrap="nowrap" py={2}>
-                {getStatusIcon(entry.status)}
-                <Text size="xs" style={{ flex: 1, whiteSpace: "pre-wrap" }} td={entry.status === "completed" ? "line-through" : undefined} c={entry.status === "completed" ? "dimmed" : undefined}>{entry.content}</Text>
-                <Badge size="xs" variant="dot" color={getPriorityColor(entry.priority)}>{entry.priority}</Badge>
-              </Group>
-            ))}
-          </CollapseComponent>
-        )}
+        {state.session && <SessionPlans session={state.session} />}
         {state.status.sessionId && <McpAppsComponent sessionId={state.status.sessionId} />}
 
         {checkAcpStatus("connected") && (
@@ -828,8 +818,4 @@ function UsageComponent({ used, size }: { used: number; size: number }) {
       </Group>
     </Tooltip>
   );
-}
-
-function AgentIcon({ icon }: { icon?: string | null }) {
-  return icon ? <i className="agent-icon" style={{ maskImage: `url(${icon})` }} /> : <i>{"\uEC1E"}</i>;
 }

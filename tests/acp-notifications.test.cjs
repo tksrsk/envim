@@ -181,3 +181,73 @@ test('compaction errors remain in the compaction UI when notices change or clear
   assert.match(ui.compactions[0].textContent, /Compaction failure/);
   assert.doesNotMatch(ui.container.textContent, /Independent notice/);
 });
+
+test('renders both plan formats and streams messages in the child transcript', async t => {
+  const ui = await setup(t);
+  const session = { id: 'active', name: 'Parent', commands: [], configOptions: [],
+    plan: [{ content: 'Old checklist', priority: 'high', status: 'pending' }],
+    plans: [{ type: 'markdown', planId: 'new', content: '**New plan**' }] };
+  const child = { id: 'child', name: 'Worker', commands: [], configOptions: [], plan: [],
+    plans: [{ type: 'markdown', planId: 'new', content: 'Child tasks' }],
+    subagent: { sessionId: 'child', parentId: 'active', state: { state: 'running' } } };
+  const reviewer = { ...child, id: 'reviewer', name: 'Reviewer', plans: [],
+    subagent: { sessionId: 'reviewer', parentId: 'active', state: { state: 'idle', stopReason: 'end_turn' } } };
+  await ui.receive('acp:session:update', 'active', [session, child, reviewer]);
+  await ui.message({ sessionUpdate: 'tool_call_update', toolCallId: 'lookup', status: 'completed', title: 'Lookup' });
+  await ui.message({ sessionUpdate: 'subagent_update', sessionId: 'child' });
+  await ui.message({ sessionUpdate: 'subagent_update', sessionId: 'reviewer' });
+  assert.match(ui.container.textContent, /Session plans/);
+  assert.match(ui.container.textContent, /Old checklist/);
+  const worker = [...ui.container.querySelectorAll('.envim-collapse-row')].find(row => row.querySelector('button')?.textContent.includes('Worker'));
+  assert.match(worker.querySelector('button').textContent, /Running/);
+  assert.ok(worker.querySelector('button .mantine-Loader-root'));
+  assert.match(worker.textContent, /Child tasks/);
+  assert.equal(ui.container.querySelector('strong').textContent, 'New plan');
+  await ui.message({ sessionUpdate: 'session_message_chunk', messageId: 'same', content: { type: 'text', text: '**Hello' } }, 'child');
+  await ui.message({ sessionUpdate: 'session_message', messageId: 'same', senderSessionId: 'active', recipientSessionId: 'child' }, 'child');
+  await ui.message({ sessionUpdate: 'session_message_chunk', messageId: 'same', content: { type: 'text', text: ' world**' } }, 'child');
+  await ui.message({ sessionUpdate: 'session_message', messageId: 'same', content: [{ type: 'text', text: 'Parent transcript' }] });
+  const messages = [...ui.container.querySelectorAll('[data-kind="session_message"]')];
+  assert.equal(messages.length, 2);
+  const childMessage = messages.find(message => message.textContent.includes('Parent → Worker'));
+  assert.equal(childMessage.querySelector('strong').textContent, 'Hello world');
+  assert.match(messages.find(message => message !== childMessage).textContent, /Parent transcript/);
+  assert.ok(worker.querySelector('.envim-collapse-card').compareDocumentPosition(childMessage) & window.Node.DOCUMENT_POSITION_FOLLOWING);
+  await ui.receive('acp:session:update', 'active', [session, {
+    ...child, subagent: { ...child.subagent, state: { state: 'idle', stopReason: 'cancelled' } }
+  }, reviewer]);
+  const history = [...ui.container.querySelectorAll('button')].find(button => button.textContent.includes('1 tool call, 2 subagents'));
+  assert.equal(history.getAttribute('aria-expanded'), 'false');
+  assert.doesNotMatch(ui.container.textContent, /Hello world/);
+  await React.act(async () => history.click());
+  const finishedWorker = [...ui.container.querySelectorAll('button')].find(button => button.textContent.includes('Worker'));
+  assert.match(finishedWorker.textContent, /Cancelled/);
+  assert.match(ui.container.textContent, /Lookup/);
+  assert.match(ui.container.textContent, /Reviewer/);
+  const parentMessage = messages.find(message => message !== childMessage);
+  assert.ok(history.compareDocumentPosition(parentMessage) & window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(finishedWorker.querySelector('.mantine-Loader-root'), null);
+  assert.equal(finishedWorker.getAttribute('aria-expanded'), 'false');
+  assert.doesNotMatch(ui.container.textContent, /Hello world/);
+  await React.act(async () => finishedWorker.click());
+  assert.match(ui.container.textContent, /Hello world/);
+});
+
+test('an unreported subagent status does not split a group of completed tool runs', async t => {
+  const ui = await setup(t);
+  const root = { id: 'active', name: 'Parent', commands: [], configOptions: [], plan: [] };
+  const child = { ...root, id: 'child', name: 'Worker', subagent: { parentId: 'active', sessionId: 'child' } };
+  await ui.receive('acp:session:update', 'active', [root, child]);
+  await ui.message({ sessionUpdate: 'tool_call', toolCallId: 'start', title: 'Start worker', status: 'completed',
+    content: [{ type: 'session', sessionId: 'child' }] });
+  await ui.message({ sessionUpdate: 'subagent_update', sessionId: 'child' });
+  await ui.message({ sessionUpdate: 'tool_call', toolCallId: 'wait', title: 'Wait', status: 'completed' });
+  const group = [...ui.container.querySelectorAll('button')].find(button => button.textContent.includes('2 tool calls, 1 subagent'));
+  assert.ok(group);
+  assert.doesNotMatch(group.textContent, /Finished|Completed/);
+  await React.act(async () => group.click());
+  assert.doesNotMatch(ui.container.textContent, /Status unknown/);
+  const start = [...ui.container.querySelectorAll('button')].find(button => button.textContent.includes('Start worker'));
+  await React.act(async () => start.click());
+  assert.match(ui.container.textContent, /Session Worker/);
+});

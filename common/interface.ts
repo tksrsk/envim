@@ -123,6 +123,8 @@ export interface IAcpSession {
   configOptions: AcpSDK.SessionConfigOption[];
   usage?: AcpSDK.UsageUpdate;
   plan: AcpSDK.PlanEntry[];
+  plans?: AcpSDK.PlanUpdateContent[];
+  subagent?: AcpSDK.SubagentUpdate & { parentId: string };
 }
 
 export interface IAcpStatus {
