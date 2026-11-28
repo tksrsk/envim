@@ -13,7 +13,7 @@ interface Options {
   address: InputRef;
   searchInput: InputRef;
   search: string;
-  command: (...command: BrowserTabCommand) => unknown;
+  command: <T = unknown>(...command: BrowserTabCommand) => Promise<T>;
   picking: () => boolean;
   togglePicker: () => void;
 }
@@ -21,6 +21,8 @@ interface Options {
 export function useCommandMode({ tab, area, commandInput, address, searchInput, search, command, picking, togglePicker }: Options) {
   const { emit } = useWorkspace();
   const cursor = React.useRef({ x: 0, y: 0 });
+  const pendingJump = React.useRef(Promise.resolve());
+  const cursorRevision = React.useRef(0);
   const anchor = React.useRef<{ x: number; y: number; line: boolean } | undefined>(undefined);
   const [mode, setMode] = React.useState<"command" | "visual">();
 
@@ -57,10 +59,24 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
   }
 
   function move(nextX: number, nextY: number) {
+    cursorRevision.current++;
+    placeCursor(nextX, nextY);
+  }
+
+  function placeCursor(nextX: number, nextY: number) {
     cursor.current = { x: nextX, y: nextY };
     const point = cursorRect();
     cursor.current = point;
     void command("cursor", { point, selection: selectionRect() });
+  }
+
+  function jumpToElement(direction: "next" | "previous") {
+    const revision = cursorRevision.current;
+    pendingJump.current = pendingJump.current.then(async () => {
+      if (revision !== cursorRevision.current) return;
+      const target = await command<{ x: number; y: number } | null>("cursor-element", { direction, point: cursorRect() });
+      if (target && revision === cursorRevision.current) placeCursor(target.x, target.y);
+    }).catch(() => {});
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -92,8 +108,8 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
       case "L": return move(x, bottom);
       case "0": return move(0, y);
       case "$": return move(right, y);
-      case "b": return move(x - width * 15, y);
-      case "w": return move(x + width * 15, y);
+      case "b": return jumpToElement("previous");
+      case "w": return jumpToElement("next");
       case "n": case "N": return void (search ? command("find", search, event.key === "n") : command("stop-find"));
       case "g": case "G":
         void command("scroll-edge", event.key === "g" ? "top" : "bottom");
@@ -119,13 +135,19 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
       case ":": return address.current?.focus();
       case "/": return searchInput.current?.focus();
       case "Escape":
+        cursorRevision.current++;
         if (picking()) togglePicker();
         if (mode === "command") void command("send-escape");
         anchor.current = undefined;
         setMode("command");
         void command("selection", selectionRect());
         return void command(tab.loading ? "stop" : "stop-find");
-      case "Enter": return void command("cursor-click", cursorRect());
+      case "Enter": {
+        const revision = cursorRevision.current;
+        return void pendingJump.current.then(async () => {
+          if (revision === cursorRevision.current) await command("cursor-click", cursorRect());
+        }).catch(() => {});
+      }
     }
   }
 
@@ -135,6 +157,7 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
   }
 
   function onBlur() {
+    cursorRevision.current++;
     anchor.current = undefined;
     setMode(undefined);
     void command("selection", null);

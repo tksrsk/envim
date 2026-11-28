@@ -193,6 +193,7 @@ export type BrowserTabCommand =
   | [action: "selection", bounds: BrowserRectangle | null]
   | [action: "capture", bounds?: BrowserRectangle]
   | [action: "cursor", position: { point: BrowserRectangle; selection: BrowserRectangle }]
+  | [action: "cursor-element", movement: { direction: "next" | "previous"; point: BrowserRectangle }]
   | [action: "cursor-click", position: BrowserRectangle]
   | [action: "scroll", scroll: { direction: "h" | "j" | "k" | "l" | "u" | "d"; point: BrowserRectangle }]
   | [action: "scroll-edge", edge: "top" | "bottom"]

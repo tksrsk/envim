@@ -4,6 +4,7 @@ import type { BrowserTabCommand, IWorkspaceBrowserTab, IWorkspaceBrowserState } 
 import { Bootstrap } from "main/bootstrap";
 import { Setting } from "main/setting";
 import { BrowserPage } from "main/browser/page";
+import { adjacentElementPoint } from "main/browser/cursor";
 import type { WorkspaceEmit } from "main/emit";
 import { registerBrowserOwner } from "main/browser/mcp/sharedbrowser";
 
@@ -285,6 +286,21 @@ export class BrowserTabs {
     });
   }
 
+  private async cursorElement(tab: Tab, movement: { direction: "next" | "previous"; point: unknown }) {
+    if (this.visible !== tab || (movement?.direction !== "next" && movement?.direction !== "previous")) return null;
+    const point = this.pageRect(tab, movement.point);
+    const page = tab.view.webContents;
+    const window = Bootstrap.win;
+    if (!point || !window || page.isDestroyed()) return null;
+    const zoom = window.webContents.getZoomFactor();
+    const pageZoom = page.getZoomFactor();
+    const target = await page.executeJavaScriptInIsolatedWorld(1001, [{
+      code: `(${adjacentElementPoint.toString()})(${JSON.stringify(point)}, ${pageZoom}, ${movement.direction === "next"})`,
+    }]).catch(() => null);
+    if (!target || this.visible !== tab) return null;
+    return { x: target.x / zoom, y: target.y / zoom };
+  }
+
   private onBrowserTabCommand = (id: number, ...[action, arg, forward = true]: BrowserTabCommand) => {
     const tab = this.tabs.get(id);
     if (!tab) return;
@@ -310,6 +326,7 @@ export class BrowserTabs {
         if (bounds) page.sendInputEvent({ type: "mouseMove", x: bounds.x, y: bounds.y });
         return this.showSelection(tab, selection);
       }
+      case "cursor-element": return this.cursorElement(tab, arg);
       case "cursor-click": {
         if (this.visible !== tab) break;
         const point = this.pageRect(tab, arg);

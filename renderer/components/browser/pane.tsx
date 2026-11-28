@@ -22,8 +22,8 @@ export function BrowserPaneComponent({ tab, visible }: { tab: IWorkspaceBrowserT
   const [selecting, setSelecting] = React.useState(false);
   const token = React.useRef<string | undefined>(undefined);
 
-  function command(...command: BrowserTabCommand) {
-    return emit.send("browser:tab:command", tab.id, ...command);
+  function command<T = unknown>(...command: BrowserTabCommand) {
+    return emit.send<T>("browser:tab:command", tab.id, ...command);
   }
 
   const mode = useCommandMode({
