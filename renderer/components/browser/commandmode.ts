@@ -2,7 +2,7 @@ import React from "react";
 
 import type { BrowserTabCommand, IWorkspaceBrowserTab } from "common/interface";
 import { useWorkspace } from "renderer/context/workspace";
-import { col2X, row2Y } from "renderer/utils/size";
+import { useApp } from "renderer/context/app";
 
 type InputRef = React.RefObject<HTMLInputElement | null>;
 
@@ -20,6 +20,7 @@ interface Options {
 
 export function useCommandMode({ tab, area, commandInput, address, searchInput, search, command, picking, togglePicker }: Options) {
   const { emit } = useWorkspace();
+  const { grid } = useApp();
   const cursor = React.useRef({ x: 0, y: 0 });
   const pendingJump = React.useRef(Promise.resolve());
   const cursorRevision = React.useRef(0);
@@ -27,8 +28,8 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
   const [mode, setMode] = React.useState<"command" | "visual">();
 
   function cursorRect() {
-    const width = col2X(1);
-    const height = row2Y(1);
+    const width = grid.col2X(1);
+    const height = grid.row2Y(1);
     const x = Math.max(0, Math.min(cursor.current.x, (area.current?.clientWidth ?? 0) - width));
     const y = Math.max(0, Math.min(cursor.current.y, (area.current?.clientHeight ?? 0) - height));
     return { x, y, width, height };

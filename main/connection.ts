@@ -117,7 +117,8 @@ export class Connection {
       workspace.bookmark = bookmark;
       Connection.current = workspace;
       Connection.workspaces = [ ...Connection.workspaces.filter(w => w !== workspace), workspace ];
-      Connection.emitWorkspace(setting);
+      Setting.set({ ...setting, bookmarks: setting.bookmarks.map(item => ({ ...item, selected: item.path === bookmark })) });
+      Connection.emitWorkspace();
       Emit.share("app:theme:native");
     };
 
@@ -141,7 +142,7 @@ export class Connection {
     Connection.emitWorkspace();
   }
 
-  private static async emitWorkspace(setting: ISetting = Setting.get()) {
+  private static async emitWorkspace() {
     const workspaces: { [id: string]: string } = {};
     const current = Connection.current
 
@@ -150,7 +151,8 @@ export class Connection {
       workspace.browserTabs.activate(workspace === current);
     });
 
-    Setting.set({ ...setting, bookmarks: setting.bookmarks.map(bookmark => ({ ...bookmark, selected: bookmark.path === current?.bookmark })) });
+    const setting = Setting.get();
+    if (setting) Emit.send("app:setting", setting);
     Emit.update("app:workspace", false, workspaces, current?.id || "");
     current?.bookmark && await current.nvim.command(`cd ${current.bookmark}`);
   }

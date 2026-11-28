@@ -3,7 +3,7 @@ import React from "react";
 import { ISetting, ITab, IBuffer, IMode, IMenu } from "common/interface";
 
 import { useWorkspace } from "renderer/context/workspace";
-import { Setting } from "renderer/utils/setting";
+import { useApp } from "renderer/context/app";
 
 interface EditorContextType {
   busy: boolean;
@@ -19,7 +19,7 @@ interface EditorContextType {
 const EditorContext = React.createContext<EditorContextType>({
   busy: false,
   connections: [],
-  options: Setting.options,
+  options: {},
   tabs: [],
   bufs: [],
   menus: [],
@@ -30,10 +30,11 @@ export const useEditor = () => React.useContext(EditorContext);
 
 export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { emit } = useWorkspace();
+  const { setting } = useApp();
   const [state, setState] = React.useState<EditorContextType>({
     busy: false,
     connections: [],
-    options: Setting.options,
+    options: setting.options,
     tabs: [],
     bufs: [],
     menus: [],
@@ -63,13 +64,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   function onNeovimUiOptionSet(options: ISetting["options"]) {
-    setState(state => {
-      const next = { ...state.options, ...options };
-
-      Setting.options = next;
-
-      return { ...state, options: next };
-    });
+    setState(state => ({ ...state, options: { ...state.options, ...options } }));
   }
 
   function onNeovimUiModeChange (mode: IMode) {

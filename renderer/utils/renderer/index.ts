@@ -1,8 +1,7 @@
 import type { ICell, IScroll } from "common/interface";
 
 import type { Highlights } from "../highlight";
-import { Setting } from "../setting";
-import { col2X, row2Y } from "../size";
+import type { ISetting } from "common/setting";
 
 export interface DecorationStroke {
   points: { x: number; y: number }[];
@@ -12,6 +11,7 @@ export interface DecorationStroke {
 
 interface FontMetrics {
   size: number;
+  scale: number;
   width: number;
   height: number;
 }
@@ -46,9 +46,9 @@ export abstract class Renderer {
     protected readonly canvas: HTMLCanvasElement,
     protected lighten: boolean,
     protected readonly highlights: Highlights,
+    { size, scale, width, height }: ISetting["font"],
   ) {
-    const { size, scale } = Setting.font;
-    this.font = { size: size * scale, width: col2X(1) * scale, height: row2Y(1) * scale };
+    this.font = { size: size * scale, scale, width: width * scale, height: height * scale };
   }
 
   protected get available() {
@@ -69,18 +69,14 @@ export abstract class Renderer {
     if (!this.failed) this.failed = !this.resize(this.backgroundColor("0"));
   }
 
-  clear(x: number, y: number, width: number, height: number) {
+  clear() {
     this.links.clear();
     this.animation = undefined;
     this.dirty = true;
     if (this.failed) return;
 
-    this.failed = !this.drawBackground({
-      x: x * this.font.width,
-      y: y * this.font.height,
-      width: width * this.font.width,
-      height: height * this.font.height,
-    }, this.backgroundColor("0"));
+    const { width, height } = this.canvas;
+    this.failed = !this.drawBackground({ x: 0, y: 0, width, height }, this.backgroundColor("0"));
   }
 
   push(cells: ICell[], scroll?: IScroll) {
@@ -131,7 +127,7 @@ export abstract class Renderer {
   protected decorations(cells: ICell[]) {
     const { font, highlights, links } = this;
     const strokes: DecorationStroke[] = [];
-    const lineWidth = Setting.font.scale;
+    const lineWidth = font.scale;
 
     for (const { row, col, width, hl } of cells) {
       const types = highlights.decoration(hl);

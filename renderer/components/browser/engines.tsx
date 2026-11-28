@@ -4,24 +4,15 @@ import { ActionIcon } from "@mantine/core";
 import { IFormRequest, schema } from "common/schema";
 
 import { useWorkspace } from "renderer/context/workspace";
-import { Emit } from "renderer/utils/emit";
-import { Setting } from "renderer/utils/setting";
+import { useApp } from "renderer/context/app";
 import { uiIcons } from "renderer/utils/icons";
 import { MenuComponent, MenuItemComponent, TreeMenuItems } from "renderer/components/menu";
 
 export function useSearchEngines() {
-  const [engines, setEngines] = React.useState(Setting.searchengines);
+  const { setting: { searchengines: engines }, updateSetting } = useApp();
 
-  React.useEffect(() => {
-    const onEngines = () => setEngines(Setting.searchengines);
-    Emit.on("browser:searchengines", onEngines);
-    return () => Emit.off("browser:searchengines", onEngines);
-  }, []);
-
-  function save(next: typeof engines) {
-    Setting.searchengines = next;
-    Emit.send("app:setting", Setting.get());
-    Emit.share("browser:searchengines");
+  function save(update: (current: typeof engines) => typeof engines) {
+    updateSetting(setting => ({ ...setting, searchengines: update(setting.searchengines) }));
   }
 
   return { engines, save };
@@ -45,13 +36,16 @@ export function SearchEngineMenuComponent({ url, engines, save, onNavigate, onFo
   }, [emit]);
 
   function onEngineSave(original: string | undefined, action?: string, values?: { name: string; uri: string }) {
-    const others = Setting.searchengines.filter(engine => ![original, values?.name].includes(engine.name) && engine.uri !== values?.uri);
-    const selected = !!values?.uri.includes("${query}");
-    const engines = action === "save" && values
-      ? [...others.map(engine => ({ ...engine, selected: engine.selected && !selected })), { name: values.name, uri: values.uri, selected }]
-      : action === "delete" ? others : undefined;
+    if (action !== "delete" && (action !== "save" || !values)) return;
 
-    engines && save(engines.sort((a, b) => a.name.localeCompare(b.name)));
+    save(current => {
+      const others = current.filter(engine => ![original, values?.name].includes(engine.name) && engine.uri !== values?.uri);
+      const selected = !!values?.uri.includes("${query}");
+      const next = action === "save" && values
+        ? [...others.map(engine => ({ ...engine, selected: engine.selected && !selected })), { name: values.name, uri: values.uri, selected }]
+        : others;
+      return next.sort((a, b) => a.name.localeCompare(b.name));
+    });
   }
 
   function openEngineForm(e: React.MouseEvent, engine?: typeof engines[number]) {
@@ -75,7 +69,7 @@ export function SearchEngineMenuComponent({ url, engines, save, onNavigate, onFo
         rightSection={<ActionIcon title="Edit" onClick={e => openEngineForm(e, engine)}><i>{uiIcons.edit}</i></ActionIcon>}
         onClick={event => {
         if (engine.uri.includes("${query}")) {
-          save(engines.map(item => ({ ...item, selected: item.name === engine.name })));
+          save(current => current.map(item => ({ ...item, selected: item.name === engine.name })));
           onFocusAddress();
         } else if (event.ctrlKey || event.metaKey) {
           void emit.send("browser:open", engine.uri);

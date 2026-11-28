@@ -1,3 +1,4 @@
+import type { ISetting } from "common/setting";
 import { ICell, IScroll } from "common/interface";
 
 import { Highlights } from "renderer/utils/highlight";
@@ -13,14 +14,14 @@ export class Canvas {
 
   constructor(private highlights: Highlights) {}
 
-  create(id: number, canvas: HTMLCanvasElement, lighten: boolean) {
+  create(id: number, canvas: HTMLCanvasElement, lighten: boolean, font: ISetting["font"]) {
     const gl = canvas.getContext("webgl2", { antialias: false, depth: false });
     if (gl) {
-      const webgl = WebGL2.create(canvas, gl, lighten, this.highlights);
+      const webgl = WebGL2.create(canvas, gl, lighten, this.highlights, font);
       if (webgl) this.renderers[id] = webgl;
     } else {
       const context = canvas.getContext("2d");
-      if (context) this.renderers[id] = new Context2D(context, lighten, this.highlights);
+      if (context) this.renderers[id] = new Context2D(context, lighten, this.highlights, font);
     }
   }
 
@@ -40,8 +41,8 @@ export class Canvas {
     }
   }
 
-  clear(id: number, width: number, height: number) {
-    this.renderers[id]?.clear(0, 0, width, height);
+  clear(id: number) {
+    this.renderers[id]?.clear();
     this.render();
   }
 

@@ -51,9 +51,8 @@ export class Workspace {
     emit.on("neovim:ui:attach", this.onNeovimUiAttach);
     emit.on("neovim:ui:option", this.onNeovimUiOption);
     emit.on("neovim:ui:position", this.onNeovimUiPosition);
-    emit.on("neovim:ui:ready", this.onNeovimUiReady);
+    emit.on("neovim:ui:grid:ready", this.onNeovimUiGridReady);
     emit.on("neovim:ui:resize", this.onNeovimUiResize);
-    emit.on("neovim:ui:resized", this.onNeovimUiResized);
 
     this.emit = emit;
     this.messages = new Messages(this);
@@ -120,18 +119,14 @@ export class Workspace {
     this.grids.flush();
   }
 
-  private onNeovimUiReady = (gid: number, revision: number) => {
-    this.onNeovimUiResized(gid, revision);
+  private onNeovimUiGridReady = (gid: number, revision: number) => {
+    this.grids.onReady(gid, revision);
   }
 
   private onNeovimUiResize = (gid: number, width: number, height: number) => {
     gid
       ? this.nvim.uiTryResizeGrid(gid, width, height).catch(() => this.grids.setStatus(gid, "delete", true))
       : this.nvim.uiTryResize(width, height);
-  }
-
-  private onNeovimUiResized = (gid: number, revision: number) => {
-    this.grids.onReady(gid, revision);
   }
 
   dispose() {

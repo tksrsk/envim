@@ -3,8 +3,7 @@ import { Box, Button, Checkbox, Group, Paper, Radio, ScrollArea, SegmentedContro
 
 import { ISetting } from "common/interface";
 
-import { Emit } from "renderer/utils/emit";
-import { Setting } from "renderer/utils/setting";
+import { useApp } from "renderer/context/app";
 
 const envimIconUrl = new URL("../../assets/envim-icon.png", import.meta.url).href;
 
@@ -21,20 +20,10 @@ const connectionLabels = [
 ];
 
 export function SettingComponent (props: Props) {
-  const [state, setState] = React.useState<ISetting>({...Setting.get() });
+  const { setting: saved, connect } = useApp();
+  const [state, setState] = React.useState(saved);
 
-  React.useEffect(() => {
-    Emit.on("app:setting", onAppSetting);
-    Emit.send("app:init");
-
-    return () => {
-      Emit.off("app:setting", onAppSetting);
-    };
-  }, []);
-
-  function onAppSetting (state: ISetting) {
-    setState(() => state);
-  }
+  React.useEffect(() => setState(saved), [saved]);
 
   function onChangeConnection (type: ISetting["type"], path: string) {
     setState(state => {
@@ -64,21 +53,15 @@ export function SettingComponent (props: Props) {
   }
 
   function onSubmit (e: React.FormEvent) {
-    const { type, path, font, opacity, options, bookmarks, searchengines, acp } = state;
+    const { font, bookmarks } = state;
 
     e.stopPropagation();
     e.preventDefault();
 
-    Setting.type = type;
-    Setting.path = path;
-    Setting.font = { size: font.size, width: Math.floor(font.size * 0.6), height: font.size + font.lspace, lspace: font.lspace, scale: Math.ceil(window.devicePixelRatio) };
-    Setting.opacity = opacity;
-    Setting.options = options;
-    Setting.bookmarks = bookmarks;
-    Setting.searchengines = searchengines;
-    Setting.acp = acp;
-
-    Emit.send("neovim:connect", Setting.get(), bookmarks.find(({ selected }) => selected)?.path);
+    connect({
+      ...state,
+      font: { size: font.size, width: Math.floor(font.size * 0.6), height: font.size + font.lspace, lspace: font.lspace, scale: Math.ceil(window.devicePixelRatio) },
+    }, bookmarks.find(({ selected }) => selected)?.path);
   }
 
   function renderSection(title: string, description: string, children: React.ReactNode, span = 1) {

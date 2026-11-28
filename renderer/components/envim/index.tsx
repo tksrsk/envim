@@ -6,8 +6,7 @@ import { EditorProvider } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 import { FocusProvider } from "renderer/context/focus";
 
-import { Setting } from "renderer/utils/setting";
-import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
+import { useApp } from "renderer/context/app";
 
 
 import { TablineComponent } from "renderer/components/envim/tabline";
@@ -58,6 +57,8 @@ const styles: { [k: string]: React.CSSProperties } = {
 export function EnvimComponent(props: Props) {
   const [state, setState] = React.useState<States>({ acp: false, grids: {} });
   const { active, emit, highlights } = useWorkspace();
+  const { setting: { font, options }, grid } = useApp();
+  const { col2X, row2Y, x2Col, y2Row } = grid;
   const acp = { width: state.acp ? 400 : 0, height: props.main.height };
   const editor = { width: col2X(x2Col(props.main.width - acp.width - 8)), height: row2Y(y2Row(props.main.height - 8)) };
   const timer: React.RefObject<number> = React.useRef<number>(0);
@@ -70,7 +71,7 @@ export function EnvimComponent(props: Props) {
     emit.on("acp:toggle", onAcpToggle);
     emit.on("neovim:ui:highlight:set", onNeovimUiHighlightSet);
     emit.on("neovim:ui:window:position", onNeovimUiWindowPosition);
-    emit.send("neovim:ui:attach", x2Col(editor.width), y2Row(editor.height), Setting.options);
+    emit.send("neovim:ui:attach", x2Col(editor.width), y2Row(editor.height), options);
 
     return () => {
       emit.off("acp:toggle", onAcpToggle);
@@ -135,12 +136,12 @@ export function EnvimComponent(props: Props) {
           <div className="envim-main" style={props.main}>
             <div className="envim-row">
               <div className="envim-row envim-workspace" style={{
-                "--envim-editor-font-size": `${Setting.font.size}px`,
-                "--envim-editor-line-height": `${Setting.font.height}px`,
+                "--envim-editor-font-size": `${font.size}px`,
+                "--envim-editor-line-height": `${font.height}px`,
               } as React.CSSProperties}>
                 <div className="envim-row envim-frame" style={{ ...editor, zIndex: 0, ...(browser ? styles.backstage : {}) }}>
                   { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
-                    <EditorComponent key={grid.gid} { ...grid } />
+                    <EditorComponent key={grid.gid} {...grid} font={font} />
                   )) }
                   <PopupmenuComponent />
                   <InputComponent input={editorInput} />

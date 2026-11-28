@@ -1,11 +1,12 @@
 import React from "react";
 
+import { useApp } from "renderer/context/app";
+
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus } from "renderer/context/focus";
 
 import { keycode } from "renderer/utils/keycode";
-import { row2Y, col2X } from "renderer/utils/size";
 
 
 interface States {
@@ -30,6 +31,8 @@ const styles: { [k: string]: React.CSSProperties } = {
 
 export function InputComponent({ input }: { input: React.RefObject<HTMLInputElement | null> }) {
   const { busy, mode } = useEditor();
+  const { grid } = useApp();
+  const { col2X, row2Y } = grid;
   const { emit } = useWorkspace();
   const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy });
   const { active, targets } = useFocus();

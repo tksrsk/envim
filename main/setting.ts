@@ -3,7 +3,7 @@ import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 import { rename, writeFile } from "fs/promises";
 
-import { ISetting } from "common/interface";
+import { ISetting, settingSchema } from "common/setting";
 
 export class Setting {
   private static item: ISetting;
@@ -15,21 +15,24 @@ export class Setting {
     const json = JSON.stringify(Setting.item);
     const tmp = `${Setting.path}.tmp`;
 
-    Setting.queue = Setting.queue
+    const saving = Setting.queue
       .then(() => writeFile(tmp, json, { encoding: "utf8" }))
-      .then(() => rename(tmp, Setting.path))
-      .catch(() => {});
+      .then(() => rename(tmp, Setting.path));
+
+    Setting.queue = saving.catch(error => console.error("Could not save settings", error));
+    return saving;
   }
 
   static set(item: ISetting) {
     const { presets } = Setting.item || { presets: {} };
 
     Setting.init = true;
-    Setting.item = { ...item, presets };
-    Setting.item.presets[`[${item.type}]:${item.path}`] = JSON.parse(JSON.stringify(item));
-    Setting.item.presets[`[${item.type}]:${item.path}`].presets = {};
+    Setting.item = {
+      ...item,
+      presets: { ...presets, [`[${item.type}]:${item.path}`]: { ...item, presets: {} } },
+    };
 
-    Setting.save();
+    return Setting.save();
   }
 
   static remove(type: string, path: string) {
@@ -39,11 +42,16 @@ export class Setting {
   }
 
   static get() {
-    if (Setting.init === false && existsSync(Setting.path)) {
-      const item = readFileSync(Setting.path, { encoding: "utf8" });
-
-      Setting.item = JSON.parse(item);
+    if (!Setting.init) {
       Setting.init = true;
+      if (existsSync(Setting.path)) {
+        try {
+          const item: unknown = JSON.parse(readFileSync(Setting.path, "utf8"));
+          Setting.item = settingSchema.parse(item);
+        } catch (error) {
+          console.error("Could not load settings", error);
+        }
+      }
     }
 
     return Setting.item;

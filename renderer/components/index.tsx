@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@mantine/core/styles.layer.css";
 import "../styles/index.scss";
 
+import { AppProvider } from "renderer/context/app";
 import { AppComponent } from "renderer/components/app";
 
 declare global {
@@ -21,4 +22,4 @@ declare global {
 }
 
 const element = document.getElementById("app");
-element && createRoot(element).render(<AppComponent />);
+element && createRoot(element).render(<AppProvider><AppComponent /></AppProvider>);

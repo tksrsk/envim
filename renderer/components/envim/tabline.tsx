@@ -8,8 +8,7 @@ import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 import type { BrowserWorkspace } from "renderer/context/browser";
 
-import { Emit } from "renderer/utils/emit";
-import { Setting } from "renderer/utils/setting";
+import { useApp } from "renderer/context/app";
 import { icons, uiIcons } from "renderer/utils/icons";
 
 import { SurfaceSwitchComponent, WorkspaceTabComponent } from "renderer/components/tab";
@@ -29,7 +28,6 @@ interface States {
   cwd: string;
   tabs: ITab[];
   menus: IMenu[];
-  bookmarks: ISetting["bookmarks"];
   mode?: IMode;
   dragging: number;
   enabled: boolean;
@@ -40,7 +38,8 @@ interface States {
 export function TablineComponent({ onToggleSurface, onFocusEditor, browserState, ...props }: Props) {
   const { options, mode, tabs, menus  } = useEditor();
   const { workspace, workspaces, emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline, theme: "dark", historyOpen: false });
+  const { setting: { bookmarks }, updateSetting } = useApp();
+  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, dragging: -1, enabled: options.ext_tabline, theme: "dark", historyOpen: false });
 
   React.useEffect(() => {
     emit.on("neovim:cwd", onNeovimCwd);
@@ -69,7 +68,7 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
   }
 
   function onNeovimCwd(cwd: string) {
-    setState(state => ({ ...state, cwd, bookmarks: Setting.bookmarks }));
+    setState(state => ({ ...state, cwd }));
   }
 
   function openBookmarkForm(e: React.MouseEvent, bookmark?: ISetting["bookmarks"][number]) {
@@ -88,16 +87,21 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
   }
 
   function onBookmarkSave(original: string | undefined, action?: string, values?: { name: string; path: string }) {
-    const others = Setting.bookmarks.filter(bookmark => ![original, values?.path].includes(bookmark.path));
-    const bookmarks = action === "save" && values
-      ? [...others.map(bookmark => ({ ...bookmark, selected: false })), { name: values.name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path: values.path, selected: false }]
-      : action === "delete" ? others : undefined;
+    if (action !== "delete" && (action !== "save" || !values)) return;
 
-    if (!bookmarks) return;
+    updateSetting(setting => {
+      const replaced = [original, values?.path];
+      const others = setting.bookmarks.filter(bookmark => !replaced.includes(bookmark.path));
+      const bookmarks = action === "save" && values
+        ? [...others, {
+          name: values.name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""),
+          path: values.path,
+          selected: setting.bookmarks.some(bookmark => bookmark.selected && replaced.includes(bookmark.path)),
+        }]
+        : others;
 
-    Setting.bookmarks = bookmarks.sort((a, b) => a.name > b.name ? 1 : -1);
-    Emit.send("app:setting", Setting.get());
-    setState(state => ({ ...state, bookmarks }));
+      return { ...setting, bookmarks: bookmarks.sort((a, b) => a.name > b.name ? 1 : -1) };
+    });
   }
 
   function runCommand(e: React.MouseEvent, command: string) {
@@ -189,7 +193,7 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
   }
 
   function renderBookmark() {
-    const bookmark = state.bookmarks.find(({ path }) => path === workspace);
+    const bookmark = bookmarks.find(({ path }) => path === workspace);
     const text = bookmark && bookmark.name.split("/").pop() || "";
     const color = bookmark ? "blue" : "gray";
     const font = <i>{bookmark ? "" : ""}</i>;
@@ -223,7 +227,7 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
         </>}
       <MenuComponent label={renderBookmark}>
         { query => <>
-          <TreeMenuItems items={state.bookmarks} query={query} text={({ path }) => path} active={({ path }) => path === workspace} render={renderBookmarkItem} />
+          <TreeMenuItems items={bookmarks} query={query} text={({ path }) => path} active={({ path }) => path === workspace} render={renderBookmarkItem} />
           <MenuItemComponent leftSection={<i>{uiIcons.add}</i>} onClick={e => openBookmarkForm(e)}>Add</MenuItemComponent>
         </> }
       </MenuComponent>

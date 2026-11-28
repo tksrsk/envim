@@ -3,8 +3,7 @@ import { MantineProvider } from "@mantine/core";
 
 import { WorkspaceProvider } from "renderer/context/workspace";
 
-import { Emit, WorkspaceEmit } from "renderer/utils/emit";
-import { Setting } from "renderer/utils/setting";
+import { Emit } from "renderer/utils/emit";
 import { Cache } from "renderer/utils/cache";
 import { theme } from "renderer/utils/theme";
 
@@ -64,7 +63,6 @@ export function AppComponent() {
   function onAppWorkspace(workspaces: { [id: string]: string }, selected: string) {
     const init = Object.keys(workspaces).length > 0;
 
-    init || Emit.send("app:setting", Setting.get());
     setState(state => ({ ...state, workspaces, selected, init }));
   }
 
@@ -73,7 +71,7 @@ export function AppComponent() {
       <div id="theme" className={`theme-${state.theme}`}>
         {state.init
           ? Object.entries(state.workspaces).map(([id, bookmark]) => (
-            <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} emit={new WorkspaceEmit(id)}>
+            <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} workspaceId={id}>
               <EnvimComponent { ...{ header, main } } />
             </WorkspaceProvider>
           ))

@@ -35,12 +35,12 @@ test('reports popup bounds on mount and on resize, and stops observing on hide',
   };
   const filename = path.resolve(__dirname, '../renderer/components/envim/popupmenu.tsx');
   const loaded = new Module(filename);
+  const gridMetrics = { row2Y: row => row * 16, col2X: col => col * 8 };
   const imports = {
     react: { __esModule: true, default: React },
     'renderer/context/editor': { useEditor: () => ({ options: { ext_popupmenu: true } }) },
     'renderer/context/workspace': { useWorkspace: () => ({ active: true, emit, highlights: { style: () => ({}) } }) },
-    'renderer/utils/setting': { Setting: { font: { width: 8 } } },
-    'renderer/utils/size': { row2Y: row => row * 16, col2X: col => col * 8 },
+    'renderer/context/app': { useApp: () => ({ grid: gridMetrics }) },
   };
   loaded.require = name => {
     assert.ok(name in imports, `Unexpected import: ${name}`);

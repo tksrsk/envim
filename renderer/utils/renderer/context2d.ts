@@ -2,7 +2,7 @@ import type { ICell } from "common/interface";
 
 import { Renderer, type Area, type DecorationStroke } from ".";
 import type { Highlights } from "../highlight";
-import { Setting } from "../setting";
+import type { ISetting } from "common/setting";
 
 interface Surface {
   canvas: HTMLCanvasElement;
@@ -18,8 +18,9 @@ export class Context2D extends Renderer {
     private readonly display: CanvasRenderingContext2D,
     lighten: boolean,
     highlights: Highlights,
+    font: ISetting["font"],
   ) {
-    super(display.canvas, lighten, highlights);
+    super(display.canvas, lighten, highlights, font);
     this.backing = this.getCanvas();
     this.drawBackground({ x: 0, y: 0, width: this.canvas.width, height: this.canvas.height }, this.backgroundColor("0"));
   }
@@ -57,7 +58,7 @@ export class Context2D extends Renderer {
 
     canvas.width = this.canvas.width;
     canvas.height = this.canvas.height;
-    ctx.lineWidth = Setting.font.scale;
+    ctx.lineWidth = this.font.scale;
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 

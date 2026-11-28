@@ -1,18 +1,19 @@
 import React from "react";
 
+import type { ISetting } from "common/setting";
 import { ICell, IScroll, IBuffer } from "common/interface";
 
+import { useApp } from "renderer/context/app";
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 
-import { Setting } from "renderer/utils/setting";
 import { uiIcons } from "renderer/utils/icons";
-import { y2Row, x2Col } from "renderer/utils/size";
 
 import { ActionIcon, Menu } from "@mantine/core";
 import { MenuComponent, SubMenuComponent, MenuItemComponent } from "renderer/components/menu";
 
 interface Props {
+  font: ISetting["font"];
   gid: number;
   revision: number;
   winid: number;
@@ -52,31 +53,30 @@ export function EditorComponent(props: Props) {
   const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
   const dragging: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
   const delta: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
-  const { scale } = Setting.font;
+  const { font } = props;
+  const { scale } = font;
+  const { grid: { x2Col, y2Row } } = useApp();
 
   React.useEffect(() => {
-    emit.on(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
+    if (!canvas.current) return;
+
+    canvasApi.create(props.gid, canvas.current, props.type === "normal", font);
+    const onClear = () => canvasApi.clear(props.gid);
+    emit.on(`neovim:ui:grid:clear:${props.gid}`, onClear);
     emit.on(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
 
     return () => {
       clearInterval(timer.current);
       canvasApi.delete(props.gid);
-      emit.off(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
+      emit.off(`neovim:ui:grid:clear:${props.gid}`, onClear);
       emit.off(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
     };
-  }, []);
+  }, [emit, canvasApi, props.gid]);
 
   React.useEffect(() => {
-    if (canvas.current) {
-      canvasApi.create(props.gid, canvas.current, props.type === "normal");
-      emit.send("neovim:ui:ready", props.gid, props.revision);
-    }
-  }, []);
-
-  React.useEffect(() => {
-      canvasApi.update(props.gid, props.type === "normal");
-      emit.send("neovim:ui:resized", props.gid, props.revision);
-  }, [props.revision, props.style.width, props.style.height]);
+    canvasApi.update(props.gid, props.type === "normal");
+    emit.send("neovim:ui:grid:ready", props.gid, props.revision);
+  }, [emit, canvasApi, props.gid, props.revision, props.type, props.style.width, props.style.height]);
 
   function runCommand(e: React.MouseEvent, command: string) {
     e.stopPropagation();
@@ -171,10 +171,6 @@ export function EditorComponent(props: Props) {
       delta.current = { x: 0, y: 0 };
       onMouseEvent(e, action, "wheel");
     }
-  }
-
-  function onNeovimUiGridClear() {
-    canvasApi.clear(props.gid, x2Col(props.style.width), y2Row(props.style.height));
   }
 
   function onNeovimUiGridFlush(flush: { cells: ICell[], scroll?: IScroll }[]) {

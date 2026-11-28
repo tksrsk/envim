@@ -1,17 +1,7 @@
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import * as McpTypes from "@modelcontextprotocol/client";
 
-export interface ISetting {
-  type: "command" | "address" | "docker" | "ssh";
-  path: string;
-  font: { size: number; width: number; height: number; lspace: number; scale: number; };
-  opacity: number;
-  options: { [k: string]: boolean; };
-  bookmarks: { name: string, path: string; selected: boolean; }[];
-  searchengines: { name: string, uri: string; selected: boolean; }[];
-  acp: { customs: IAcpRegistryAgent[]; mcpServers: { enabled: boolean; server: AcpSDK.McpServer }[]; };
-  presets: { [k: string]: ISetting };
-}
+export type { ISetting } from "common/setting";
 
 export interface IWindow {
   gid: number;

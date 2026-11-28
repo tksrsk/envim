@@ -1,3 +1,4 @@
+import type { ISetting } from "common/setting";
 import type { ICell } from "common/interface";
 
 import { Renderer, type Area, type DecorationStroke } from ".";
@@ -89,6 +90,7 @@ export class WebGL2 extends Renderer {
     gl: WebGL2RenderingContext,
     lighten: boolean,
     highlights: Highlights,
+    font: ISetting["font"],
   ) {
     const raster = document.createElement("canvas").getContext("2d");
     if (!raster || gl.isContextLost()) return null;
@@ -118,7 +120,7 @@ export class WebGL2 extends Renderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    const renderer = new WebGL2(canvas, raster, gl, program, texture, buffer, viewportSize, size, maxSize, lighten, highlights);
+    const renderer = new WebGL2(canvas, raster, gl, program, texture, buffer, viewportSize, size, maxSize, lighten, highlights, font);
     if (gl.getError() === gl.NO_ERROR && renderer.resize(renderer.backgroundColor("0"))) return renderer;
 
     renderer.dispose();
@@ -147,8 +149,9 @@ export class WebGL2 extends Renderer {
     private readonly maxSize: number,
     lighten: boolean,
     highlights: Highlights,
+    font: ISetting["font"],
   ) {
-    super(canvas, lighten, highlights);
+    super(canvas, lighten, highlights, font);
     document.fonts.addEventListener("loadingdone", this.reset);
     document.fonts.addEventListener("loadingerror", this.reset);
   }

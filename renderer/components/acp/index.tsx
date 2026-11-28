@@ -8,8 +8,7 @@ import { IFormRequest, schema } from "common/schema";
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
 
-import { Emit } from "renderer/utils/emit";
-import { Setting } from "renderer/utils/setting";
+import { useApp } from "renderer/context/app";
 import { uiIcons } from "renderer/utils/icons";
 
 import { MenuComponent, SubMenuComponent, MenuItemComponent, TreeMenuItems, trackMenu } from "renderer/components/menu";
@@ -57,6 +56,7 @@ const styles: { [k: string]: React.CSSProperties } = {
 type SettingItem = ISetting["acp"]["customs" | "mcpServers"][number];
 
 export function AcpComponent() {
+  const { setting: { acp }, updateSetting } = useApp();
   const { emit } = useWorkspace();
   const [state, setState] = React.useState<State>({
     visible: false,
@@ -275,7 +275,7 @@ export function AcpComponent() {
 
   function onSelectPackage(provider: string, agent: IAcpRegistryAgent) {
     if (provider === "custom") {
-      openSettingForm("customs", Setting.acp.customs.indexOf(agent));
+      openSettingForm("customs", acp.customs.findIndex(custom => custom === agent));
     } else {
       onAcpAgentStart(agent);
     }
@@ -299,7 +299,7 @@ export function AcpComponent() {
       : [`${uiIcons.mcp} MCP server (${kind})`, schema.object({ enabled: schema.boolean("Enabled", true), server }), "Save"];
 
     emit.share("form:open", {
-      title, schema: form, values: index === undefined ? undefined : Setting.acp[key][index],
+      title, schema: form, values: index === undefined ? undefined : acp[key][index],
       actions: [
         { action: "save", name, color: "green", font: uiIcons.save, submit: true },
         ...(index === undefined ? [] : [{ action: "delete", name: "Delete", color: "red", font: uiIcons.close }]),
@@ -309,18 +309,14 @@ export function AcpComponent() {
   }
 
   function onAcpSettingSave(key: "customs" | "mcpServers", index: number | undefined, action?: string, item?: SettingItem) {
-    const items: SettingItem[] = Setting.acp[key];
+    if (action !== "delete" && (action !== "save" || !item)) return;
 
-    if (!action) return;
-
-    saveSettingItem(key, items.toSpliced(index ?? items.length, index === undefined ? 0 : 1, ...(action === "save" && item ? [item] : [])));
-    action === "save" && key === "customs" && onAcpAgentStart(item as IAcpRegistryAgent);
-  }
-
-  function saveSettingItem(key: "customs" | "mcpServers", items: unknown[]) {
-    Setting.acp = { ...Setting.acp, [key]: items };
-    Emit.send("app:setting", Setting.get());
-    setState(state => ({ ...state }));
+    const updated = updateSetting(setting => {
+      const items: SettingItem[] = setting.acp[key];
+      const next = items.toSpliced(index ?? items.length, index === undefined ? 0 : 1, ...(action === "save" && item ? [item] : []));
+      return { ...setting, acp: { ...setting.acp, [key]: next } };
+    });
+    if (updated && action === "save" && key === "customs" && item && "package" in item) onAcpAgentStart(item);
   }
 
   function onAcpAuthenticate(method: AcpSDK.AuthMethod) {
@@ -598,7 +594,7 @@ export function AcpComponent() {
                 <MenuComponent label={() => <Button variant="subtle" color="gray" size="compact-xs" fw={500} title="Start agent" rightSection={<span aria-hidden="true">▾</span>}>No agent</Button>}>
                   {query => <>
                     <TreeMenuItems query={query} text={({ agent }) => agent.description || ""} render={renderRegistryAgent}
-                      items={Object.entries({ ...state.registry, custom: Setting.acp.customs }).flatMap(([kind, agents]) => agents.map(agent => ({ name: `${kind}/${agent.name}`, kind, agent })))} />
+                      items={Object.entries({ ...state.registry, custom: acp.customs }).flatMap(([kind, agents]) => agents.map(agent => ({ name: `${kind}/${agent.name}`, kind, agent })))} />
                     <MenuItemComponent leftSection={<i>{uiIcons.add}</i>} onClick={() => openSettingForm("customs")}>Add</MenuItemComponent>
                   </>}
                 </MenuComponent>
@@ -635,7 +631,7 @@ export function AcpComponent() {
               <Menu.Divider />
             </>}
             <SubMenuComponent label="MCP servers" leftSection={<i>{uiIcons.mcp}</i>}>
-              {Setting.acp.mcpServers.map((mcp, i) => (
+              {acp.mcpServers.map((mcp, i) => (
                 <MenuItemComponent key={i} onClick={() => openSettingForm("mcpServers", i, "url" in mcp.server ? "http" : "stdio")}
                   style={mcp.enabled ? undefined : { opacity: .5 }}
                 >

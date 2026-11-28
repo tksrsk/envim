@@ -32,7 +32,10 @@ async function setup(t) {
   const cache = new Map();
   function load(name) {
     if (name === 'renderer/context/workspace') return { useWorkspace: () => ({ emit }) };
-    if (name === 'renderer/utils/setting') return { Setting: { acp: { customs: [], mcpServers: [] }, font: { size: 16 } } };
+    if (name === 'renderer/context/app') {
+      const setting = { acp: { customs: [], mcpServers: [] } };
+      return { useApp: () => ({ setting }) };
+    }
     if (name === 'renderer/components/acp/app') return { McpAppsComponent: () => null };
     if (!/^(renderer|common)\//.test(name)) return require(name);
     if (cache.has(name)) return cache.get(name).exports;

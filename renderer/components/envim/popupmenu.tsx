@@ -1,10 +1,9 @@
 import React from "react";
 
+import { useApp } from "renderer/context/app";
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 
-import { Setting } from "renderer/utils/setting";
-import { row2Y, col2X } from "renderer/utils/size";
 
 
 interface States {
@@ -19,6 +18,8 @@ interface States {
 
 export function PopupmenuComponent() {
   const { options } = useEditor();
+  const { grid } = useApp();
+  const { col2X, row2Y } = grid;
   const { active, emit, highlights } = useWorkspace();
   const [ state, setState ] = React.useState<States>({ items: [], selected: -1, row: 0, col: 0, height: 0, zIndex: 0, enabled: options.ext_popupmenu });
   const scope: React.RefObject<HTMLDivElement | null> = React.useRef(null);
@@ -63,7 +64,7 @@ export function PopupmenuComponent() {
     const observer = new ResizeObserver(() => reportBounds(popup, grid));
     observer.observe(popup, { box: "border-box" });
     return () => observer.disconnect();
-  }, [active, emit, state.enabled, state.items, state.row, state.col, state.height]);
+  }, [active, emit, grid, state.enabled, state.items, state.row, state.col, state.height]);
 
   React.useLayoutEffect(() => {
     const popup = scope.current;
@@ -120,7 +121,7 @@ export function PopupmenuComponent() {
 
         return (
           <div className="envim-pum-item" data-selected={state.selected === i || undefined}
-            style={{ height: row2Y(1), paddingInlineStart: Setting.font.width }}
+            style={{ height: row2Y(1), paddingInlineStart: col2X(1) }}
             onClick={() => void emit.send("neovim:api", "nvim_select_popupmenu_item", [i, true, false, {}])}
             key={i}>
             <span className="envim-pum-word">{word}</span>

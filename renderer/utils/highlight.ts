@@ -1,5 +1,4 @@
 import { IHighlight } from "common/interface";
-import { Setting } from "renderer/utils/setting";
 
 interface IOptions {
   reverse?: boolean;
@@ -88,10 +87,11 @@ class Highlight {
 export class Highlights {
   private hls: { [k: string]: Highlight } = {};
 
-  setHighlight(id: string, ui: boolean, hl: IHighlight) {
-    const alpha = ui ? Setting.opacity : 0;
-    const lighten = alpha && Setting.options.ext_multigrid ? Math.sqrt(alpha / 100) * 100 : alpha;
+  constructor(private readonly opacity: number, private readonly multigrid: boolean) {}
 
+  setHighlight(id: string, ui: boolean, hl: IHighlight) {
+    const alpha = ui ? this.opacity : 0;
+    const lighten = this.multigrid ? Math.sqrt(alpha / 100) * 100 : alpha;
     this.hls[id] = new Highlight(hl, alpha, lighten);
   }
 

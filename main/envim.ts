@@ -1,6 +1,6 @@
 import * as Electron from "electron";
 
-import { ISetting } from "common/interface";
+import { settingSchema } from "common/setting";
 import { IFormRequest } from "common/schema";
 
 import { Emit } from "main/emit";
@@ -34,8 +34,8 @@ export class Envim {
     setting && Emit.send("app:setting", setting);
   }
 
-  private onAppSetting = (setting: ISetting) => {
-    Setting.set(setting);
+  private onAppSetting = (input: unknown) => {
+    return Setting.set(settingSchema.parse(input));
   }
 
   private onAppThemeNative = () => {
@@ -58,8 +58,8 @@ export class Envim {
     return Connection.active()?.emit.share("neovim:command", command);
   }
 
-  private onNeovimConnect = (setting: ISetting, bookmark: string) => {
-    Connection.connect(setting, bookmark);
+  private onNeovimConnect = (input: unknown, bookmark: string) => {
+    Connection.connect(settingSchema.parse(input), bookmark);
   }
 
   private onNeovimFunction = (name: string, args: any[]) => {
