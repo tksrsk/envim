@@ -3,9 +3,7 @@ import React from "react";
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
 
-import { Setting } from "renderer/utils/setting";
-
-import { FlexComponent } from "renderer/components/flex";
+import { trackMenu } from "renderer/components/menu";
 
 interface States {
   cmdline: { hl: string, c: string }[];
@@ -16,11 +14,12 @@ interface States {
   enabled: boolean;
 }
 
-const styles: { [k: string]: React.CSSProperties } = {
-  scope: {
-    left: "10%",
-    right: "10%",
-  },
+const kinds: { [prompt: string]: { icon: string, label: string, color: string } } = {
+  ":": { icon: "", label: "Cmdline", color: "blue" },
+  "/": { icon: "", label: "Search", color: "orange" },
+  "?": { icon: "", label: "Search", color: "orange" },
+  "=": { icon: "", label: "Expression", color: "violet" },
+  "@": { icon: "", label: "Input", color: "teal" },
 };
 
 export function CmdlineComponent() {
@@ -117,9 +116,8 @@ export function CmdlineComponent() {
     options.ext_cmdline === undefined || setState(state => ({ ...state, enabled: options.ext_cmdline }));
   }, [options.ext_cmdline]);
 
-  function getScopeStyle() {
-    const { height } = Setting.font;
-    return { padding: height, ...highlights.style("0"), ...styles.scope };
+  function getKind() {
+    return kinds[state.prompt] || { icon: "", label: state.prompt.trim() || "Input", color: "teal" };
   }
 
   function renderCmdline(cmdline: States["cmdline"], cursor: boolean) {
@@ -130,13 +128,14 @@ export function CmdlineComponent() {
     });
   }
 
+  const kind = getKind();
+  const { background, color, fontFamily } = highlights.style("0");
+
   return state.enabled && state.cmdline.length > 0 && (
-    <FlexComponent animate="slide-down" position="absolute" whiteSpace="pre-wrap" rounded={[0, 0, 4, 4]} style={getScopeStyle()} shadow nomouse>
-      <FlexComponent whiteSpace="pre-wrap" shrink={0}><div className="bold">{ state.prompt }</div></FlexComponent>
-      <div>
-        {state.contents.map((content, i) => <div key={i}>{ renderCmdline(content, false) }</div>)}
-        <div>{ renderCmdline(state.cmdline, true) }</div>
-      </div>
-    </FlexComponent>
+    <div ref={trackMenu} className="envim-cmdline animate fade-in" style={{ background, color, fontFamily, "--cmdline-color": `var(--mantine-color-${kind.color}-filled)` } as React.CSSProperties}>
+      <div className="envim-cmdline-title"><i>{ kind.icon }</i>{ kind.label }</div>
+      {state.contents.map((content, i) => <div key={i}>{ renderCmdline(content, false) }</div>)}
+      <div>{ renderCmdline(state.cmdline, true) }</div>
+    </div>
   );
 }

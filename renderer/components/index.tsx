@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 
+import "@mantine/core/styles.layer.css";
 import "../styles/index.scss";
 
 import { AppComponent } from "renderer/components/app";
@@ -13,8 +14,8 @@ declare global {
   }
 
   interface Navigator {
-    windowControlsOverlay: {
-      getTitlebarAreaRect?: () => DOMRect,
+    windowControlsOverlay?: EventTarget & {
+      getTitlebarAreaRect: () => DOMRect,
     };
   }
 }

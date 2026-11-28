@@ -50,37 +50,29 @@ test('scrolls and softly emphasizes the paragraph containing a match, preserving
   const paragraph = app.document.querySelector('p');
   assert.deepEqual(app.moves, [{ target: paragraph, options: { behavior: 'smooth', block: 'nearest', inline: 'nearest' } }]);
   assert.equal(app.animations[0].target, paragraph);
-  assert.equal(app.animations[0].frames[0].backgroundColor, 'var(--color-orange-alpha)');
+  assert.equal(app.animations[0].frames[0].backgroundColor, 'var(--mantine-color-orange-light)');
   assert.equal(app.animations[0].options.duration, 1200);
   assert.equal(app.highlights.get('search-all').ranges[0].toString(), 'match');
   assert.deepEqual(app.highlights.get('search-active').ranges, [app.result.ranges[0]]);
   app.close();
 });
 
-for (const outerOpen of [false, true]) {
-  test(`targets the visible heading without opening disclosures (outer open: ${outerOpen})`, () => {
-    const app = setup(`<details ${outerOpen ? 'open' : ''}><summary>Tool</summary><details><summary>Output</summary><p>match</p></details></details>`);
-    const [outer, inner] = app.document.querySelectorAll('details');
-    app.search({ query: 'match', highlight: true });
-    const heading = (outerOpen ? inner : outer).querySelector('summary');
-    assert.equal(app.moves[0].target, heading);
-    assert.equal(app.animations[0].target, heading);
-    assert.equal(outer.open, outerOpen);
-    assert.equal(inner.open, false);
-    app.close();
-  });
-}
+test('searches tool content only while it is mounted', () => {
+  const app = setup('<button>Tool</button><div id="tool"></div>');
+  const tool = app.document.querySelector('#tool');
+  app.search({ query: 'match', highlight: true });
+  assert.equal(app.result.ranges.length, 0);
 
-test('targets a highlighted code block or a closed disclosure heading as a whole', () => {
-  for (const [markup, selector] of [
-    ['<pre><code>long\n<span>match</span>\ncode</code></pre>', 'pre'],
-    ['<details><summary><span>match</span></summary><p>hidden</p></details>', 'summary']
-  ]) {
-    const app = setup(markup);
-    app.search({ query: 'match', highlight: true });
-    assert.equal(app.moves[0].target, app.document.querySelector(selector));
-    app.close();
-  }
+  tool.innerHTML = '<pre><code>long\n<span>match</span>\ncode</code></pre>';
+  app.search({ active: 1 });
+  assert.equal(app.result.ranges.length, 1);
+  assert.equal(app.moves.at(-1).target, tool.querySelector('pre'));
+
+  tool.replaceChildren();
+  app.search({ active: 1 });
+  assert.equal(app.result.ranges.length, 0);
+  assert.equal(app.highlights.size, 0);
+  app.close();
 });
 
 test('message updates do not re-search or scroll; index changes search the latest content', () => {

@@ -7,7 +7,6 @@ import { useFocus } from "renderer/context/focus";
 import { keycode } from "renderer/utils/keycode";
 import { row2Y, col2X } from "renderer/utils/size";
 
-import { FlexComponent } from "renderer/components/flex";
 
 interface States {
   cursor: { x: number, y: number, width: number, zIndex: number, shape: "block" | "vertical" | "horizontal" };
@@ -25,6 +24,7 @@ const styles: { [k: string]: React.CSSProperties } = {
     padding: 0,
     margin: 0,
     caretColor: "transparent",
+    outline: "none",
   },
 };
 
@@ -34,6 +34,7 @@ export function InputComponent({ input }: { input: React.RefObject<HTMLInputElem
   const [state, setState] = React.useState<States>({ cursor: { x: 0, y: 0, width: 0, zIndex: 0, shape: "block" }, value: "", busy });
   const { active, targets } = useFocus();
   const focused = active === input.current;
+  const restore = React.useRef<HTMLElement | null>(null);
 
   React.useEffect(() => {
     targets.push(input);
@@ -56,7 +57,13 @@ export function InputComponent({ input }: { input: React.RefObject<HTMLInputElem
   React.useEffect(() => {
     if (mode) {
       setState(state => ({ ...state, cursor: { ...state.cursor, shape: mode.cursor_shape }}));
-      mode.short_name === "c" && input.current?.focus();
+      if (mode.short_name === "c") {
+        document.activeElement !== input.current && (restore.current = document.activeElement as HTMLElement | null);
+        input.current?.focus();
+      } else if (restore.current) {
+        restore.current.focus();
+        restore.current = null;
+      }
     }
   }, [mode]);
 
@@ -70,11 +77,11 @@ export function InputComponent({ input }: { input: React.RefObject<HTMLInputElem
       height: row2Y(1),
       transform: `translate(${col2X(cursor.x) - offset}px, ${row2Y(cursor.y)}px)`,
       zIndex: cursor.zIndex,
-      backdropFilter: "invert(1)",
+      borderRadius: 2,
       ...({
-        horizontal: { filter: "invert(1)", borderBottom: "2px solid" },
-        vertical: { filter: "invert(1)", borderLeft: "2px solid" },
-        block: {},
+        horizontal: { borderBottom: "2px solid var(--mantine-color-text)" },
+        vertical: { borderLeft: "2px solid var(--mantine-color-text)" },
+        block: { backdropFilter: "invert(1)" },
       }[cursor.shape]),
     };
   }
@@ -99,12 +106,12 @@ export function InputComponent({ input }: { input: React.RefObject<HTMLInputElem
   }
 
   return (
-    <FlexComponent animate="fade-in" style={makeStyle()} shadow={!state.busy && focused && state.cursor.shape === "block"} nomouse>
+    <div className="animate fade-in envim-input" data-shadow={(!state.busy && focused && state.cursor.shape === "block") || undefined} style={makeStyle()}>
       <input type="text" style={styles.input} ref={input} tabIndex={-1} autoFocus
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
       />
-      <FlexComponent color="default">{ state.value }</FlexComponent>
-    </FlexComponent>
+      <div className="envim-input-value">{ state.value }</div>
+    </div>
   );
 }

@@ -37,6 +37,8 @@
     "@agentclientprotocol/sdk": "^2.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@eslint/js": "^10.0.1",
+    "@mantine/core": "^9.8.2",
+    "@mantine/hooks": "^9.8.2",
     "@modelcontextprotocol/client": "^2.4.0",
     "@modelcontextprotocol/core": "^2.1.0",
     "@modelcontextprotocol/ext-apps": "^2.0.3",

@@ -9,25 +9,23 @@ import { FocusProvider } from "renderer/context/focus";
 import { Setting } from "renderer/utils/setting";
 import { y2Row, x2Col, row2Y, col2X } from "renderer/utils/size";
 
-import { FlexComponent } from "renderer/components/flex";
 
 import { TablineComponent } from "renderer/components/envim/tabline";
 import { EditorComponent } from "renderer/components/envim/editor";
-import { HistoryComponent } from "renderer/components/envim/history";
+import { MessagesComponent } from "renderer/components/envim/messages";
 import { CmdlineComponent } from "renderer/components/envim/cmdline";
 import { PopupmenuComponent } from "renderer/components/envim/popupmenu";
-import { NotificateComponent } from "renderer/components/envim/notificate";
 import { AcpComponent } from "renderer/components/acp";
 import { InputComponent } from "renderer/components/envim/input";
 
 import { BrowserPaneComponent } from "renderer/components/browser/pane";
 import { useBrowserWorkspace } from "renderer/context/browser";
 import { useSurface } from "renderer/components/envim/surface";
+import { FormHostComponent } from "renderer/components/form";
 
 interface Props {
-  header: { width: number; height: number; paddingLeft: number };
+  header: { height: number; paddingLeft: number; paddingRight: number };
   main: { width: number; height: number; };
-  footer: { width: number; height: number; };
 }
 
 interface States {
@@ -51,11 +49,17 @@ interface States {
   }};
 }
 
+
+const styles: { [k: string]: React.CSSProperties } = {
+  // Hidden behind the browser but still focusable, so Neovim prompts (input()) keep working.
+  backstage: { position: "absolute", opacity: 0, pointerEvents: "none" },
+};
+
 export function EnvimComponent(props: Props) {
   const [state, setState] = React.useState<States>({ acp: false, grids: {} });
   const { active, emit, highlights } = useWorkspace();
-  const acp = { width: state.acp ? 400 : 0, height: row2Y(y2Row(props.main.height) - 1) };
-  const editor = { width: col2X(x2Col(props.main.width - acp.width) - 2), height: acp.height };
+  const acp = { width: state.acp ? 400 : 0, height: props.main.height };
+  const editor = { width: col2X(x2Col(props.main.width - acp.width - 8)), height: row2Y(y2Row(props.main.height - 8)) };
   const timer: React.RefObject<number> = React.useRef<number>(0);
   const browserState = useBrowserWorkspace();
   const editorInput = React.useRef<HTMLInputElement>(null);
@@ -128,37 +132,37 @@ export function EnvimComponent(props: Props) {
       <EditorProvider>
         <div style={{display: active ? undefined : "none"}} onMouseUp={onMouseUp}>
           <TablineComponent {...props.header} onToggleSurface={toggleSurface} onFocusEditor={focusEditor} browserState={browser ? browserState : undefined} />
-          <FlexComponent zIndex={0} direction="column" style={props.main}>
-            <FlexComponent color="default" grow={1} />
-            <FlexComponent overflow="visible">
-              <FlexComponent zIndex={0} grow={1} shrink={1} overflow="visible">
-                <FlexComponent color="default" zIndex={-1} grow={1} />
-                <FlexComponent zIndex={0} overflow="visible" style={{ ...editor, ...(browser ? { display: "none" } : {}) }}>
+          <div className="envim-main" style={props.main}>
+            <div className="envim-row">
+              <div className="envim-row envim-workspace" style={{
+                "--envim-editor-font-size": `${Setting.font.size}px`,
+                "--envim-editor-line-height": `${Setting.font.height}px`,
+              } as React.CSSProperties}>
+                <div className="envim-row envim-frame" style={{ ...editor, zIndex: 0, ...(browser ? styles.backstage : {}) }}>
                   { Object.values(state.grids).sort((a, b) => a.order - b.order).map(grid => (
                     <EditorComponent key={grid.gid} { ...grid } />
                   )) }
                   <PopupmenuComponent />
                   <InputComponent input={editorInput} />
-                </FlexComponent>
+                </div>
                 {browser && (
-                  <FlexComponent color="default" position="relative" style={editor}>
+                  <div className="envim-row envim-surface envim-frame" style={{ ...editor, overflow: "hidden" }}>
                     {browserState.current && (
                       <BrowserPaneComponent key={browserState.current.id} tab={browserState.current}
                         visible={active} />
                     )}
-                  </FlexComponent>
+                  </div>
                 )}
-                <FlexComponent color="default" zIndex={-1} grow={1} />
-                {!browser && <CmdlineComponent />}
-                <NotificateComponent />
-              </FlexComponent>
-              <FlexComponent style={acp}>
+                <CmdlineComponent />
+                <MessagesComponent />
+              </div>
+              <div className="envim-row" style={{ ...acp, overflow: "hidden" }}>
                 <AcpComponent />
-              </FlexComponent>
-            </FlexComponent>
-          </FlexComponent>
-          <HistoryComponent {...props.footer} />
+              </div>
+            </div>
+          </div>
         </div>
+        <FormHostComponent />
       </EditorProvider>
     </FocusProvider>
   );

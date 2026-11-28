@@ -258,7 +258,6 @@ export class Acp {
       }).then(initialize => {
         if (!initialize) return;
 
-        initialize.authMethods = initialize.authMethods?.filter(m => (m as { type?: string }).type !== "env_var");
         this.setState({ ...this.state, initialize, status: "connected" });
         this.listSession();
       });
@@ -274,12 +273,19 @@ export class Acp {
     this.workspace.emit.share("neovim:function", "EnvimAcpStop", []);
   }
 
-  private onAcpAuthAuthenticate = (methodId: string) => {
+  private onAcpAuthAuthenticate = (methodId: string, _?: string, env?: { [key: string]: string }) => {
     if (!this.connection) return;
 
     const agent = this.state.agent!;
     const selectedAgent = { ...agent, auth: this.state.initialize?.authMethods?.find(method => method.id === methodId) };
-    if ((selectedAgent.auth as { type?: string } | undefined)?.type === "terminal") {
+    const type = (selectedAgent.auth as { type?: string } | undefined)?.type;
+
+    if (type === "env_var") {
+      if (!env) return;
+
+      const restarted = { ...agent, package: { ...agent.package, env: { ...agent.package.env, ...env } } };
+      this.workspace.emit.share("neovim:function", "EnvimAcpStop", []).then(() => this.onAcpAgentStart(restarted));
+    } else if (type === "terminal") {
       this.workspace.emit.share("neovim:function", "EnvimAcpStop", []).then(() => {
         this.onAcpAgentStart(selectedAgent);
       });
@@ -302,12 +308,14 @@ export class Acp {
     });
   }
 
-  private onAcpElicitationResponse = (requestId: string, response: AcpSDK.CreateElicitationResponse): void => {
+  private onAcpElicitationResponse = (requestId: string, action?: AcpSDK.CreateElicitationResponse["action"], content?: AcpSDK.ElicitationAcceptAction["content"]): void => {
     const elicitation = this.elicitation[requestId];
 
-    if (!elicitation) {
+    if (!elicitation || !action) {
       return;
     }
+
+    const response = { action, ...(content && { content }) } as AcpSDK.CreateElicitationResponse;
 
     const { params } = elicitation.request;
 
@@ -876,7 +884,7 @@ export class Acp {
       this.setState({ ...this.state, elicitation: request });
     }
 
-    signal.addEventListener("abort", () => this.onAcpElicitationResponse(requestId, { action: "cancel" }), { once: true });
+    signal.addEventListener("abort", () => this.onAcpElicitationResponse(requestId, "cancel"), { once: true });
 
     return new Promise((resolve) => this.elicitation[requestId] = { request, resolve });
   }
@@ -894,7 +902,7 @@ export class Acp {
       this.onAcpPermissionResponse(requestId, "");
     });
     Object.keys(this.elicitation).forEach(requestId => {
-      this.onAcpElicitationResponse(requestId, { action: "cancel" });
+      this.onAcpElicitationResponse(requestId, "cancel");
     });
   }
 }

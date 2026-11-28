@@ -1,11 +1,12 @@
 import React from "react";
+import { MantineProvider } from "@mantine/core";
 
 import { WorkspaceProvider } from "renderer/context/workspace";
 
 import { Emit, WorkspaceEmit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { Cache } from "renderer/utils/cache";
-import { y2Row, row2Y } from "renderer/utils/size";
+import { theme } from "renderer/utils/theme";
 
 import { SettingComponent } from "renderer/components/setting";
 import { EnvimComponent } from "renderer/components/envim";
@@ -20,16 +21,23 @@ interface States {
 
 export function AppComponent() {
   const [state, setState] = React.useState<States>({ init: false, theme: "dark", window: { width: window.innerWidth, height: window.innerHeight }, workspaces: {}, selected: "" });
-  const titlebar = navigator.windowControlsOverlay.getTitlebarAreaRect
-    ? navigator.windowControlsOverlay.getTitlebarAreaRect()
-    : { x: 0, y: 0, width: 0, height: 0, left: 0, right: 0 };
+  const overlay = navigator.windowControlsOverlay;
+  const [titlebar, setTitlebar] = React.useState(() => overlay?.getTitlebarAreaRect());
   const header = {
-    width: titlebar.width + titlebar.left,
-    height: Math.max(row2Y(2), (titlebar.y * 2) + titlebar.height),
-    paddingLeft: titlebar.left || 0,
+    height: Math.max(34, titlebar?.bottom ?? 0),
+    paddingLeft: (titlebar?.left ?? 0) + 6,
+    paddingRight: (titlebar?.width ? Math.max(0, window.innerWidth - titlebar.right) : 0) + 6,
   };
-  const main = { width: state.window.width, height: row2Y(y2Row(state.window.height - header.height - row2Y(1) - 4)) };
-  const footer = { width: state.window.width, height: state.window.height - header.height - main.height };
+  const main = { width: state.window.width, height: Math.max(0, state.window.height - header.height) };
+
+  React.useEffect(() => {
+    if (!overlay) return;
+
+    const updateTitlebar = () => setTitlebar(overlay.getTitlebarAreaRect());
+    overlay.addEventListener("geometrychange", updateTitlebar);
+    updateTitlebar();
+    return () => overlay.removeEventListener("geometrychange", updateTitlebar);
+  }, [overlay]);
 
   React.useEffect(() => {
     document.fonts.load("10px Regular").then();
@@ -41,6 +49,7 @@ export function AppComponent() {
     Emit.on("app:resize", onAppResize);
     Emit.on("app:theme", onAppTheme);
     Emit.on("app:workspace", onAppWorkspace);
+    Emit.on("console:log", console.log);
   }, []);
 
   function onAppResize (width: number, height: number) {
@@ -60,15 +69,17 @@ export function AppComponent() {
   }
 
   return (
-    <div id="theme" className={`theme-${state.theme}`} style={state.init ? { fontSize: Setting.font.size, lineHeight: `${Setting.font.height}px` } : undefined}>
-      {state.init
-        ? Object.entries(state.workspaces).map(([id, bookmark]) => (
-          <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} emit={new WorkspaceEmit(id)}>
-            <EnvimComponent { ...{ header, main, footer } } />
-          </WorkspaceProvider>
-        ))
-        : <SettingComponent {...state.window} />
-      }
-    </div>
+    <MantineProvider theme={theme} forceColorScheme={state.theme}>
+      <div id="theme" className={`theme-${state.theme}`}>
+        {state.init
+          ? Object.entries(state.workspaces).map(([id, bookmark]) => (
+            <WorkspaceProvider key={id} workspace={bookmark} workspaces={state.workspaces} active={id === state.selected} emit={new WorkspaceEmit(id)}>
+              <EnvimComponent { ...{ header, main } } />
+            </WorkspaceProvider>
+          ))
+          : <SettingComponent {...state.window} />
+        }
+      </div>
+    </MantineProvider>
   );
 }

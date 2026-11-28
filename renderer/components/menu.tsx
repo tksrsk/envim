@@ -1,46 +1,16 @@
 import React from "react";
-import { createPortal } from "react-dom";
+import { Menu, UnstyledButton } from "@mantine/core";
 
-import { FlexComponent } from "renderer/components/flex";
 
 interface Props {
-  side?: boolean;
-  horizontal?: boolean;
   label: string | (() => React.ReactNode);
   color?: string;
   active?: boolean;
-  fit?: boolean;
 }
 
-interface States {
-  position: {
-    top?: number,
-    right?: number,
-    bottom?: number,
-    left?: number
-  } | null;
+interface MenuProps extends Props {
+  children?: React.ReactNode | ((query: string) => React.ReactNode);
 }
-
-const styles: { [k: string]: React.CSSProperties } = {
-  wrap: {
-    position: "relative",
-    display: "flex",
-    width: "100%",
-    height: "100%",
-  },
-  menu: {
-    lineHeight: 1.5,
-    whiteSpace: "nowrap",
-    overflowY: "auto",
-    overflowX: "hidden",
-  },
-  sidemenu: {
-    lineHeight: 1.5,
-    whiteSpace: "nowrap",
-    overflowY: "auto",
-    overflowX: "hidden",
-  },
-};
 
 const openMenus = new Set<HTMLDivElement>();
 export const menuLayoutEvent = "envim:menu-layout";
@@ -54,82 +24,134 @@ export function menuOverlaps(bounds: DOMRectReadOnly): boolean {
   return false;
 }
 
-export function MenuComponent(props: React.PropsWithChildren<Props>) {
-  const [state, setState] = React.useState<States>({ position: null });
-  const timer: React.RefObject<number> = React.useRef<number>(0);
-  const div: React.RefObject<HTMLDivElement | null> = React.useRef<HTMLDivElement>(null);
-  const menu = React.useRef<HTMLDivElement>(null);
+export function trackMenu(element: HTMLDivElement) {
+  const notify = () => document.dispatchEvent(new Event(menuLayoutEvent));
+  const observer = new ResizeObserver(notify);
 
-  React.useLayoutEffect(() => {
-    const element = menu.current;
-    if (!element) return;
-    const notify = () => document.dispatchEvent(new Event(menuLayoutEvent));
-    openMenus.add(element);
+  openMenus.add(element);
+  observer.observe(element);
+  notify();
+
+  return () => {
+    observer.disconnect();
+    openMenus.delete(element);
     notify();
-    const observer = new ResizeObserver(notify);
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-      openMenus.delete(element);
-      notify();
-    };
-  }, [state.position]);
+  };
+}
 
-  React.useEffect(() => () => clearTimeout(timer.current), []);
+function hasContent(children: React.ReactNode): boolean {
+  return React.Children.toArray(children).some(child =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? hasContent(child.props.children)
+      : true
+  );
+}
 
-  function onClick() { }
+const dropdownStyle: React.CSSProperties = { maxHeight: "50vh", maxWidth: "50vw", overflowY: "auto" };
+const activeStyle: React.CSSProperties = { background: "var(--mantine-primary-color-light)" };
 
-  function onMouseEnter() {
-    clearTimeout(timer.current);
-    timer.current = +setTimeout(() => setState(() => {
-      const haschild = !(Array.isArray(props.children) && props.children.length === 0);
+export function MenuLabelComponent({ color, active, ...props }: Omit<React.ComponentProps<"button">, "color"> & { color?: string; active?: boolean }) {
+  return <UnstyledButton {...props} className="menu-label" c={color} data-active={active || undefined} />;
+}
 
-      if (!haschild || !div.current) return { position: null };
+export function MenuComponent({ label, color, active, children }: MenuProps) {
+  const [opened, setOpened] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const search = React.useRef<HTMLInputElement>(null);
+  const force = React.useRef(false);
+  const searchable = typeof children === "function";
+  const content = searchable ? children(query.trim().toLowerCase()) : children;
 
-      const rect = div.current.getBoundingClientRect();
-      const vert = window.innerHeight / 2 < rect.top ? "top" : "bottom";
-      const hori = window.innerWidth / 2 < rect.left ? "left" : "right";
-      const position: States["position"] = {};
+  React.useEffect(() => {
+    const dropdown = search.current?.closest("[data-menu-dropdown]");
+    const first = query.trim() && [...dropdown?.querySelectorAll("[data-menu-item]:not([data-disabled])") ?? []]
+      .find(item => item.closest("[data-menu-dropdown]") === dropdown);
 
-      if (props.side) {
-        vert === "bottom" ? position.top = rect.top : position.bottom = window.innerHeight - rect.bottom;
-        hori === "left" ? position.right = window.innerWidth - rect.left : position.left = rect.right;
-      } else {
-        vert === "bottom" ? position.top = rect.bottom : position.bottom = window.innerHeight - rect.top;
-        hori === "left" ? position.right = window.innerWidth - rect.right : position.left = rect.left;
-      }
+    first && first.setAttribute("data-menu-active", "true");
+  }, [query]);
 
-      return { position };
-    }), 200);
+  function onChange(next: boolean) {
+    if (!next && !force.current && document.activeElement === search.current) return;
+    force.current = false;
+    setOpened(next);
   }
 
-  function onMouseLeave() {
-    clearTimeout(timer.current);
-    timer.current = +setTimeout(() => setState({ position: null }), 200);
-  }
-
-  function renderMenu() {
-    if (!state.position) return null;
-
-    const base = props.side ? styles.sidemenu : styles.menu;
-    const style = { ...base, ...state.position, maxWidth: window.innerWidth / 2, maxHeight: window.innerHeight / 2, minWidth: Math.min(props.fit ? 0 : 150, window.innerWidth / 2 - 20) };
-    const direction = props.horizontal ? "row" : "column";
-
-    return createPortal((
-      <FlexComponent ref={menu} color="default" animate="fade-in" direction={direction} position="fixed" zIndex={20} rounded={[2]} style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} shadow>
-        { props.children }
-      </FlexComponent>
-    ), document.getElementById("theme") || document.body);
+  function close() {
+    force.current = true;
+    onChange(false);
   }
 
   return (
-    <FlexComponent vertical="center">
-      <div className="space" style={styles.wrap} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} ref={div}>
-        <FlexComponent grow={1} vertical="center" color={props.color} onClick={onClick} active={props.active} spacing={typeof props.label === "string"}>
-          { typeof props.label === "string" ? props.label : props.label() }
-        </FlexComponent>
-        { renderMenu() }
-      </div>
-    </FlexComponent>
+    <Menu opened={opened} onChange={onChange} disabled={!searchable && !hasContent(children)} trigger="hover" openDelay={150} closeDelay={250} position="bottom-start" shadow="md" trapFocus={false} returnFocus={false}>
+      <Menu.Target>
+        <div style={{ display: "flex", alignItems: "center", alignSelf: "center", flexShrink: 0 }}>
+          {typeof label === "string"
+            ? <MenuLabelComponent color={color} active={active}>{label}</MenuLabelComponent>
+            : label()}
+        </div>
+      </Menu.Target>
+      <Menu.Dropdown ref={trackMenu} style={dropdownStyle} onClickCapture={() => { force.current = true; queueMicrotask(() => force.current = false); }}>
+        {searchable && <Menu.Search ref={search} size="xs" placeholder="Search" value={query} onChange={e => setQuery(e.currentTarget.value)}
+          onKeyDown={e => e.key === "Escape" && close()}
+          onBlur={e => (e.relatedTarget as HTMLElement | null)?.closest("[data-menu-dropdown]") || close()} />}
+        {content}
+      </Menu.Dropdown>
+    </Menu>
   );
+}
+
+export function TreeMenuItems<T extends { name: string }>({ items, query, text, active, render }: {
+  items: T[];
+  query: string;
+  text?: (item: T) => string;
+  active?: (item: T) => boolean;
+  render: (item: T, label: string) => React.ReactNode;
+}) {
+  if (query) {
+    return <>{items.filter(item => `${item.name}\n${text?.(item) ?? ""}`.toLowerCase().includes(query)).map(item => render(item, item.name))}</>;
+  }
+
+  return renderTree(items, "", active, render);
+}
+
+function renderTree<T extends { name: string }>(items: T[], prefix: string, active: ((item: T) => boolean) | undefined, render: (item: T, label: string) => React.ReactNode): React.ReactNode {
+  const scoped = items.filter(item => item.name.startsWith(prefix));
+  const groups = new Set(scoped.map(item => item.name.slice(prefix.length).split("/")).filter(parts => parts.length > 1).map(parts => parts[0]));
+
+  return <>
+    {[...groups].map(group => (
+      <SubMenuComponent key={`${prefix}${group}`} color="cyan" label={`󰉋 ${group}`} active={scoped.some(item => item.name.startsWith(`${prefix}${group}/`) && active?.(item))}>
+        {renderTree(items, `${prefix}${group}/`, active, render)}
+      </SubMenuComponent>
+    ))}
+    {scoped.filter(item => !item.name.slice(prefix.length).includes("/")).map(item => render(item, item.name.slice(prefix.length)))}
+  </>;
+}
+
+export function SubMenuComponent({ label, color, active, leftSection, children }: React.PropsWithChildren<Props & { leftSection?: React.ReactNode }>) {
+  return (
+    <Menu.Sub disabled={!hasContent(children)} openDelay={100} closeDelay={200} floatingStrategy="fixed">
+      <Menu.Sub.Target>
+        <Menu.Sub.Item color={color} leftSection={leftSection} style={active ? activeStyle : undefined}>
+          {typeof label === "string" ? label : label()}
+        </Menu.Sub.Item>
+      </Menu.Sub.Target>
+      <Menu.Sub.Dropdown ref={trackMenu} style={dropdownStyle}>
+        {children}
+      </Menu.Sub.Dropdown>
+    </Menu.Sub>
+  );
+}
+
+type MenuItemProps = Omit<React.ComponentProps<"div">, "color"> & {
+  active?: boolean;
+  disabled?: boolean;
+  color?: string;
+  leftSection?: React.ReactNode;
+  rightSection?: React.ReactNode;
+  closeMenuOnClick?: boolean;
+};
+
+export function MenuItemComponent({ active, color, style, ...props }: MenuItemProps) {
+  return <Menu.Item component="div" color={color} {...props} style={{ ...(active ? activeStyle : {}), ...style }} />;
 }

@@ -213,6 +213,7 @@ export class BrowserTools {
     const run = () => this.act(tab, async () => {
       if (name === "browser_click" && hidden) {
         const page = await connection.page(guest);
+        // Initialize rendering before clicking a tab that has never been shown.
         await page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 }, timeout: 5000 });
         const locator = BrowserTools.target(page, args.target);
         if (!await locator.isEnabled({ timeout: 5000 })) throw new Error("The element is disabled.");

@@ -48,7 +48,6 @@ export class Workspace {
     emit.on("neovim:input", this.onNeovimInput);
     emit.on("neovim:luafile", this.onNeovimLuafile);
     emit.on("neovim:mouse", this.onNeovimMouse);
-    emit.on("neovim:readline", this.onNeovimReadline);
     emit.on("neovim:ui:attach", this.onNeovimUiAttach);
     emit.on("neovim:ui:option", this.onNeovimUiOption);
     emit.on("neovim:ui:position", this.onNeovimUiPosition);
@@ -70,16 +69,7 @@ export class Workspace {
     this.browser = new BrowserServer(this);
   }
 
-  private onBrowserOpen = async (src: string) => {
-    const text = src.trim();
-    const opened = text && await this.nvim.lua(`
-      local uri = vim.uri_from_fname(vim.fn.fnamemodify(..., ":p"))
-      if vim.fn.getftype(vim.uri_to_fname((uri:gsub("#.*$", "")))) == "" then return false end
-      envim_open_file(uri)
-      return true
-    `, [text]);
-    if (!opened) await this.browserTabs.open(src);
-  };
+  private onBrowserOpen = async (url: string) => { await this.browserTabs.open(url); };
 
   private onNeovimApi = (fname: string, args: any[]) => {
     return this.nvim.request(fname, args);
@@ -114,10 +104,6 @@ export class Workspace {
 
   private onNeovimMouse = (gid: number, button: string, action: string, modifier: string, row: number, col: number) => {
     return this.nvim.inputMouse(button, action, modifier, gid, row, col);
-  }
-
-  private onNeovimReadline = (prompt: string, value: string = "") => {
-    return this.emit.share("neovim:function", "EnvimInput", [prompt, value]);
   }
 
   private onNeovimUiAttach = async (width: number, height: number, options: UiAttachOptions) => {

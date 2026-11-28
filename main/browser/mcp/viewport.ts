@@ -41,7 +41,7 @@ export class BrowserViewports {
     this.emulatedViewports.delete(guest);
     if (viewport && !guest.isDestroyed()) {
       if (!viewport.device) guest.disableDeviceEmulation();
-      this.emit.send("browser:viewport:changed", guest.id, null);
+      this.emit.send(`browser:viewport:changed:${guest.id}`, null);
     }
     await cleanup;
   }
@@ -136,7 +136,7 @@ export class BrowserViewports {
         }
         const viewport: IBrowserViewport = { device, style: { width, height } };
         this.emulatedViewports.set(guest, viewport);
-        this.emit.send("browser:viewport:changed", guest.id, viewport);
+        this.emit.send(`browser:viewport:changed:${guest.id}`, viewport);
       } catch (error) {
         if (device) await this.reset(guest);
         throw error;

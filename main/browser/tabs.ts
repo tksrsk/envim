@@ -139,7 +139,7 @@ export class BrowserTabs {
           return child;
         },
       };
-    }, () => this.emit.send("browser:mode:command", id));
+    }, () => this.emit.send(`browser:mode:command:${id}`));
     const publish = () => this.publish();
     page.on("did-start-loading", publish);
     page.on("did-stop-loading", publish);
@@ -160,8 +160,13 @@ export class BrowserTabs {
     });
     page.on("console-message", event => {
       if (!tab.selecting || event.message !== `envim-picked:${tab.selecting}`) return;
-      this.emit.send("browser:element-picked", id, tab.selecting);
+      this.emit.send(`browser:element-picked:${id}`, tab.selecting);
       tab.selecting = undefined;
+    });
+    page.on("found-in-page", (_event, { finalUpdate, selectionArea }) => {
+      if (!finalUpdate || !selectionArea || !Bootstrap.win) return;
+      const zoom = Bootstrap.win.webContents.getZoomFactor();
+      this.emit.send(`browser:found:${id}`, { x: selectionArea.x / zoom, y: selectionArea.y / zoom });
     });
     page.on("did-navigate", () => { tab.selecting = undefined; publish(); });
     page.once("destroyed", () => {

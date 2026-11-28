@@ -1,22 +1,27 @@
 import * as Electron from "electron";
 
 import { ISetting } from "common/interface";
+import { IFormRequest } from "common/schema";
 
 import { Emit } from "main/emit";
 import { Connection } from "main/connection";
 import { Setting } from "main/setting";
 
 export class Envim {
+  private formId = 0;
+  private forms = new Map<number, (result: unknown[]) => void>();
+  private replies = new WeakSet<object>();
+
   constructor() {
     Emit.on("app:init", this.onAppInit);
     Emit.on("app:setting", this.onAppSetting);
     Emit.on("app:theme:native", this.onAppThemeNative);
     Emit.on("browser:open", this.onBrowserOpen);
+    Emit.on("form:request", this.onFormRequest);
     Emit.on("neovim:api", this.onNeovimApi);
     Emit.on("neovim:command", this.onNeovimCommand);
     Emit.on("neovim:connect", this.onNeovimConnect);
     Emit.on("neovim:function", this.onNeovimFunction);
-    Emit.on("neovim:readline", this.onNeovimReadline);
     Emit.on("neovim:theme", this.onNeovimTheme);
     process.on("uncaughtException", this.onError);
     process.on("unhandledRejection", this.onError);
@@ -61,8 +66,24 @@ export class Envim {
     return Connection.active()?.emit.share("neovim:function", name, args);
   }
 
-  private onNeovimReadline = (prompt: string, value?: string) => {
-    return Connection.active()?.emit.share("neovim:readline", prompt, value);
+  private onFormRequest = (request: Omit<IFormRequest, "reply">) => {
+    const emit = Connection.active()?.emit;
+    const id = ++this.formId;
+
+    if (!emit) return Promise.resolve([]);
+
+    if (!this.replies.has(emit)) {
+      this.replies.add(emit);
+      emit.on("form:reply", (id: number, ...result: unknown[]) => {
+        this.forms.get(id)?.(result);
+        this.forms.delete(id);
+      });
+    }
+
+    return new Promise<unknown[]>(resolve => {
+      this.forms.set(id, resolve);
+      emit.send("form:open", { ...request, reply: { event: "form:reply", via: "send", args: [id] } } satisfies IFormRequest);
+    });
   }
 
   private onNeovimTheme = (theme?: "dark" | "light") => {

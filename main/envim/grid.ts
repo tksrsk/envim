@@ -9,7 +9,6 @@ class Grid {
   private lines: { cell: ICell, hl: { fg: number; bg: number; sp: number } }[][] = [];
   private flush: { cells: ICell[], scroll?: IScroll }[] = [];
   private dirty: { [k: string]: ICell } = {};
-  private viewport: { top: number; bottom: number; total: number; } = { top: 0, bottom: 0, total: 0 };
   private ready = false;
 
   constructor(private workspace: Workspace, gid: number, width: number, height: number) {
@@ -63,10 +62,6 @@ class Grid {
     x = this.info.status === "show" && this.info.width > x ? x + this.info.x : -1;
 
     return { x, y, width, zIndex: this.info.zIndex + 1 };
-  }
-
-  setViewport(top: number, bottom: number, total: number) {
-    this.viewport = { top, bottom, total };
   }
 
   getDefault(row: number, col: number) {
@@ -146,13 +141,13 @@ class Grid {
   getFlush() {
     if (!this.ready) return {};
 
-    const { flush, viewport } = this;
+    const { flush } = this;
     this.flush = [];
 
     const cells = this.getDirty();
     cells.length && flush.push({ cells });
 
-    return { flush, viewport };
+    return { flush };
   }
 
   onReady(revision: number) {
@@ -300,9 +295,8 @@ export class Grids {
 
     Object.values(this.grids).map(grid => {
       const { gid } = grid.getInfo();
-      const { flush, viewport } = grid.getFlush();
+      const { flush } = grid.getFlush();
       flush && flush.length && this.workspace.emit.send(`neovim:ui:grid:flush:${gid}`, flush);
-      viewport && this.workspace.emit.update(`neovim:ui:grid:viewport:${gid}`, false, viewport.top, viewport.bottom, viewport.total);
     });
 
     this.workspace.emit.update("neovim:ui:mode:change", true, this.mode);

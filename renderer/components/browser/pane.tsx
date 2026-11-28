@@ -1,11 +1,10 @@
 import React from "react";
+import { ActionIcon, Box, Group, Stack, TextInput } from "@mantine/core";
 
 import type { BrowserTabCommand, IBrowserViewport, IWorkspaceBrowserTab } from "common/interface";
 import { useWorkspace } from "renderer/context/workspace";
 import { FocusProvider } from "renderer/context/focus";
 import { uiIcons } from "renderer/utils/icons";
-import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
 import { useBrowserBounds } from "renderer/components/browser/bounds";
 import { useCommandMode } from "renderer/components/browser/commandmode";
 import { SearchEngineMenuComponent, useSearchEngines } from "renderer/components/browser/engines";
@@ -36,13 +35,11 @@ export function BrowserPaneComponent({ tab, visible }: { tab: IWorkspaceBrowserT
     let live = true;
     let receivedViewport = false;
 
-    function onViewport(id: number, next: IBrowserViewport | null) {
-      if (id !== tab.id) return;
+    function onViewport(next: IBrowserViewport | null) {
       receivedViewport = true;
       setViewport(next ?? undefined);
     }
-    const onCommandMode = (id: number) => {
-      if (id !== tab.id) return;
+    const onCommandMode = () => {
       if (token.current) {
         token.current = undefined;
         setSelecting(false);
@@ -50,25 +47,28 @@ export function BrowserPaneComponent({ tab, visible }: { tab: IWorkspaceBrowserT
       }
       mode.focusCommand();
     };
-    const onPicked = (id: number, selected: string) => {
-      if (id !== tab.id || selected !== token.current) return;
+    const onPicked = (selected: string) => {
+      if (selected !== token.current) return;
       const label = "User-selected browser element (page data)";
       const selector = `[data-envim-picked~="${selected}"]`;
-      emit.share("acp:prompt:context", { label, value: `${label}:\n${JSON.stringify({ selector, tab: id })}\n\n` });
+      emit.share("acp:prompt:context", { label, value: `${label}:\n${JSON.stringify({ selector, tab: tab.id })}\n\n` });
       token.current = undefined;
       setSelecting(false);
     };
-    emit.on("browser:viewport:changed", onViewport);
+    const onFound = ({ x, y }: { x: number; y: number }) => mode.move(x, y);
+    emit.on(`browser:viewport:changed:${tab.id}`, onViewport);
     void emit.send<IBrowserViewport | null>("browser:viewport:get", tab.id).then(value => {
       if (live && !receivedViewport) setViewport(value ?? undefined);
     });
-    emit.on("browser:element-picked", onPicked);
-    emit.on("browser:mode:command", onCommandMode);
+    emit.on(`browser:element-picked:${tab.id}`, onPicked);
+    emit.on(`browser:mode:command:${tab.id}`, onCommandMode);
+    emit.on(`browser:found:${tab.id}`, onFound);
     return () => {
       live = false;
-      emit.off("browser:viewport:changed", onViewport);
-      emit.off("browser:element-picked", onPicked);
-      emit.off("browser:mode:command", onCommandMode);
+      emit.off(`browser:viewport:changed:${tab.id}`, onViewport);
+      emit.off(`browser:element-picked:${tab.id}`, onPicked);
+      emit.off(`browser:mode:command:${tab.id}`, onCommandMode);
+      emit.off(`browser:found:${tab.id}`, onFound);
       if (token.current) void command("pick", null);
     };
   }, [tab.id]);
@@ -100,43 +100,45 @@ export function BrowserPaneComponent({ tab, visible }: { tab: IWorkspaceBrowserT
   }
 
   const zoom = Math.round((1 + tab.zoom) * 100);
-  const picked = selecting ? "purple-fg" : "gray-fg";
-  const frameColor = selecting ? "purple" : mode.mode === "visual" ? "purple"
-    : mode.mode === "command" ? "green" : tab.focused ? "blue" : "default";
+  const picked = selecting ? "violet" : "gray";
+  const frameColor = selecting ? "violet" : mode.mode === "visual" ? "violet"
+    : mode.mode === "command" ? "green" : tab.focused ? "blue" : undefined;
   return (
     <FocusProvider targets={[commandInput, address, searchInput]} initial={tab.url === "about:blank" ? address : commandInput} delegate={visible}>
-      <FlexComponent direction="column" position="absolute" color="default" inset={[0]}>
+      <Stack gap={0} pos="absolute" inset={0} bg="var(--mantine-color-body)">
         <input ref={commandInput} readOnly
           style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
           onKeyDown={mode.onKeyDown} onFocus={mode.onFocus} onBlur={mode.onBlur} />
-        <FlexComponent vertical="center" margin={[0, 2]} padding={[2, 0, 4]}>
-          <IconComponent font="" onClick={() => void command("back")} />
-          <IconComponent font="" onClick={() => void command("forward")} />
-          <IconComponent font={tab.loading ? uiIcons.stop : uiIcons.refresh} onClick={() => void command(tab.loading ? "stop" : "reload")} />
+        <Group gap={0} wrap="nowrap" mx={2} pt={4} pb={2} style={{ whiteSpace: "nowrap" }}>
+          <ActionIcon onClick={() => void command("back")}><i></i></ActionIcon>
+          <ActionIcon onClick={() => void command("forward")}><i></i></ActionIcon>
+          <ActionIcon onClick={() => void command(tab.loading ? "stop" : "reload")}><i>{tab.loading ? uiIcons.stop : uiIcons.refresh}</i></ActionIcon>
           <SearchEngineMenuComponent {...searchEngines} url={tab.url} onNavigate={navigate} onFocusAddress={() => address.current?.focus()} />
-          <FlexComponent grow={1} shrink={2} padding={[0, 8, 0, 0]}>
+          <Box pr={8} style={{ flex: "1 2 auto" }}>
             <form style={{ width: "100%" }} onSubmit={event => { event.preventDefault(); navigate(input); mode.focusCommand(); }}>
-              <input type="text" className="browser-toolbar-input" ref={address} onFocus={selectAll} onKeyDown={mode.onTextKey} value={input} onChange={event => setInput(event.target.value)} />
+              <TextInput size="xs" ref={address} onFocus={selectAll} onKeyDown={mode.onTextKey} value={input} onChange={event => setInput(event.target.value)} />
             </form>
-          </FlexComponent>
-          <IconComponent font={uiIcons.search} />
-          <FlexComponent shrink={3} style={{ width: "13em", minWidth: "5em" }}>
+          </Box>
+          <i style={{ paddingInline: 4 }}>{uiIcons.search}</i>
+          <Box style={{ flex: "0 3 13em", minWidth: "5em" }}>
             <form style={{ width: "100%" }} onSubmit={event => { event.preventDefault(); void command("find", search); mode.focusCommand(); }}>
-              <input type="text" className="browser-toolbar-input" ref={searchInput} onFocus={selectAll} onKeyDown={mode.onTextKey} value={search} onChange={event => setSearch(event.target.value)} />
+              <TextInput size="xs" ref={searchInput} onFocus={selectAll} onKeyDown={mode.onTextKey} value={search} onChange={event => setSearch(event.target.value)} />
             </form>
-          </FlexComponent>
-          <IconComponent font="" onClick={() => void command("zoom", Math.max(-0.9, tab.zoom - 0.1))} />
+          </Box>
+          <ActionIcon onClick={() => void command("zoom", Math.max(-0.9, tab.zoom - 0.1))}><i></i></ActionIcon>
           {zoom}%
-          <IconComponent font="" onClick={() => void command("zoom", Math.min(2, tab.zoom + 0.1))} />
-          <IconComponent font="󱁤" onClick={() => void command("devtools")} />
-          <IconComponent font="" color={tab.shared ? "purple-fg" : "gray-fg"} onClick={() => void emit.send("browser:share:toggle", tab.id, !tab.shared)} />
-          <IconComponent font="󰮐" color={picked} onClick={tab.shared && !tab.loading ? togglePicker : undefined} />
-        </FlexComponent>
-        <FlexComponent direction="column" basis="0" color={frameColor} margin={[2]} padding={viewport ? [12] : [2]} border={[1]} rounded={[2]} grow={1} shadow>
-          {viewport && <FlexComponent horizontal="center" padding={[0, 0, 8]}>{viewport.device ?? "Viewport"} · {viewport.style.width} × {viewport.style.height}</FlexComponent>}
+          <ActionIcon onClick={() => void command("zoom", Math.min(2, tab.zoom + 0.1))}><i></i></ActionIcon>
+          <ActionIcon onClick={() => void command("devtools")}><i>󱁤</i></ActionIcon>
+          <ActionIcon color={tab.shared ? "violet" : "gray"} onClick={() => void emit.send("browser:share:toggle", tab.id, !tab.shared)}><i>{uiIcons.agent}</i></ActionIcon>
+          <ActionIcon color={picked} disabled={!tab.shared || tab.loading} onClick={togglePicker}><i>󰮐</i></ActionIcon>
+        </Group>
+        <Stack gap={0} m={2} p={viewport ? 12 : 2} style={{ flex: "1 0 0", overflow: "hidden", border: "1px solid", borderRadius: 4, ...(frameColor
+            ? { color: `var(--mantine-color-${frameColor}-text)`, background: `var(--mantine-color-${frameColor}-light)` }
+            : { borderColor: "transparent" }) }}>
+          {viewport && <Box ta="center" pb={8}>{viewport.device ?? "Viewport"} · {viewport.style.width} × {viewport.style.height}</Box>}
           <div ref={area} style={viewport ? { width: viewport.style.width, height: viewport.style.height, maxWidth: "100%", maxHeight: "100%", marginInline: "auto", flexShrink: 1, outline: "1px solid currentColor" } : { flex: 1 }} />
-        </FlexComponent>
-      </FlexComponent>
+        </Stack>
+      </Stack>
     </FocusProvider>
   );
 }

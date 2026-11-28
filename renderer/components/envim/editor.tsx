@@ -9,9 +9,8 @@ import { Setting } from "renderer/utils/setting";
 import { uiIcons } from "renderer/utils/icons";
 import { y2Row, x2Col } from "renderer/utils/size";
 
-import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
-import { MenuComponent } from "renderer/components/menu";
+import { ActionIcon, Menu } from "@mantine/core";
+import { MenuComponent, SubMenuComponent, MenuItemComponent } from "renderer/components/menu";
 
 interface Props {
   gid: number;
@@ -35,36 +34,35 @@ interface States {
   nomouse: boolean;
   dragging: boolean;
   hidden: boolean;
-  scrolling: number;
-  scroll: {
-    total: number;
-    height: string;
-    transform: string;
-  };
 }
+
+const moves = [
+  { font: "󱂪", label: "Move to left", command: "wincmd H" },
+  { font: "󱂫", label: "Move to right", command: "wincmd L" },
+  { font: "󱔓", label: "Move to top", command: "wincmd K" },
+  { font: "󱂩", label: "Move to bottom", command: "wincmd J" },
+];
 
 export function EditorComponent(props: Props) {
   const { busy, options, mode, bufs, drag } = useEditor();
   const { emit, canvas: canvasApi } = useWorkspace();
-  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.gid, dragging: false, hidden: false, scrolling: 0, scroll: { total: 0, height: "100%", transform: "" } });
+  const [state, setState] = React.useState<States>({ bufs, nomouse: drag !== "" && drag !== props.gid, dragging: false, hidden: false });
   const canvas: React.RefObject<HTMLCanvasElement | null> = React.useRef<HTMLCanvasElement>(null);
   const timer: React.RefObject<number> = React.useRef(0);
   const pointer: React.RefObject<{ row: number; col: number }> = React.useRef({ row: 0, col: 0 });
   const dragging: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
   const delta: React.RefObject<{ x: number; y: number }> = React.useRef({ x: 0, y: 0 });
-  const { height, scale } = Setting.font;
+  const { scale } = Setting.font;
 
   React.useEffect(() => {
     emit.on(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
     emit.on(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
-    emit.on(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
 
     return () => {
       clearInterval(timer.current);
       canvasApi.delete(props.gid);
       emit.off(`neovim:ui:grid:clear:${props.gid}`, onNeovimUiGridClear);
       emit.off(`neovim:ui:grid:flush:${props.gid}`, onNeovimUiGridFlush);
-      emit.off(`neovim:ui:grid:viewport:${props.gid}`, onNeovimUiGridViewport);
     };
   }, []);
 
@@ -175,13 +173,6 @@ export function EditorComponent(props: Props) {
     }
   }
 
-  function onScroll(e: React.MouseEvent) {
-    const per = e.nativeEvent.offsetY / e.currentTarget.clientHeight;
-    const line = Math.ceil(state.scroll.total * per);
-
-    runCommand(e, `${line} | redraw`);
-  }
-
   function onNeovimUiGridClear() {
     canvasApi.clear(props.gid, x2Col(props.style.width), y2Row(props.style.height));
   }
@@ -212,22 +203,6 @@ export function EditorComponent(props: Props) {
     setState(state => ({ ...state, hidden: !state.hidden }));
   }
 
-  function onNeovimUiGridViewport(top: number, bottom: number, total: number) {
-    setState(state => {
-      const limit = props.style.height;
-      const height = Math.min(Math.floor((bottom - top) / total * 100), 100);
-      const scrolling = height === 100 ? 0 : +setTimeout(() => setState(state => ({ ...state, scrolling: 0 })) , 500);
-
-      state.scroll && clearTimeout(state.scrolling);
-
-      return { ...state, scrolling, scroll: {
-        total,
-        height: height ? `${height}%` : "4px",
-        transform: `translateY(${Math.min(Math.floor(top / total * limit), limit - 4)}px)`,
-      }};
-    });
-  }
-
   React.useEffect(() => {
     const nomouse = ["", props.gid].indexOf(drag) < 0;
 
@@ -238,32 +213,48 @@ export function EditorComponent(props: Props) {
     setState(state => ({ ...state, bufs }));
   }, [bufs]);
 
-  function renderMenu(label: string, command: string) {
+  function renderMoves() {
     return (
-      <MenuComponent color="gray-fg" label={label}>
-        { state.bufs.map(({ name, buffer, active }, i) => (
-          <FlexComponent active={active} title={name} onClick={e => runCommand(e, `${command}${buffer}`)} key={i} spacing>
-            { name.replace(/.*\//, "…/") }
-          </FlexComponent>
+      <SubMenuComponent label="Move">
+        { moves.map(({ font, label, command }) => (
+          <MenuItemComponent key={command} leftSection={<i>{font}</i>} onClick={e => runCommand(e, command)}>{ label }</MenuItemComponent>
         )) }
-      </MenuComponent>
+      </SubMenuComponent>
     );
   }
 
-  function renderIconMenu(label: string, menus: { font: string, onClick: (e: React.MouseEvent) => void }[][]) {
-    return (
-      <MenuComponent color="gray-fg" label={label} fit>
-        { menus.map((menu, i) => (
-          <FlexComponent key={i}>
-            { menu.map((item, j) => <IconComponent key={`${i}-${j}`} color="gray-fg" { ...item } />) }
-          </FlexComponent>
-        )) }
-      </MenuComponent>
+  function renderWindowMenu() {
+    return props.type === "normal" ? (
+      <>
+        <SubMenuComponent label="Buffers">
+          { state.bufs.map(({ name, buffer, active }, i) => (
+            <MenuItemComponent active={active} title={name} onClick={e => runCommand(e, `buffer ${buffer}`)} key={i}>
+              { name.replace(/.*\//, "…/") }
+            </MenuItemComponent>
+          )) }
+        </SubMenuComponent>
+        <Menu.Divider />
+        <MenuItemComponent leftSection={<i></i>} onClick={e => runCommand(e, "enew")}>New buffer</MenuItemComponent>
+        <MenuItemComponent leftSection={<i></i>} onClick={e => runCommand(e, "vsplit")}>Split vertically</MenuItemComponent>
+        <MenuItemComponent leftSection={<i></i>} onClick={e => runCommand(e, "split")}>Split horizontally</MenuItemComponent>
+        { renderMoves() }
+        <MenuItemComponent leftSection={<i>󰉡</i>} onClick={e => runCommand(e, "wincmd =")}>Equalize sizes</MenuItemComponent>
+        <MenuItemComponent leftSection={<i>󰶭</i>} onClick={openExtWindow}>Open as external window</MenuItemComponent>
+        <Menu.Divider />
+        <MenuItemComponent leftSection={<i>{uiIcons.save}</i>} onClick={e => runCommand(e, "write")}>Save</MenuItemComponent>
+      </>
+    ) : (
+      <>
+        <MenuItemComponent leftSection={<i>{state.hidden ? "" : ""}</i>} onClick={toggleExtWindow}>{ state.hidden ? "Show" : "Hide" }</MenuItemComponent>
+        { !state.hidden && <MenuItemComponent active={state.dragging} leftSection={<i>󰮐</i>} onClick={dragExtWIndow}>Drag to move</MenuItemComponent> }
+        { !state.hidden && renderMoves() }
+      </>
     );
   }
 
   return (
-    <FlexComponent animate="fade-in hover" position="absolute" overflow="visible" nomouse={state.nomouse} style={{ ...props.style, ...(state.hidden ? { height: 0 } : {}) }} shadow={props.shadow && !state.hidden}
+    <div className="animate fade-in envim-grid" data-nomouse={state.nomouse || undefined} data-shadow={(props.shadow && !state.hidden) || undefined}
+      style={{ ...props.style, ...(state.hidden ? { height: 0 } : {}) }} draggable={state.dragging}
       onMouseDown={state.dragging ? undefined : onMouseDown}
       onMouseMove={state.dragging ? undefined : onMouseMove}
       onMouseUp={state.dragging ? undefined : onMouseUp}
@@ -271,56 +262,24 @@ export function EditorComponent(props: Props) {
       onDragStart={state.dragging ? onDragStart : undefined}
       onDragEnd={state.dragging ? onDragEnd : undefined}
     >
-      <FlexComponent nomouse>
+      <div className="envim-grid-canvas">
         <canvas width={props.style.width * scale} height={props.style.height * scale} ref={canvas} />
-      </FlexComponent>
+      </div>
       { props.gid === 1 || !props.focusable ? null : (
         <>
-          <FlexComponent color="default" grow={1} position="absolute" inset={[0, -3, 0, "auto"]} onMouseDown={onScroll} hover={state.scrolling === 0}>
-            <FlexComponent animate="fade-in" color="blue" border={[0, 1.5]} rounded={[2]} style={state.scroll} shadow nomouse></FlexComponent>
-          </FlexComponent>
-          <FlexComponent color={state.hidden ? "orange" : "default"} position="absolute" inset={[-height, -4, "auto", "auto"]} rounded={state.hidden ? [4] : [4, 4, 0, 0]} hover={!state.hidden} spacing
-            onMouseDown={e => runCommand(e, "")}
-          >
-            { props.type === "normal" && renderMenu("", "buffer ") }
-            { props.type === "normal" && renderIconMenu("", [
-              [
-                { font: "", onClick: e => runCommand(e, "enew") },
-                { font: "", onClick: e => runCommand(e, "vsplit") },
-                { font: "", onClick: e => runCommand(e, "split") },
-              ],
-              [
-                { font: "󰶭", onClick: openExtWindow },
-                { font: "󱂪", onClick: e => runCommand(e, "wincmd H") },
-                { font: "󱂫", onClick: e => runCommand(e, "wincmd L") },
-              ],
-              [
-                { font: "󱔓", onClick: e => runCommand(e, "wincmd K") },
-                { font: "󱂩", onClick: e => runCommand(e, "wincmd J") },
-                { font: "󰉡", onClick: e => runCommand(e, "wincmd =") },
-              ],
-            ]) }
-            { props.type === "normal" && <IconComponent color="gray-fg" font={uiIcons.save} onClick={e => runCommand(e, "write")} /> }
-            { props.type === "external" && <IconComponent color="gray-fg" font={state.hidden ? "" : ""} onClick={toggleExtWindow} /> }
-            { props.type === "external" && !state.hidden && (
-              <>
-                <IconComponent color="gray-fg" font="󰮐" active={state.dragging} onClick={dragExtWIndow} />
-                { renderIconMenu("", [
-                  [
-                    { font: "󱂪", onClick: e => runCommand(e, "wincmd H") },
-                    { font: "󱂫", onClick: e => runCommand(e, "wincmd L") },
-                  ],
-                  [
-                    { font: "󱔓", onClick: e => runCommand(e, "wincmd K") },
-                    { font: "󱂩", onClick: e => runCommand(e, "wincmd J") },
-                  ],
-                ]) }
-              </>
-            ) }
-            <IconComponent color="gray-fg" font={uiIcons.close} onClick={e => runCommand(e, "confirm quit")} />
-          </FlexComponent>
+          <div className="envim-grid-fab" data-hidden={state.hidden || undefined} onMouseDown={e => runCommand(e, "")}>
+            <MenuComponent label={() => (
+              <ActionIcon variant={state.hidden ? "filled" : "subtle"} color={state.hidden ? "orange" : "gray"} radius="xl" title="Window">
+                <i></i>
+              </ActionIcon>
+            )}>
+              { renderWindowMenu() }
+              <Menu.Divider />
+              <MenuItemComponent color="red" leftSection={<i>{uiIcons.close}</i>} onClick={e => runCommand(e, "confirm quit")}>Close</MenuItemComponent>
+            </MenuComponent>
+          </div>
         </>
       )}
-    </FlexComponent>
+    </div>
   );
 }

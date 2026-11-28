@@ -28,7 +28,7 @@ export class App {
       case "redraw": return this.redraw(args);
       case "envim_clipboard": return this.workspace.clipboard.copy(args[0], args[1]);
       case "envim_setbackground": return Emit.share("neovim:theme", args[0]);
-      case "envim_openurl": return args.length && this.workspace.emit.share("browser:open", args[0]);
+      case "envim_openurl": return args.length && this.openUrl(args[0]);
       case "envim_acp_stdout": return this.workspace.emit.share("acp:stdout", args[0]);
       case "envim_acp_exited": return this.workspace.emit.share("acp:exited", args[0]);
       case "envim_acp_notice": return this.workspace.emit.update("acp:notice:changed", false, args[0]);
@@ -39,6 +39,16 @@ export class App {
       case "envim_mcp_data": return this.workspace.mcpGateway.onData(args[0], args[1]);
       case "envim_mcp_close": return this.workspace.mcpGateway.onClose(args[0]);
     }
+  }
+
+  private async openUrl(src: string) {
+    const text = src.trim();
+    if (text && !/^(?:https?:\/\/|file:\/\/|about:|data:)/i.test(text)) {
+      const opened = await this.workspace.emit.share("neovim:function", "EnvimOpenFile", [text]);
+      if (opened) return;
+    }
+
+    return this.workspace.emit.share("browser:open", text);
   }
 
   private redraw(redraw: any[][]) {
@@ -89,9 +99,6 @@ export class App {
         break;
         case "win_close":
           r.forEach(r => this.winClose(r[0]));
-        break;
-        case "win_viewport":
-          r.forEach(r => this.winViewport(r[0], r[2], r[3], r[6]));
         break;
 
         /** ext_tabline **/
@@ -290,10 +297,6 @@ export class App {
 
   private winClose(gid: number) {
     this.workspace.grids.setStatus(gid, "delete", false);
-  }
-
-  private winViewport(gid: number, top: number, bottom: number, total: number) {
-    this.workspace.grids.get(gid, false).setViewport(top, bottom, total);
   }
 
   private async tablineUpdate(ctab: Tabpage, tabs: { tab: Tabpage, name: string }[], cbuf: Buffer, bufs: { buffer: Buffer, name: string }[]) {

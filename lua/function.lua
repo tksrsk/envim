@@ -6,53 +6,18 @@ _G.envim_connect = function (sync, args)
   return vim.api.nvim_call_function(fname, args)
 end
 
-_G.envim_input = (function ()
-  local cache = {}
-
-  return function (prompt, default, completion)
-    local old = {}
-    local history = cache[prompt] or {}
-
-    _G.envim_completion = function () return history end
-
-    for pos = 1, vim.fn.histnr("input") do
-      table.insert(old, vim.fn.histget("input", pos))
-    end
-
-    vim.fn.histdel("input")
-
-    local input = vim.fn.input(string.format("%s: ", prompt), default or "", completion or "customlist,v:lua.envim_completion")
-
-    input = vim.fn.trim(input or "")
-    if input ~= "" then
-      local tmp = {}
-
-      for _, val in ipairs(history) do
-        if val ~= input then table.insert(tmp, val) end
-      end
-      table.insert(tmp, 1, input)
-
-      history = tmp
-    end
-
-    vim.fn.histdel("input")
-    for _, val in ipairs(old) do
-      vim.fn.histadd("input", val)
-    end
-
-    _G.envim_completion = nil
-    cache[prompt] = history
-
-    return input
-  end
-end)()
-
 local open_ns = vim.api.nvim_create_namespace("envim_open")
 
-_G.envim_open_file = function (uri)
-  local line = tonumber(uri:match("#L(%d+)$"))
+_G.envim_open_file = function (src)
+  if src == "" then return false end
 
-  vim.cmd.buffer(vim.fn.bufadd(vim.uri_to_fname(uri)))
+  local is_uri = src:sub(1, 7) == "file://"
+  local filename = is_uri and vim.uri_to_fname(src) or vim.fn.fnamemodify(src, ":p")
+  local line = is_uri and tonumber(src:match("#L(%d+)$"))
+
+  if vim.fn.getftype(filename) == "" then return false end
+
+  vim.cmd.buffer(vim.fn.bufadd(filename))
   vim.bo.buflisted = true
 
   if line and line > 0 then
@@ -68,6 +33,8 @@ _G.envim_open_file = function (uri)
       end
     end, 1500)
   end
+
+  return true
 end
 
 vim.cmd([[
@@ -75,12 +42,8 @@ vim.cmd([[
     return v:lua.envim_connect(a:sync, a:000)
   endfunction
 
-  function! EnvimInput(prompt, ...)
-    return v:lua.envim_input(a:prompt, get(a:, 1, v:false), get(a:, 2, v:false))
-  endfunction
-
-  function! EnvimOpenFile(uri)
-    return v:lua.envim_open_file(a:uri)
+  function! EnvimOpenFile(src)
+    return v:lua.envim_open_file(a:src)
   endfunction
 
   function! EnvimReadBlob(path)

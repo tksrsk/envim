@@ -1,4 +1,5 @@
 import React from "react";
+import { Alert, Box, Button, Group, Loader, Paper, Stack, Tabs } from "@mantine/core";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,50 +12,55 @@ import { uiIcons } from "renderer/utils/icons";
 
 import { useWorkspace } from "renderer/context/workspace";
 
-import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
 import { CollapseComponent } from "renderer/components/collapse";
 import { ElicitationComponent } from "renderer/components/acp/elicitation";
 
-const styles: { [k: string]: React.CSSProperties } = {
-  permission: {
-    flexBasis: "100%",
-  }
+const kindIcons: Record<string, string> = {
+  read: "\u{F0219}",
+  edit: "\u{F03EB}",
+  delete: "\u{F01B4}",
+  move: "\u{F04E1}",
+  search: "\u{F0349}",
+  execute: "\u{F018D}",
+  think: "\u{F0336}",
+  fetch: "\u{F059F}",
+  switch_mode: "\u{F04E1}",
+  compact: "\u{F0219}",
+  other: "\u{F1064}",
 };
 
 const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotification }) => {
   const { emit } = useWorkspace();
+  const [toolTab, setToolTab] = React.useState<string | null>(null);
 
   function urlTransform(url: string) {
     if (/^(data:|file:\/\/)/.test(url)) return url;
     return defaultUrlTransform(url);
   }
 
-  function getStatusIcon(status?: string | null) {
-    switch (status) {
-      case "pending": return <IconComponent color="gray-fg" font={uiIcons.pending} />;
-      case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
-      case "completed": return <IconComponent color="green-fg" font={uiIcons.success} />;
-      case "cancelled": return <IconComponent color="gray-fg" font={uiIcons.decline} />;
-      case "failed": return <IconComponent font={uiIcons.error} color="red-fg" />;
-      default: return null;
-    }
+  function getKindIcon(kind?: string | null, status?: string | null) {
+    if (status === "in_progress") return <Loader size="1em" />;
+
+    const font = kindIcons[kind || "other"] || kindIcons.other;
+    const color = status === "failed" ? "red" : status === "pending" ? "yellow" : status === "cancelled" ? "gray" : undefined;
+
+    return <i style={color ? { color: `var(--mantine-color-${color}-text)` } : undefined}>{font}</i>;
   }
 
   function onAcpPermissionChoice(requestId: string, optionId: string) {
     emit.send("acp:permission:response", requestId, optionId);
   }
 
-  function getPermissionIcon(kind: string, suffix: string = "") {
+  function getPermissionIcon(kind: string) {
     switch (kind) {
       case "allow_once":
       case "allow_always":
-        return { color: `green${suffix}`, font: uiIcons.accept };
+        return { color: "green", font: uiIcons.accept };
       case "reject_once":
       case "reject_always":
-        return { color: `red${suffix}`, font: uiIcons.decline };
+        return { color: "red", font: uiIcons.decline };
       default:
-        return { color: `blue${suffix}`, font: "" };
+        return { color: "blue", font: "" };
     }
   }
 
@@ -75,21 +81,21 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     return (
       <>
         <a href={`file://${path}`}>{path}</a>
-        <FlexComponent>
-          {added > 0 && <span className="color-green-fg" style={{padding: "0 2px"}}>+{added}</span>}
-          {removed > 0 && <span className="color-red-fg" style={{padding: "0 2px"}}>-{removed}</span>}
-        </FlexComponent>
+        <Group gap={0}>
+          {added > 0 && <Box component="span" c="green" px={2}>+{added}</Box>}
+          {removed > 0 && <Box component="span" c="red" px={2}>-{removed}</Box>}
+        </Group>
         <div className="selectable">
-          <FlexComponent overflow="auto">
-            <FlexComponent position="absolute" inset={[0]}>
+          <div className="acp-diff">
+            <div className="acp-diff-signs">
               <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
                 {`\`\`\`diff\n${signs.join("\n")}\n\`\`\``}
               </Markdown>
-            </FlexComponent>
+            </div>
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
               {`${fence}${path.split(".").pop() || ""}\n${lines.join("\n")}\n${fence}`}
             </Markdown>
-          </FlexComponent>
+          </div>
         </div>
       </>
     );
@@ -106,10 +112,10 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
 
     return (
       <>
-        <FlexComponent>
-          {terminal.truncated && <span className="color-gray-fg" style={{padding: "0 2px"}}>(truncated)</span>}
-          {failed && <span className="color-red-fg" style={{padding: "0 2px"}}>{signal ? `signal ${signal}` : `exit ${exitCode}`}</span>}
-        </FlexComponent>
+        <Group gap={0}>
+          {terminal.truncated && <Box component="span" c="dimmed" px={2}>(truncated)</Box>}
+          {failed && <Box component="span" c="red" px={2}>{signal ? `signal ${signal}` : `exit ${exitCode}`}</Box>}
+        </Group>
         {output && (
           <div className="selectable">
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>
@@ -173,11 +179,9 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
         : compaction.status === "cancelled" ? "Context compaction cancelled"
         : `Context compaction: ${compaction.status}`;
       return (
-        <CollapseComponent label={compactionLabel} badge={() => getStatusIcon(compaction.status)}>
+        <CollapseComponent variant="row" label={compactionLabel} icon={getKindIcon("compact", compaction.status)}>
           {compaction.error && (
-            <FlexComponent color="red" padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
-              <span>{compaction.error}</span>
-            </FlexComponent>
+            <Alert variant="light" color="red" p={4} className="selectable" style={{ whiteSpace: "pre-wrap" }}>{compaction.error}</Alert>
           )}
           {compaction.summary?.map((content, i) => <React.Fragment key={i}>{renderContent(content)}</React.Fragment>)}
         </CollapseComponent>
@@ -185,48 +189,60 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
     case "user_message_chunk":
       const content = renderContent(message.update.content);
       return message.update.content.type !== "text" ? content : (
-        <FlexComponent direction="column" color="lightblue" padding={[8]} rounded={[4]} shadow>{content}</FlexComponent>
+        <Paper className="acp-user-prompt" p="7px 9px" radius={4} bg="var(--mantine-color-cyan-light)">{content}</Paper>
       );
     case "agent_message_chunk":
       return renderContent(message.update.content);
     case "agent_thought_chunk":
-      return <CollapseComponent label="󰟶 Agent Thought...">{renderContent(message.update.content)}</CollapseComponent>;
+      return <CollapseComponent variant="row" label="Thinking…" icon={getKindIcon("think")}>{renderContent(message.update.content)}</CollapseComponent>;
     case "tool_call":
     case "tool_call_update":
       const permissionRequest = message.update._meta?.permissionRequest as IPermissionRequest | undefined;
       const elicitationRequest = message.update._meta?.elicitationRequest as IElicitationRequest | undefined;
-      const icon = getStatusIcon(message.update.status);
       const input = formatToolData(message.update.rawInput);
       const output = formatToolData(message.update.rawOutput);
+      const toolContent = message.update.content;
+      const hasContent = !!toolContent?.length;
+      const availableTabs = [hasContent && "content", output && "output", input && "input"].filter(Boolean);
+      const activeTab = toolTab && availableTabs.includes(toolTab) ? toolTab : availableTabs[0] || null;
 
       return (
         <>
-          <CollapseComponent
+          <CollapseComponent variant="row"
             label={message.update.title || message.update.name || message.update.kind || message.update.toolCallId}
-            badge={() => <>{typeof message.update._meta?.executionTime === "string" && `${message.update._meta?.executionTime}s`}{icon}</>}
+            icon={getKindIcon(message.update.kind, message.update.status)}
+            badge={typeof message.update._meta?.executionTime === "string" ? `${message.update._meta.executionTime}s` : undefined}
           >
-            {input && (
-              <CollapseComponent label=" INPUT" style={{marginBottom: 4}}>
-                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{input}</Markdown></div>
-              </CollapseComponent>
+            {activeTab && (
+              <Tabs className="acp-tool-tabs" variant="pills" keepMounted={false} value={activeTab} onChange={setToolTab}>
+                <Tabs.List>
+                  {hasContent && <Tabs.Tab value="content">Content</Tabs.Tab>}
+                  {input && <Tabs.Tab value="input">Input</Tabs.Tab>}
+                  {output && <Tabs.Tab value="output">Output</Tabs.Tab>}
+                </Tabs.List>
+                {hasContent && <Tabs.Panel value="content">{toolContent?.map(renderToolCallContent)}</Tabs.Panel>}
+                {[["input", input], ["output", output]].map(([value, data]) => data && (
+                  <Tabs.Panel key={value} value={value!} className="selectable">
+                    <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{data}</Markdown>
+                  </Tabs.Panel>
+                ))}
+              </Tabs>
             )}
-            {output && (
-              <CollapseComponent label=" OUTPUT" style={{marginBottom: 4}}>
-                <div className="selectable" style={{ margin: 4 }}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHilight]} urlTransform={urlTransform}>{output}</Markdown></div>
-              </CollapseComponent>
-            )}
-            {message.update.content?.map(renderToolCallContent)}
           </CollapseComponent>
           {permissionRequest && (
-            <FlexComponent color="default" horizontal="center">
-              {permissionRequest.options.map(option => (
-                <FlexComponent key={option.optionId} border={[1]} color={getPermissionIcon(option.kind).color} margin={[4]} padding={[4]} rounded={[4]} shrink={1} title={option.name} style={styles.permission}
-                  onClick={() => onAcpPermissionChoice(permissionRequest!.requestId, option.optionId)}
-                >
-                  <IconComponent {...getPermissionIcon(option.kind, "-fg")} text={option.name} />
-                </FlexComponent>
-              ))}
-            </FlexComponent>
+            <Group grow gap={4} my={4}>
+              {permissionRequest.options.map(option => {
+                const { color, font } = getPermissionIcon(option.kind);
+
+                return (
+                  <Button key={option.optionId} variant="light" color={color} size="xs" title={option.name} leftSection={<i>{font}</i>}
+                    onClick={() => onAcpPermissionChoice(permissionRequest!.requestId, option.optionId)}
+                  >
+                    {option.name}
+                  </Button>
+                );
+              })}
+            </Group>
           )}
           {elicitationRequest && <ElicitationComponent request={elicitationRequest} />}
         </>
@@ -236,12 +252,57 @@ const MessageMemo = React.memo(({ message }: { message: AcpSDK.SessionNotificati
   return null;
 });
 
-export const MessageComponent = React.memo(({ messages, sessionId }: { messages: AcpSDK.SessionNotification[]; sessionId: string; }) => (
-  <>
-    {messages.map((message, i) => message.sessionId !== sessionId ? null : (
-      <FlexComponent key={`message_${i}`} animate="fade-in" direction="column" padding={[4, 2]}>
+export const MessageComponent = React.memo(({ messages, sessionId }: { messages: AcpSDK.SessionNotification[]; sessionId: string; }) => {
+  type Entry = { message: AcpSDK.SessionNotification; index: number };
+  type Group = { entries: Entry[]; toolCount: number; failedCount: number };
+  const groups: Group[] = [];
+  let pendingThoughts: Entry[] = [];
+
+  function flushThoughts() {
+    for (const thought of pendingThoughts) groups.push({ entries: [thought], toolCount: 0, failedCount: 0 });
+    pendingThoughts = [];
+  }
+
+  messages.forEach((message, index) => {
+    if (message.sessionId !== sessionId) return;
+
+    const entry = { message, index };
+    const update = message.update;
+    const last = groups.at(-1);
+    if (update.sessionUpdate === "agent_thought_chunk" && last?.toolCount) {
+      pendingThoughts.push(entry);
+      return;
+    }
+
+    const canGroup = (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update")
+      && (update.status === "completed" || update.status === "failed")
+      && !update._meta?.permissionRequest && !update._meta?.elicitationRequest;
+    if (canGroup && last?.toolCount) {
+      last.entries.push(...pendingThoughts, entry);
+      last.toolCount++;
+      if (update.status === "failed") last.failedCount++;
+      pendingThoughts = [];
+    } else {
+      flushThoughts();
+      groups.push({ entries: [entry], toolCount: canGroup ? 1 : 0, failedCount: canGroup && update.status === "failed" ? 1 : 0 });
+    }
+  });
+  flushThoughts();
+
+  function renderMessage({ message, index }: Entry) {
+    return (
+      <Stack key={index} gap={0} px={2} py={4} className="animate fade-in acp-message" data-kind={message.update.sessionUpdate}>
         <MessageMemo message={message} />
-      </FlexComponent>
-    ))}
-  </>
-));
+      </Stack>
+    );
+  }
+
+  return groups.map(group => group.toolCount > 1 ? (
+    <Stack key={group.entries[0].index} gap={0} px={2} className="acp-message">
+      <CollapseComponent variant="row" label={`${group.toolCount} tool calls · ${group.failedCount ? `${group.failedCount} failed` : "Completed"}`}
+        icon={<Box component="i" c={group.failedCount ? "red" : undefined}>{kindIcons.other}</Box>}>
+        {group.entries.map(renderMessage)}
+      </CollapseComponent>
+    </Stack>
+  ) : renderMessage(group.entries[0]));
+});

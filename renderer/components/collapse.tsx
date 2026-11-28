@@ -1,37 +1,29 @@
 import React from "react";
-
-import { FlexComponent } from "renderer/components/flex";
+import { Accordion, Group, Text } from "@mantine/core";
 
 interface Props {
   label: string;
   open?: boolean;
+  icon?: React.ReactNode;
   badge?: string | React.ComponentType;
+  variant?: "card" | "row";
   style?: React.CSSProperties;
 }
 
-const styles: { [k: string]: React.CSSProperties } = {
-  text: {
-    display: "inline",
-    paddingRight: 4,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-};
-
-export function CollapseComponent(props: React.PropsWithChildren<Props>) {
+export function CollapseComponent({ label, open, icon, badge: Badge, variant = "card", style, children }: React.PropsWithChildren<Props>) {
   return (
-    <details style={props.style} open={props.open}>
-      <summary className="clickable">
-        <FlexComponent vertical="center" whiteSpace="pre-wrap">
-          <div style={styles.text}>{props.label}</div>
-          <div className="space" />
-          { props.badge && (<FlexComponent>{typeof props.badge === "string" ? props.badge : <props.badge />}</FlexComponent>) }
-        </FlexComponent>
-      </summary>
-      <FlexComponent direction="column" padding={[4]}>
-        {props.children}
-      </FlexComponent>
-    </details>
+    <Accordion className={`envim-collapse envim-collapse-${variant}`} variant={variant === "card" ? "contained" : "default"} radius="sm"
+      chevronPosition={variant === "card" ? "left" : "right"} chevronSize={10} chevronIconSize={10} defaultValue={open ? "item" : null} keepMounted={false} style={style}
+    >
+      <Accordion.Item value="item">
+        <Accordion.Control icon={icon}>
+          <Group gap={4} wrap="nowrap">
+            <Text component="span" inherit truncate flex={1} miw={0}>{label}</Text>
+            {Badge && (typeof Badge === "string" ? Badge : <Badge />)}
+          </Group>
+        </Accordion.Control>
+        <Accordion.Panel>{children}</Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
   );
 }

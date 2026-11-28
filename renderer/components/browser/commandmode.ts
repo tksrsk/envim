@@ -56,17 +56,18 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
     focusCommand();
   }
 
+  function move(nextX: number, nextY: number) {
+    cursor.current = { x: nextX, y: nextY };
+    const point = cursorRect();
+    cursor.current = point;
+    void command("cursor", { point, selection: selectionRect() });
+  }
+
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.nativeEvent.isComposing || event.key === "Tab") return;
     event.preventDefault();
     event.stopPropagation();
     const { x, y, width, height } = cursorRect();
-    function move(nextX: number, nextY: number) {
-      cursor.current = { x: nextX, y: nextY };
-      const point = cursorRect();
-      cursor.current = point;
-      void command("cursor", { point, selection: selectionRect() });
-    }
 
     if (event.ctrlKey || event.metaKey) {
       switch (event.key) {
@@ -139,5 +140,5 @@ export function useCommandMode({ tab, area, commandInput, address, searchInput, 
     void command("selection", null);
   }
 
-  return { mode, selectionRect, focusCommand, onTextKey, onKeyDown, onFocus, onBlur };
+  return { mode, move, selectionRect, focusCommand, onTextKey, onKeyDown, onFocus, onBlur };
 }

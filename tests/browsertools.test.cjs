@@ -247,6 +247,7 @@ test('browser tab snapshots include sharing and omit closed tabs', async () => {
       isDestroyed: () => false,
       contentView: { addChildView() {}, removeChildView() {} },
     } } },
+    'main/setting': { Setting: { get: () => undefined } },
     'main/browser/page': { BrowserPage: class {} },
   });
   const tabs = new BrowserTabs('workspace', {

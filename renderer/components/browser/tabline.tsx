@@ -1,6 +1,6 @@
 import React from "react";
+import { ActionIcon, Box, Loader } from "@mantine/core";
 
-import { IconComponent } from "renderer/components/icon";
 import { WorkspaceTabComponent } from "renderer/components/tab";
 import { useWorkspace } from "renderer/context/workspace";
 import { uiIcons } from "renderer/utils/icons";
@@ -26,15 +26,16 @@ export function BrowserTablineComponent({ state }: { state: BrowserWorkspace }) 
           const select = () => void emit.send("browser:tabs:select", tab.id);
           const close = () => void emit.send("browser:tabs:close", tab.id);
           return (
-            <WorkspaceTabComponent key={tab.id} color={shared ? "purple" : "gray"} active={active} font="󰖟" text={title}
+            <WorkspaceTabComponent key={tab.id} active={active} font="󰖟" text={title}
               title={shared ? `${title} (shared with the agent)` : title}
-              glyph={tab.loading ? <span className="animate loading inline" /> : <TabFavicon key={tab.favicon} src={tab.favicon} />}
+              glyph={tab.loading ? <Loader size="1em" /> : <TabFavicon key={tab.favicon} src={tab.favicon} />}
+              badge={shared && <Box component="i" c="violet">{uiIcons.agent}</Box>}
               onClick={select}
               onClose={event => { event.stopPropagation(); close(); }} />
           );
         })}
       </div>
-      <IconComponent color="green-fg" font={uiIcons.add} onClick={() => void emit.send("browser:open", "")} />
+      <ActionIcon color="green" onClick={() => void emit.send("browser:open", "")}><i>{uiIcons.add}</i></ActionIcon>
     </>
   );
 }

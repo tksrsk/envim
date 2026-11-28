@@ -1,11 +1,10 @@
 import React from "react";
+import { Box, Button, Checkbox, Group, Paper, Radio, ScrollArea, SegmentedControl, SimpleGrid, Slider, Stack, Text, TextInput, Title } from "@mantine/core";
 
 import { ISetting } from "common/interface";
 
 import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
-
-import { FlexComponent } from "renderer/components/flex";
 
 const envimIconUrl = new URL("../../assets/envim-icon.png", import.meta.url).href;
 
@@ -14,43 +13,12 @@ interface Props {
   height: number;
 }
 
-const styles: { [key: string]: React.CSSProperties } = {
-  scope: {
-    isolation: "isolate",
-    fontSize: 13,
-    lineHeight: 1.5,
-    wordBreak: "normal"
-  },
-  title: {
-    margin: "2px 0 5px",
-    fontWeight: 650,
-    letterSpacing: "-.035em",
-    lineHeight: 1.2
-  },
-  eyebrow: {
-    margin: 0,
-    fontSize: 10,
-    letterSpacing: ".16em",
-    fontWeight: 600,
-    color: "var(--form-accent)"
-  },
-  heading: {
-    margin: 0,
-    fontSize: 15,
-    fontWeight: 650
-  },
-  description: {
-    margin: "4px 0 18px",
-    color: "var(--form-muted)",
-    fontSize: 12
-  },
-  previewCaption: {
-    marginBottom: 8,
-    color: "var(--form-muted)",
-    fontSize: 9,
-    letterSpacing: ".12em"
-  },
-};
+const connectionLabels = [
+  { value: "command", label: "Command" },
+  { value: "address", label: "Server" },
+  { value: "docker", label: "Docker" },
+  { value: "ssh", label: "SSH" },
+];
 
 export function SettingComponent (props: Props) {
   const [state, setState] = React.useState<ISetting>({...Setting.get() });
@@ -68,44 +36,20 @@ export function SettingComponent (props: Props) {
     setState(() => state);
   }
 
-  function onToggleType (e: React.ChangeEvent<HTMLInputElement>) {
+  function onChangeConnection (type: ISetting["type"], path: string) {
     setState(state => {
-      const type = e.target.value as ISetting["type"];
-      const path = state.path;
       const { presets, searchengines, ...rest } = state.presets[`[${type}]:${path}`] || { type, path };
 
       return { ...state, ...rest };
     });
   }
 
-  function onChangePath (e: React.ChangeEvent<HTMLInputElement>) {
-    setState(state => {
-      const path = e.target.value;
-      const type = state.type;
-      const { presets, searchengines, ...rest } = state.presets[`[${type}]:${path}`] || { type, path };
-
-      return { ...state, ...rest };
-    });
+  function onChangeFont (font: Partial<ISetting["font"]>) {
+    setState(state => ({ ...state, font: { ...state.font, ...font } }));
   }
 
-  function onChangeFont (e: React.ChangeEvent<HTMLInputElement>) {
-    setState(state => ({ ...state, font: { ...state.font, size: +e.target.value } }));
-  }
-
-  function onChangeLspace (e: React.ChangeEvent<HTMLInputElement>) {
-    setState(state => ({ ...state, font: { ...state.font, lspace: +e.target.value } }));
-  }
-
-  function onChangeOpacity (e: React.ChangeEvent<HTMLInputElement>) {
-    setState(state => ({ ...state, opacity: +e.target.value }));
-  }
-
-  function onToggleOption (e: React.ChangeEvent<HTMLInputElement>) {
-    setState(({ options, ...state }) => {
-      options[e.target.name] = e.target.checked;
-
-      return { ...state, options };
-    });
+  function onToggleOption (name: string, checked: boolean) {
+    setState(state => ({ ...state, options: { ...state.options, [name]: checked } }));
   }
 
   function onSelectBookmark(index: number) {
@@ -137,94 +81,92 @@ export function SettingComponent (props: Props) {
     Emit.send("neovim:connect", Setting.get(), bookmarks.find(({ selected }) => selected)?.path);
   }
 
-  const connectionLabels = { command: "Command", address: "Server", docker: "Docker", ssh: "SSH" };
-
-  function renderSection(id: string, title: string, description: string, children: React.ReactNode, full = false) {
+  function renderSection(title: string, description: string, children: React.ReactNode, span = 1) {
     return (
-      <section aria-labelledby={id} style={{ minWidth: 0, flex: full ? "1 1 100%" : "1 1 calc(50% - 8px)" }}>
-        <FlexComponent direction="column" color="default" border={[1]} rounded={[10]} padding={[22]} overflow="visible" whiteSpace="pre-wrap" style={{ height: "100%", borderColor: "var(--form-border)", wordBreak: "normal" }}>
-          <h2 style={styles.heading} id={id}>{title}</h2>
-          <p style={styles.description}>{description}</p>
-          {children}
-        </FlexComponent>
-      </section>
+      <Paper withBorder radius="md" p="lg" style={{ gridColumn: `span ${span}` }}>
+        <Title order={2} size="h4">{title}</Title>
+        <Text size="sm" c="dimmed" mb="md">{description}</Text>
+        {children}
+      </Paper>
     );
   }
 
+  function renderSlider(label: string, value: number, unit: string, min: number, max: number, onChange: (value: number) => void) {
+    return (
+      <Box mb="md">
+        <Group justify="space-between" mb={4}>
+          <Text size="sm" fw={500}>{label}</Text>
+          <Text size="sm" c="dimmed">{value}{unit}</Text>
+        </Group>
+        <Slider min={min} max={max} value={value} onChange={onChange} label={null} />
+      </Box>
+    );
+  }
+
+  const selectedBookmark = state.bookmarks.findIndex(({ selected }) => selected);
+
   return (
-    <FlexComponent direction="column" color="inverse-fg" overflow="auto" padding={[48, 28, 28]} whiteSpace="pre-wrap" style={{ ...styles.scope, ...props }}>
-      <FlexComponent color="default" position="fixed" inset={[0]} zIndex={-1} nomouse style={{ opacity: (100 - state.opacity) / 100 }} />
-      <form style={{ width: "100%", maxWidth: 880, margin: "0 auto" }} onSubmit={onSubmit}>
-        <header>
-          <FlexComponent vertical="center" margin={[0, 0, 28]} overflow="visible" whiteSpace="pre-wrap" style={{ gap: 18, wordBreak: "normal" }}>
-            <img src={envimIconUrl} alt="" width={56} height={56} draggable={false} style={{ flexShrink: 0, objectFit: "contain" }} />
-            <div>
-              <p style={styles.eyebrow}>YOUR NEOVIM WORKSPACE</p>
-              <h1 style={{ ...styles.title, fontSize: 27 }}>Welcome to Envim</h1>
-            </div>
-          </FlexComponent>
-        </header>
+    <ScrollArea style={props}>
+      <Box pos="fixed" inset={0} bg="var(--mantine-color-body)" style={{ zIndex: -1, pointerEvents: "none", opacity: (100 - state.opacity) / 100 }} />
+      <form style={{ maxWidth: 880, margin: "0 auto", padding: "48px 28px 28px" }} onSubmit={onSubmit}>
+        <Group gap={18} mb={28} wrap="nowrap">
+          <img src={envimIconUrl} alt="" width={56} height={56} draggable={false} />
+          <div>
+            <Text size="xs" fw={600} c="blue" style={{ letterSpacing: ".16em" }}>YOUR NEOVIM WORKSPACE</Text>
+            <Title order={1} size={27}>Welcome to Envim</Title>
+          </div>
+        </Group>
 
-        <FlexComponent overflow="visible" style={{ flexWrap: "wrap", gap: 16 }}>
-          {renderSection("connection-title", "Connection", "Choose how to connect to Neovim.", <>
-            <div role="group" aria-label="Connection type">
-              <FlexComponent margin={[0, 0, 18]} overflow="visible" style={{ flexWrap: "wrap", gap: 6 }}>
-                {Object.entries(connectionLabels).map(([type, label]) => (
-                  <label key={type}><input type="radio" name="connection-type" value={type} checked={state.type === type} onChange={onToggleType} />{label}</label>
-                ))}
-              </FlexComponent>
-            </div>
-            <label>Neovim path<input type="text" value={state.path} onChange={onChangePath} autoFocus spellCheck={false} /></label>
-          </>, true)}
+        <SimpleGrid cols={2} spacing="md">
+          {renderSection("Connection", "Choose how to connect to Neovim.", <Stack>
+            <SegmentedControl data={connectionLabels} value={state.type} onChange={type => onChangeConnection(type as ISetting["type"], state.path)} style={{ alignSelf: "flex-start" }} />
+            <TextInput label="Neovim path" value={state.path} onChange={e => onChangeConnection(state.type, e.currentTarget.value)} autoFocus spellCheck={false} />
+          </Stack>, 2)}
 
-          {renderSection("appearance-title", "Appearance", "Fine-tune your editor’s reading comfort.", <>
-            <label><span>Font size <output>{state.font.size}px</output></span><input type="range" min="5" max="20" value={state.font.size} onChange={onChangeFont} /></label>
-            <label><span>Line spacing <output>{state.font.lspace}px</output></span><input type="range" min="0" max="10" value={state.font.lspace} onChange={onChangeLspace} /></label>
-            <FlexComponent direction="column" color="inverse" padding={[12, 14]} margin={[0, 0, 16]} rounded={[6]} whiteSpace="pre-wrap">
-              <span style={styles.previewCaption}>PREVIEW</span>
-              <div style={{ color: "var(--color-fg)", fontFamily: '"Regular", monospace', overflowWrap: "anywhere", fontSize: state.font.size, lineHeight: `${state.font.size + state.font.lspace}px` }}>
+          {renderSection("Appearance", "Fine-tune your editor’s reading comfort.", <>
+            {renderSlider("Font size", state.font.size, "px", 5, 20, size => onChangeFont({ size }))}
+            {renderSlider("Line spacing", state.font.lspace, "px", 0, 10, lspace => onChangeFont({ lspace }))}
+            <Paper bg="var(--mantine-color-default)" p="sm" mb="md">
+              <Text size="xs" c="dimmed" mb={8} style={{ letterSpacing: ".12em" }}>PREVIEW</Text>
+              <div style={{ fontFamily: "var(--mantine-font-family-monospace)", overflowWrap: "anywhere", fontSize: state.font.size, lineHeight: `${state.font.size + state.font.lspace}px` }}>
                 The quick brown fox<br />
                 jumps over the lazy dog.
               </div>
-              </FlexComponent>
-            <label><span>Transparency <output>{state.opacity}%</output></span><input type="range" min="0" max="50" value={state.opacity} onChange={onChangeOpacity} /></label>
+            </Paper>
+            {renderSlider("Transparency", state.opacity, "%", 0, 50, opacity => setState(state => ({ ...state, opacity })))}
           </>)}
 
-          {renderSection("options-title", "Options", "Choose the Neovim UI features to enable.",
-            <FlexComponent direction="column" overflow="visible" style={{ fontFamily: '"Regular", monospace' }}>
-              {Object.keys(state.options).map(key => (
-                <label key={key}><input type="checkbox" name={key} checked={state.options[key]} onChange={onToggleOption} />{key}</label>
-              ))}
-            </FlexComponent>
-          )}
+          {renderSection("Options", "Choose the Neovim UI features to enable.", <Stack gap="xs">
+            {Object.keys(state.options).map(key => (
+              <Checkbox key={key} label={key} checked={state.options[key]} onChange={e => onToggleOption(key, e.currentTarget.checked)} ff="monospace" />
+            ))}
+          </Stack>)}
 
-          {renderSection("bookmarks-title", "Bookmarks", "Pick a workspace to open.",
-            <FlexComponent direction="column" overflow="auto" style={{ maxHeight: 180 }}>
-              <label><input type="radio" name="bookmark" checked={!state.bookmarks.some(({ selected }) => selected)} onChange={() => onSelectBookmark(-1)} />Default workspace</label>
-              {state.bookmarks.map((bookmark, i) => (
-                <label key={i}><input type="radio" name="bookmark" checked={bookmark.selected} onChange={() => onSelectBookmark(i)} />{bookmark.name.replace(/\//g, " / ")}</label>
-              ))}
-            </FlexComponent>
-          )}
+          {renderSection("Bookmarks", "Pick a workspace to open.", <ScrollArea.Autosize mah={180}>
+            <Radio.Group value={`${selectedBookmark}`} onChange={value => onSelectBookmark(+value)}>
+              <Stack gap="xs">
+                <Radio value="-1" label="Default workspace" />
+                {state.bookmarks.map((bookmark, i) => <Radio key={i} value={`${i}`} label={bookmark.name.replace(/\//g, " / ")} />)}
+              </Stack>
+            </Radio.Group>
+          </ScrollArea.Autosize>)}
 
-          {renderSection("presets-title", "Presets", "Reuse a saved connection setup.",
-            <FlexComponent direction="column" overflow="auto" style={{ maxHeight: 180 }}>
-              {Object.keys(state.presets).length === 0 && <span style={{ color: "var(--form-muted)" }}>No saved presets yet.</span>}
-              {Object.keys(state.presets).map(key => (
-                <label key={key}><input type="radio" name="preset" checked={`[${state.type}]:${state.path}` === key} onChange={() => onSelectPreset(key)} />{key}</label>
-              ))}
-            </FlexComponent>
-          )}
-        </FlexComponent>
+          {renderSection("Presets", "Reuse a saved connection setup.", <ScrollArea.Autosize mah={180}>
+            {Object.keys(state.presets).length === 0 && <Text size="sm" c="dimmed">No saved presets yet.</Text>}
+            <Radio.Group value={`[${state.type}]:${state.path}`} onChange={onSelectPreset}>
+              <Stack gap="xs">
+                {Object.keys(state.presets).map(key => <Radio key={key} value={key} label={key} />)}
+              </Stack>
+            </Radio.Group>
+          </ScrollArea.Autosize>)}
+        </SimpleGrid>
 
-        <footer>
-          <FlexComponent vertical="center" padding={[20, 0, 4]} overflow="visible">
-            <span style={{ color: "var(--form-muted)", fontSize: 12 }}>Ready when you are.</span>
-            <FlexComponent grow={1} />
-            <button type="submit">Start Envim</button>
-          </FlexComponent>
-        </footer>
+        <Group pt={20} pb={4}>
+          <Text size="xs" c="dimmed">Ready when you are.</Text>
+          <Box style={{ flexGrow: 1 }} />
+          <Button type="submit">Start Envim</Button>
+        </Group>
       </form>
-    </FlexComponent>
+    </ScrollArea>
   );
 }

@@ -1,6 +1,8 @@
 import React from "react";
+import { ActionIcon, Box, Button, Divider, Menu } from "@mantine/core";
 
 import { ISetting, ITab, IMode, IMenu } from "common/interface";
+import { IFormRequest, schema } from "common/schema";
 
 import { useEditor } from "renderer/context/editor";
 import { useWorkspace } from "renderer/context/workspace";
@@ -10,16 +12,14 @@ import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { icons, uiIcons } from "renderer/utils/icons";
 
-import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
 import { SurfaceSwitchComponent, WorkspaceTabComponent } from "renderer/components/tab";
 import { BrowserTablineComponent } from "renderer/components/browser/tabline";
-import { MenuComponent } from "renderer/components/menu";
+import { MenuComponent, SubMenuComponent, MenuItemComponent, MenuLabelComponent, TreeMenuItems } from "renderer/components/menu";
 
 interface Props {
-  width: number;
   height: number;
   paddingLeft: number;
+  paddingRight: number;
   onToggleSurface: () => void;
   onFocusEditor: () => void;
   browserState?: BrowserWorkspace;
@@ -33,52 +33,69 @@ interface States {
   mode?: IMode;
   dragging: number;
   enabled: boolean;
+  theme: "dark" | "light";
+  historyOpen: boolean;
 }
 
 export function TablineComponent({ onToggleSurface, onFocusEditor, browserState, ...props }: Props) {
   const { options, mode, tabs, menus  } = useEditor();
   const { workspace, workspaces, emit } = useWorkspace();
-  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline });
+  const [state, setState] = React.useState<States>({ cwd: "", tabs, menus, bookmarks: [], dragging: -1, enabled: options.ext_tabline, theme: "dark", historyOpen: false });
 
   React.useEffect(() => {
     emit.on("neovim:cwd", onNeovimCwd);
+    emit.on("history:visibility", onHistoryVisibility);
+    emit.on("bookmark:save", onBookmarkSave);
 
     return () => {
       emit.off("neovim:cwd", onNeovimCwd);
+      emit.off("history:visibility", onHistoryVisibility);
+      emit.off("bookmark:save", onBookmarkSave);
     };
   }, []);
+
+  function onHistoryVisibility(historyOpen: boolean) {
+    setState(state => ({ ...state, historyOpen }));
+  }
+
+  function toggleTheme() {
+    setState(state => {
+      const theme = state.theme === "dark" ? "light" : "dark";
+
+      emit.send("neovim:command", `set background=${theme}`);
+
+      return { ...state, theme };
+    });
+  }
 
   function onNeovimCwd(cwd: string) {
     setState(state => ({ ...state, cwd, bookmarks: Setting.bookmarks }));
   }
 
-  async function saveBookmark(path: string) {
-    if (path !== state.cwd) {
-      path = await emit.send<string>("neovim:readline", "Bookmark Path", state.cwd, "dir") || path;
-    }
+  function openBookmarkForm(e: React.MouseEvent, bookmark?: ISetting["bookmarks"][number]) {
+    e.stopPropagation();
 
-    const bookmark = state.bookmarks.find(bookmark => bookmark.path === path);
-    const bookmarks = state.bookmarks
-      .filter(bookmark => bookmark.path !== path)
-      .map(bookmark => ({ ...bookmark, selected: false }));
-    const name = await emit.send<string>("neovim:readline", "Bookmark Name", bookmark?.name || state.cwd);
-
-    if (name) {
-      bookmarks.push({ name: name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path, selected: false });
-      Setting.bookmarks = bookmarks.sort((a, b) => a.name > b.name ? 1 : -1);
-
-      Emit.send("app:setting", Setting.get());
-      setState(state => ({ ...state, bookmarks }));
-    }
+    emit.share("form:open", {
+      title: " Bookmark",
+      schema: schema.object({ name: schema.string("Name"), path: schema.string("Path") }, ["name", "path"]),
+      values: bookmark ?? { name: state.cwd, path: state.cwd },
+      actions: [
+        { action: "save", name: "Save", color: "blue", font: uiIcons.save, submit: true },
+        ...(bookmark ? [{ action: "delete", name: "Delete", color: "red", font: uiIcons.close }] : []),
+      ],
+      reply: { event: "bookmark:save", via: "share", args: [bookmark?.path] },
+    } satisfies IFormRequest);
   }
 
-  function deleteBookmark(e: React.MouseEvent, path: string) {
-    const bookmarks = state.bookmarks.filter(bookmark => bookmark.path !== path);
+  function onBookmarkSave(original: string | undefined, action?: string, values?: { name: string; path: string }) {
+    const others = Setting.bookmarks.filter(bookmark => ![original, values?.path].includes(bookmark.path));
+    const bookmarks = action === "save" && values
+      ? [...others.map(bookmark => ({ ...bookmark, selected: false })), { name: values.name.replace(/^\//, "").replace(/\/+/, "/").replace(/\/$/, ""), path: values.path, selected: false }]
+      : action === "delete" ? others : undefined;
 
-    e.stopPropagation();
-    e.preventDefault();
+    if (!bookmarks) return;
 
-    Setting.bookmarks = bookmarks;
+    Setting.bookmarks = bookmarks.sort((a, b) => a.name > b.name ? 1 : -1);
     Emit.send("app:setting", Setting.get());
     setState(state => ({ ...state, bookmarks }));
   }
@@ -155,17 +172,18 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
     return !sname ? null : menus.map((menu, i) => {
       const command = [ ...base, menu.name.replace(/([\\. ])/g, "\\$1") ];
 
+      const Submenu = base.length > 0 ? SubMenuComponent : MenuComponent;
+      const Item = base.length > 0 ? MenuItemComponent : MenuLabelComponent;
+
       return menu.submenus?.length ? (
-        <MenuComponent key={i} side={base.length > 0} label={menu.name}>
+        <Submenu key={i} label={menu.name}>
           { renderSubmenu(menu.submenus, command)}
-        </MenuComponent>
+        </Submenu>
       ) : (
-        menu.mappings[sname]?.enabled && menu.mappings[sname]?.rhs
-          ? <FlexComponent key={i} onClick={event => {
-            onFocusEditor();
-            runCommand(event, `emenu ${command.join(".")}`);
-          }} spacing>{ menu.name }</FlexComponent>
-          : <FlexComponent key={i} color="gray-fg" spacing>{ menu.name }</FlexComponent>
+        <Item key={i} disabled={!(menu.mappings[sname]?.enabled && menu.mappings[sname]?.rhs)} onClick={(event: React.MouseEvent) => {
+          onFocusEditor();
+          runCommand(event, `emenu ${command.join(".")}`);
+        }}>{ menu.name }</Item>
       );
     });
   }
@@ -173,50 +191,60 @@ export function TablineComponent({ onToggleSurface, onFocusEditor, browserState,
   function renderBookmark() {
     const bookmark = state.bookmarks.find(({ path }) => path === workspace);
     const text = bookmark && bookmark.name.split("/").pop() || "";
-    const icon = bookmark ? { color: "blue-fg", font: "", text } : { color: "gray-fg", font: "", text };
-
-    return <IconComponent { ...icon } onClick={() => saveBookmark(bookmark?.path || state.cwd)} />;
+    const color = bookmark ? "blue" : "gray";
+    const font = <i>{bookmark ? "" : ""}</i>;
+    return text
+      ? <Button variant="subtle" color={color} size="compact-xs" className="envim-inline-button" leftSection={font}>{text}</Button>
+      : <ActionIcon color={color}>{font}</ActionIcon>;
   }
 
-  function renderBookmarkMenu(base: string) {
-    const regexp = new RegExp(`^${base}`);
-    const bookmarks = state.bookmarks.filter(({ name }) => name.match(regexp)).map(({ name, ...other }) => ({ ...other, name: name.replace(regexp, "") }));
-    const groups = bookmarks.map(({ name }) => name.split("/")).reduce((all, curr) => curr.length === 1 || all.indexOf(curr[0]) >= 0 ? all : [...all, curr[0]], []);
-    const selected = state.bookmarks.find(({ path }) => path === workspace)?.name || "";
+  function renderBookmarkItem(bookmark: ISetting["bookmarks"][number], label: string) {
+    const { path } = bookmark;
 
     return (
-      <>
-        { groups.map(group =>
-          <MenuComponent key={`${base}${group}`} color="lightblue-fg" label={`󰉋 ${group}`} active={selected.indexOf(`${base}${group}/`) === 0} side>
-            { renderBookmarkMenu(`${base}${group}/`) }
-          </MenuComponent>
-        ) }
-        { bookmarks.filter(({ name }) => name.split("/").length === 1).map(({ name, path }, i) =>
-          <FlexComponent animate="hover" direction="column" active={path === workspace} key={`${base}-${i}`} onClick={e => runCommand(e, `cd ${path}`)} spacing>
-            <FlexComponent>{ Object.values(workspaces).includes(path) && <IconComponent color="green-fg" font="" /> }{name}</FlexComponent>
-            <div className="color-gray-fg small">{ path }</div>
-            <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => deleteBookmark(e, path)} hover />
-          </FlexComponent>
-        ) }
-      </>
+      <MenuItemComponent key={path} active={path === workspace} onClick={e => runCommand(e, `cd ${path}`)}
+        leftSection={<Box component="i" c="green" style={{ visibility: Object.values(workspaces).includes(path) ? "visible" : "hidden" }}>{uiIcons.connected}</Box>}
+        rightSection={<ActionIcon title="Edit" onClick={e => openBookmarkForm(e, bookmark)}><i>{uiIcons.edit}</i></ActionIcon>}
+      >
+        <div>{label}</div>
+        <Box c="dimmed" fz="xs">{ path }</Box>
+      </MenuItemComponent>
     );
   }
 
   return (
-    <FlexComponent color="default" overflow="visible" zIndex={1} style={props} shadow>
+    <div className="envim-tabline" style={props}>
       <SurfaceSwitchComponent onClick={onToggleSurface} />
       {browserState
         ? <BrowserTablineComponent state={browserState} />
         : <>
           {state.enabled && state.tabs.map((tab, i) => renderTab(i, tab))}
-          <IconComponent color="green-fg" font={uiIcons.add} onClick={e => runCommand(e, "$tab split")} />
+          <ActionIcon color="green" onClick={e => runCommand(e, "$tab split")}><i>{uiIcons.add}</i></ActionIcon>
         </>}
       <MenuComponent label={renderBookmark}>
-        { renderBookmarkMenu("") }
+        { query => <>
+          <TreeMenuItems items={state.bookmarks} query={query} text={({ path }) => path} active={({ path }) => path === workspace} render={renderBookmarkItem} />
+          <MenuItemComponent leftSection={<i>{uiIcons.add}</i>} onClick={e => openBookmarkForm(e)}>Add</MenuItemComponent>
+        </> }
       </MenuComponent>
       <div className="space dragable" />
       { renderSubmenu(state.menus, []) }
-      <IconComponent color="gray-fg" font={uiIcons.stop} onClick={e => runCommand(e, "confirm quitall")} />
-    </FlexComponent>
+      <Divider orientation="vertical" mx={6} my={8} />
+      <ActionIcon color="violet" title="Agent" aria-label="Agent" onClick={() => emit.send("acp:toggle")}><i>{uiIcons.agent}</i></ActionIcon>
+      <MenuComponent label={() => <ActionIcon title="Settings" aria-label="Settings"><i>{uiIcons.settings}</i></ActionIcon>}>
+        <Menu.CheckboxItem checked={state.historyOpen} onChange={checked => emit.share("history:toggle", checked)}>Message history</Menu.CheckboxItem>
+        <Menu.Divider />
+        { ["ext_tabline", "ext_cmdline", "ext_messages", "ext_popupmenu", "ext_termcolors"].map(ext => (
+          <Menu.CheckboxItem key={ext} checked={!!options[ext]} onChange={checked => emit.send("neovim:ui:option", ext, checked)}>{ ext }</Menu.CheckboxItem>
+        )) }
+        <Menu.Divider />
+        <MenuItemComponent closeMenuOnClick={false} onClick={toggleTheme}
+          leftSection={<Box component="i" c={state.theme === "light" ? "orange" : "yellow"}>{state.theme === "light" ? "" : ""}</Box>}>
+          {state.theme === "light" ? "Light" : "Dark"}
+        </MenuItemComponent>
+        <Menu.Divider />
+        <MenuItemComponent color="red" leftSection={<i>{uiIcons.quit}</i>} onClick={e => runCommand(e, "confirm quitall")}>Quit all</MenuItemComponent>
+      </MenuComponent>
+    </div>
   );
 }

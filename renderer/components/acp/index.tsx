@@ -1,17 +1,18 @@
 import React from "react";
+import { ActionIcon, Alert, Badge, Box, Button, CloseButton, Group, Loader, Menu, Paper, Popover, Progress, Stack, Text, Textarea, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import * as AcpSDK from "@agentclientprotocol/sdk/unstable";
 
-import { IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
+import { ISetting, IAcpRegistry, IAcpRegistryAgent, IAcpStatus, IAcpSession } from "common/interface";
+import { IFormRequest, schema } from "common/schema";
 
 import { useWorkspace } from "renderer/context/workspace";
 import { useFocus, FocusProvider } from "renderer/context/focus";
 
+import { Emit } from "renderer/utils/emit";
 import { Setting } from "renderer/utils/setting";
 import { uiIcons } from "renderer/utils/icons";
 
-import { FlexComponent } from "renderer/components/flex";
-import { IconComponent } from "renderer/components/icon";
-import { MenuComponent } from "renderer/components/menu";
+import { MenuComponent, SubMenuComponent, MenuItemComponent, TreeMenuItems, trackMenu } from "renderer/components/menu";
 import { CollapseComponent } from "renderer/components/collapse";
 import { MessageComponent } from "renderer/components/acp/message";
 import { McpAppsComponent } from "renderer/components/acp/app";
@@ -25,7 +26,6 @@ interface State {
   messages: AcpSDK.SessionNotification[];
   input: string;
   promptContext?: { label: string; value: string };
-  mode: { sub: "package" | "prompt" | "mcp" | "search", mcp?: number };
   session: IAcpSession | null;
   scroll: boolean;
   files: string[];
@@ -40,17 +40,21 @@ const styles: { [k: string]: React.CSSProperties } = {
     width: 0,
     height: 0,
     padding: 0,
+    border: 0,
+    opacity: 0,
+    outline: "none",
   },
   panel: {
-    fontSize: "9px",
+    flex: "1 1 auto",
+    minWidth: 0,
+    fontSize: "var(--mantine-font-size-xs)",
   },
   invisible: {
     display: "none",
   },
-  image: {
-    width: "90%",
-  },
 };
+
+type SettingItem = ISetting["acp"]["customs" | "mcpServers"][number];
 
 export function AcpComponent() {
   const { emit } = useWorkspace();
@@ -59,9 +63,8 @@ export function AcpComponent() {
     status: { status: "disconnected" },
     sessions: [],
     messages: [],
-    input: JSON.stringify({name: "", package: { command: [] }}, null, 2),
+    input: "",
     search: { query: "", highlight: false, active: 0, ranges: [] },
-    mode: { sub: "package" },
     session: null,
     scroll: false,
     files: [],
@@ -72,9 +75,20 @@ export function AcpComponent() {
   const scroll = React.useRef<HTMLDivElement>(null);
   const command = React.useRef<HTMLInputElement>(null);
   const textarea = React.useRef<HTMLTextAreaElement>(null);
+  const searchInput = React.useRef<HTMLInputElement>(null);
   const { active } = useFocus();
-  const main = active === command.current ? "normal" : active === textarea.current ? "input" : "blur";
-  const color = main === "normal" ? "green" : { search: "orange" }[state.mode.sub] || "default";
+  const main = active === command.current ? "normal" : active === textarea.current ? "input" : active === searchInput.current ? "search" : "blur";
+  const color = { normal: "green", search: "orange" }[main as string] || "default";
+
+  const [suggestion, setSuggestion] = React.useState(0);
+  const [suggestionsDismissed, setSuggestionsDismissed] = React.useState(false);
+  const suggestionsId = React.useId();
+  const commandPrefix = state.input.match(/^\/(\S*)$/)?.[1];
+  const commandSuggestions = commandPrefix !== undefined && !state.promptContext && state.status.status !== "processing"
+    ? (state.session?.commands ?? []).filter(command => command.name.toLowerCase().startsWith(commandPrefix.toLowerCase()))
+    : [];
+  const showCommandSuggestions = main === "input" && !suggestionsDismissed && commandSuggestions.length > 0;
+  const selectedSuggestion = Math.min(suggestion, commandSuggestions.length - 1);
 
   React.useEffect(() => {
     emit.on("acp:file:add", onAcpFileAdd);
@@ -84,6 +98,7 @@ export function AcpComponent() {
     emit.on("acp:notice:changed", onAcpNoticeChanged);
     emit.on("acp:status:changed", onAcpStatusChanged);
     emit.on("acp:toggle", onAcpToggle);
+    emit.on("acp:setting:save", onAcpSettingSave);
 
     return () => {
       emit.off("acp:file:add", onAcpFileAdd);
@@ -93,29 +108,13 @@ export function AcpComponent() {
       emit.off("acp:notice:changed", onAcpNoticeChanged);
       emit.off("acp:status:changed", onAcpStatusChanged);
       emit.off("acp:toggle", onAcpToggle);
+      emit.off("acp:setting:save", onAcpSettingSave);
     };
   }, []);
 
   React.useEffect(() => {
     state.messages.length && !state.scroll && scrollTo("bottom");
   }, [state.messages]);
-
-  React.useEffect(() => {
-    setState(state => ({ ...state, mode: { ...state.mode, sub: checkAcpStatus("connected") ? "prompt" : "package" } }));
-  }, [state.status.status]);
-
-  React.useEffect(() => {
-    const input = (() => {
-      switch (state.mode.sub) {
-        case "package": return JSON.stringify({name: "", package: { command: [] }}, null, 2);
-        case "mcp": return JSON.stringify(typeof state.mode.mcp === "number" ? Setting.acp.mcpServers[state.mode.mcp].server : {}, null, 2);
-        case "prompt": return "";
-        default: return "";
-      }
-    })();
-
-    setState(state => ({ ...state, input }));
-  }, [state.mode.sub, state.mode.mcp]);
 
   React.useEffect(() => {
     state.visible && command.current?.focus();
@@ -160,15 +159,10 @@ export function AcpComponent() {
       CSS.highlights.set("search-active", new Highlight(range));
 
       const element = range.startContainer.parentElement as HTMLElement;
-      let target = element.closest<HTMLElement>("p, pre, li, td, th, h1, h2, h3, h4, h5, h6, summary") || element;
-      for (let parent: HTMLElement | null = element; parent && parent !== container; parent = parent.parentElement) {
-        if (parent.tagName !== "DETAILS" || (parent as HTMLDetailsElement).open) continue;
-        const summary = parent.querySelector<HTMLElement>(":scope > summary");
-        if (summary && !summary.contains(range.startContainer)) target = summary;
-      }
+      const target = element.closest<HTMLElement>("p, pre, li, td, th, h1, h2, h3, h4, h5, h6") || element;
 
       target.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-      target.animate([{ backgroundColor: "var(--color-orange-alpha)" }, {}], { duration: 1200, easing: "ease-out" });
+      target.animate([{ backgroundColor: "var(--mantine-color-orange-light)" }, {}], { duration: 1200, easing: "ease-out" });
     }
   }, [state.search.query, state.search.active, state.search.highlight]);
 
@@ -244,8 +238,20 @@ export function AcpComponent() {
     }
 
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
-      const toolCallId = update.toolCallId;
-      messages = messages.filter(msg => msg.sessionId !== curr.sessionId || !(msg.update.sessionUpdate === "tool_call" || msg.update.sessionUpdate === "tool_call_update") || msg.update.toolCallId !== toolCallId);
+      const index = messages.findIndex(({ sessionId, update: previous }) =>
+        sessionId === curr.sessionId && (previous.sessionUpdate === "tool_call" || previous.sessionUpdate === "tool_call_update") && previous.toolCallId === update.toolCallId
+      );
+      const previous = messages[index]?.update;
+      if (previous?.sessionUpdate === "tool_call" || previous?.sessionUpdate === "tool_call_update") {
+        const meta: Record<string, unknown> = { ...previous._meta };
+        delete meta.permissionRequest;
+        delete meta.elicitationRequest;
+
+        const notification: AcpSDK.SessionNotification = {
+          ...curr, update: { ...previous, ...update, sessionUpdate: "tool_call_update", _meta: { ...meta, ...update._meta } },
+        };
+        return messages.map((message, i) => i === index ? notification : message);
+      }
     }
     return [...messages, curr];
   }
@@ -269,18 +275,71 @@ export function AcpComponent() {
 
   function onSelectPackage(provider: string, agent: IAcpRegistryAgent) {
     if (provider === "custom") {
-      setState(state => ({ ...state, mode: { sub: "package" }, input: JSON.stringify(agent, null, 2) }));
-      textarea.current?.focus();
+      openSettingForm("customs", Setting.acp.customs.indexOf(agent));
     } else {
       onAcpAgentStart(agent);
     }
   }
 
-  function onDeleteCustomPackage(e: React.MouseEvent, agent: IAcpRegistryAgent) {
-    e.stopPropagation();
+  function openSettingForm(key: "customs" | "mcpServers", index?: number, kind: "stdio" | "http" = "stdio") {
+    const pairs = (title: string) => schema.array(title, schema.object({ name: schema.string("Name"), value: schema.string("Value") }, ["name", "value"]));
+    const server = kind === "http"
+      ? schema.object({ type: { const: "http" }, name: schema.string("Name"), url: schema.string("URL"), headers: pairs("Headers") }, ["name", "url"])
+      : schema.object({
+        name: schema.string("Name"), command: schema.string("Command"), args: schema.array("Arguments", schema.string("Argument")), env: pairs("Environment"),
+      }, ["name", "command"]);
+    const [title, form, name] = key === "customs"
+      ? [`${uiIcons.agent} Custom agent`, schema.object({
+        name: schema.string("Name"),
+        package: schema.object({
+          command: schema.array("Command", schema.string("Argument"), { description: "Executable followed by its arguments", default: [""] }),
+          env: schema.record("Environment", schema.string("Value")),
+        }),
+      }, ["name"]), "Save & Start"]
+      : [`${uiIcons.mcp} MCP server (${kind})`, schema.object({ enabled: schema.boolean("Enabled", true), server }), "Save"];
 
-    Setting.acp = { ...Setting.acp, customs: (Setting.acp.customs || []).filter(custom => custom.name !== agent.name) };
+    emit.share("form:open", {
+      title, schema: form, values: index === undefined ? undefined : Setting.acp[key][index],
+      actions: [
+        { action: "save", name, color: "green", font: uiIcons.save, submit: true },
+        ...(index === undefined ? [] : [{ action: "delete", name: "Delete", color: "red", font: uiIcons.close }]),
+      ],
+      reply: { event: "acp:setting:save", via: "share", args: [key, index] },
+    } satisfies IFormRequest);
+  }
+
+  function onAcpSettingSave(key: "customs" | "mcpServers", index: number | undefined, action?: string, item?: SettingItem) {
+    const items: SettingItem[] = Setting.acp[key];
+
+    if (!action) return;
+
+    saveSettingItem(key, items.toSpliced(index ?? items.length, index === undefined ? 0 : 1, ...(action === "save" && item ? [item] : [])));
+    action === "save" && key === "customs" && onAcpAgentStart(item as IAcpRegistryAgent);
+  }
+
+  function saveSettingItem(key: "customs" | "mcpServers", items: unknown[]) {
+    Setting.acp = { ...Setting.acp, [key]: items };
+    Emit.send("app:setting", Setting.get());
     setState(state => ({ ...state }));
+  }
+
+  function onAcpAuthenticate(method: AcpSDK.AuthMethod) {
+    const { type, vars = [], link } = method as { type?: string; link?: string; vars?: { name: string; label?: string; secret?: boolean; optional?: boolean }[] };
+
+    if (type !== "env_var") {
+      emit.send("acp:auth:authenticate", method.id);
+      return;
+    }
+
+    emit.share("form:open", {
+      title: `󰌆 ${method.name}`, message: [method.description, link].filter(Boolean).join("\n"),
+      schema: schema.object(
+        Object.fromEntries(vars.map(({ name, label, secret }) => [name, schema.string(label || name, secret === false ? undefined : { format: "password" })])),
+        vars.filter(({ optional }) => !optional).map(({ name }) => name),
+      ),
+      actions: [{ action: "authenticate", name: "Authenticate", color: "cyan", font: "󰌆", submit: true }],
+      reply: { event: "acp:auth:authenticate", via: "send", args: [method.id] },
+    } satisfies IFormRequest);
   }
 
   function onAcpAgentStart(agent: IAcpRegistryAgent) {
@@ -336,7 +395,7 @@ export function AcpComponent() {
       .filter(item => item.kind === "file" && item.type.startsWith("image/"))
       .flatMap(item => item.getAsFile() || []);
 
-    if (state.mode.sub !== "prompt" || !files.length) return;
+    if (!files.length) return;
 
     e.preventDefault();
 
@@ -351,88 +410,13 @@ export function AcpComponent() {
     }))).then(images => images.length && setState(state => ({ ...state, images: [...state.images, ...images] })));
   }
 
-  function onEditMcp(e: React.MouseEvent | React.ChangeEvent, action: "toggle" | "delete", index: number) {
-    e.stopPropagation();
-
-    switch (action) {
-      case "toggle":
-        Setting.acp.mcpServers[index].enabled = !Setting.acp.mcpServers[index].enabled;
-        break;
-      case "delete":
-        Setting.acp.mcpServers.splice(index, 1);
-        break;
-    }
-
-    switchMode(checkAcpStatus("connected") ? "prompt" : "package");
-  }
-
-  function getPlaceholder() {
-    switch (state.mode.sub) {
-      case "package": return "Select or Type an ACP package";
-      case "mcp": return "Enter mcp server settings as JSON";
-      case "prompt": return "Type your message";
-      case "search": return "Search messages...";
-      default: return "";
-    }
-  }
-
   function onConfirmInput() {
-    const { input, search } = state;
+    if (checkAcpStatus("processing")) return;
 
-    switch (state.mode.sub) {
-      case "package":
-        try {
-          const agent = JSON.parse(input);
+    const prompt = [state.promptContext?.value, state.input.trim()].filter(Boolean).join(" ");
 
-          if (!agent) return;
-
-          Setting.acp = { ...Setting.acp, customs: [...(Setting.acp.customs || []).filter(custom => custom.name !== agent?.name), agent] };
-          onAcpAgentStart(agent);
-        } finally {
-          return;
-        }
-      case "mcp":
-        try {
-          const server = JSON.parse(input);
-
-          if (!server.name || !["http", "stdio", "acp"].includes(server.type)) {
-            return;
-          }
-
-          if (typeof state.mode.mcp === "number" && Setting.acp.mcpServers[state.mode.mcp]) {
-            Setting.acp.mcpServers[state.mode.mcp].server = server;
-          } else {
-            Setting.acp.mcpServers.push({ enabled: true, server });
-          }
-        } catch {
-          return;
-        }
-
-        break;
-      case "prompt": {
-        if (checkAcpStatus("processing")) {
-          return;
-        }
-
-        const prompt = [state.promptContext?.value, input.trim()].filter(Boolean).join(" ");
-        emit.send("acp:prompt:send", state.status.sessionId, prompt, state.files, state.images);
-
-        break;
-      }
-      case "search":
-        search.query = input;
-        search.highlight = true;
-        search.active = 0;
-
-        break;
-    }
-
-    setState(state => ({
-      ...state, search, input: "", files: [], images: [],
-      promptContext: state.mode.sub === "prompt" ? undefined : state.promptContext,
-      mode: { sub: checkAcpStatus("connected") ? "prompt" : "package" },
-    }));
-    command.current?.focus();
+    emit.send("acp:prompt:send", state.status.sessionId, prompt, state.files, state.images);
+    setState(state => ({ ...state, input: "", files: [], images: [], promptContext: undefined }));
   }
 
   function onAcpPromptCancel() {
@@ -448,7 +432,7 @@ export function AcpComponent() {
     e.preventDefault();
 
     switch (e.key) {
-      case "i": return switchMode(state.mode.sub === "search" ? "prompt" : state.mode.sub);
+      case "i": return textarea.current?.focus();
       case "g": return scrollTo("top");
       case "G": return scrollTo("bottom");
       case "k": return scrollTo("up");
@@ -464,27 +448,47 @@ export function AcpComponent() {
     }
   }
 
+  function selectCommandSuggestion(name: string) {
+    setState(state => ({ ...state, input: "", promptContext: { label: `/${name}`, value: `/${name}` } }));
+    setSuggestion(0);
+  }
+
   function onInputKeyDown(e: React.KeyboardEvent) {
+    if (e.nativeEvent.isComposing) return;
+
+    if (showCommandSuggestions && ["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setSuggestionsDismissed(true);
+      } else if (e.key === "Enter") {
+        selectCommandSuggestion(commandSuggestions[selectedSuggestion].name);
+      } else {
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        const next = (selectedSuggestion + step + commandSuggestions.length) % commandSuggestions.length;
+        setSuggestion(next);
+        document.getElementById(`${suggestionsId}-${next}`)?.scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+
     if (e.key === "Escape") {
       e.preventDefault();
-      setState(state => ({ ...state, input: state.mode.sub === "search" ? "" : state.input }));
       command.current?.focus();
-    }
-    if (e.key === "Enter" && state.mode.sub === "search") {
-      onNormalKeyDown(e);
     }
   }
 
   function onSearchInput() {
-    if (!state.session) return;
-
-    setState(state => ({ ...state, input: "", mode: { sub: "search" }, search: { query: "", active: 0, highlight: false, ranges: [] } }));
-    textarea.current?.focus();
+    searchInput.current?.focus();
   }
 
-  function switchMode(sub: State["mode"]["sub"], mcp?: number) {
-    setState(state => ({ ...state, mode: { sub, mcp } }));
-    (typeof mcp === "number" ? command : textarea).current?.focus();
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.nativeEvent.isComposing || !["Enter", "Escape"].includes(e.key)) return;
+
+    e.preventDefault();
+    e.key === "Enter" && setState(state => ({ ...state, search: { ...state.search, highlight: true, active: 0 } }));
+    command.current?.focus();
   }
 
   function onSearch(active: number) {
@@ -497,10 +501,10 @@ export function AcpComponent() {
 
   function getStatusIcon(status?: string | null) {
     switch (status) {
-      case "pending": return <IconComponent color="gray-fg" font={uiIcons.pending} />;
-      case "in_progress": return <div className="animate loading inline" style={{margin: "0 4px"}} />;
-      case "completed": return <IconComponent color="green-fg" font={uiIcons.success} />;
-      case "failed": return <IconComponent font={uiIcons.error} color="red-fg" />;
+      case "pending": return <Box component="i" c="dimmed">{uiIcons.pending}</Box>;
+      case "in_progress": return <Loader size="1em" mx={4} />;
+      case "completed": return <Box component="i" c="green">{uiIcons.success}</Box>;
+      case "failed": return <Box component="i" c="red">{uiIcons.error}</Box>;
       default: return null;
     }
   }
@@ -522,23 +526,13 @@ export function AcpComponent() {
     return status.includes(state.status.status);
   }
 
-  function getDisabledStyle(disabled: boolean) {
-    return {
-      opacity: disabled ? 0.5 : 1,
-      cursor: disabled ? "not-allowed" : "pointer"
-    };
-  }
-
-  function renderRegistryProvider([kind, registry]: [string, IAcpRegistry[keyof IAcpRegistry]]) {
-    return registry.length === 0 ? null : (
-      <MenuComponent key={kind} side label={kind}>
-        {registry.map((agent, i) => (
-          <FlexComponent key={i} animate="hover" title={agent.description} onClick={() => onSelectPackage(kind, agent)} spacing>
-            {<IconComponent font={agent.icon || ""} mark={!!agent.icon} text={agent.name} /> }
-            {kind === "custom" && <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => onDeleteCustomPackage(e, agent)} hover />}
-          </FlexComponent>
-        ))}
-      </MenuComponent>
+  function renderRegistryAgent({ kind, agent }: { kind: string; agent: IAcpRegistryAgent }, label: string) {
+    return (
+      <MenuItemComponent key={`${kind}/${agent.name}`} title={agent.description || undefined} onClick={() => onSelectPackage(kind, agent)}
+        leftSection={<AgentIcon icon={agent.icon} />}
+      >
+        {label}
+      </MenuItemComponent>
     );
   }
 
@@ -546,21 +540,22 @@ export function AcpComponent() {
     switch (config.type) {
       case "boolean":
         return (
-          <FlexComponent key={config.id} animate="hover" onClick={() => onAcpSessionConfig(config.id, !config.currentValue)} spacing>
-            <input type="checkbox" checked={config.currentValue} readOnly />
+          <Button key={config.id} {...chipProps(config.currentValue)} title={config.name} leftSection={config.currentValue ? <i>{uiIcons.accept}</i> : undefined}
+            onClick={() => onAcpSessionConfig(config.id, !config.currentValue)}
+          >
             {config.name}
-          </FlexComponent>
+          </Button>
         );
       case "select":
         const renderConfigSelectOption = (option: AcpSDK.SessionConfigSelectOption) => (
-          <FlexComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => onAcpSessionConfig(config.id, option.value)} spacing>
+          <MenuItemComponent key={option.value} active={config.currentValue === option.value} title={option.description || ""} onClick={() => onAcpSessionConfig(config.id, option.value)}>
             {option.name}
-          </FlexComponent>
+          </MenuItemComponent>
         );
         return (
-          <MenuComponent key={config.id} label={config.name}>
+          <MenuComponent key={config.id} label={() => <Button {...chipProps(false)} title={config.name} rightSection={<span style={{ opacity: .6 }}>▾</span>}>{getConfigValueName(config) || config.name}</Button>}>
             {config.options.map(option => "group" in option
-              ? <MenuComponent key={option.group} label={option.name}>{option.options.map(renderConfigSelectOption)}</MenuComponent>
+              ? <SubMenuComponent key={option.group} label={option.name}>{option.options.map(renderConfigSelectOption)}</SubMenuComponent>
               : renderConfigSelectOption(option))
             }
           </MenuComponent>
@@ -570,166 +565,275 @@ export function AcpComponent() {
     }
   }
 
+  function chipProps(active: boolean) {
+    return {
+      variant: active ? "light" : "default",
+      size: "compact-xs",
+      fw: 400,
+      style: { fontSize: "inherit", height: "var(--envim-control-size)", flexShrink: 0 },
+    } as const;
+  }
+
+  function getConfigValueName(config: AcpSDK.SessionConfigOption) {
+    if (config.type !== "select") return "";
+
+    const options = config.options.flatMap(option => "group" in option ? option.options : [option]);
+
+    return options.find(option => option.value === config.currentValue)?.name || "";
+  }
+
+  const connected = checkAcpStatus("connected");
+
   return (
-    <FocusProvider targets={[command, textarea]}>
-      <FlexComponent color="default" animate="fade-in" direction="column" grow={1} shrink={1} padding={[8]} style={state.visible ? styles.panel : styles.invisible}>
+    <FocusProvider targets={[command, textarea, searchInput]}>
+      <Stack className="acp-panel" gap={8} p={8} bg="var(--mantine-color-body)" style={state.visible ? styles.panel : styles.invisible}>
         <input style={styles.command} type="text" ref={command} onKeyDown={onNormalKeyDown} tabIndex={-1} />
-        <FlexComponent color={color} grow={1} shrink={1} direction="column" border={[1]} rounded={[2]} shadow>
-          {state.status.status === "authenticating" ? (
-            <FlexComponent color="default" direction="column" grow={1} vertical="center" horizontal="center" padding={[16]}>
-              <span style={{ marginBottom: 8 }}>Authentication in progress</span>
-              {!state.status.agent?.auth && state.status.initialize?.authMethods?.map(method => (
-                <FlexComponent key={method.id} color="lightblue" padding={[8]} margin={[4]} rounded={[4]} shadow animate="hover"
-                  onClick={() => emit.send("acp:auth:authenticate", method.id)}
+
+        <Group gap={4} wrap="nowrap">
+          {connected && state.status.agent
+            ? <Group gap={4} wrap="nowrap" px={4} miw={0}><AgentIcon icon={state.status.agent.icon} /><Text component="span" inherit truncate>{state.status.agent.name}</Text></Group>
+            : connected || checkAcpStatus("processing")
+              ? <Text size="xs" c="dimmed" px={4}>No agent</Text>
+              : (
+                <MenuComponent label={() => <Button variant="subtle" color="gray" size="compact-xs" fw={500} title="Start agent" rightSection={<span aria-hidden="true">▾</span>}>No agent</Button>}>
+                  {query => <>
+                    <TreeMenuItems query={query} text={({ agent }) => agent.description || ""} render={renderRegistryAgent}
+                      items={Object.entries({ ...state.registry, custom: Setting.acp.customs }).flatMap(([kind, agents]) => agents.map(agent => ({ name: `${kind}/${agent.name}`, kind, agent })))} />
+                    <MenuItemComponent leftSection={<i>{uiIcons.add}</i>} onClick={() => openSettingForm("customs")}>Add</MenuItemComponent>
+                  </>}
+                </MenuComponent>
+              )}
+          {connected ? (
+            <Menu trigger="click-hover" openDelay={150} closeDelay={250} position="bottom-start" shadow="md" trapFocus={false}>
+              <Menu.Target>
+                <Button variant="subtle" color="gray" size="compact-xs" fw={500} title={state.session?.name || "Select session"}
+                  rightSection={<span aria-hidden="true">▾</span>} style={{ flex: "1 1 0", minWidth: 0 }}
+                  styles={{ inner: { minWidth: 0 }, label: { minWidth: 0 } }}
                 >
-                  <IconComponent font="󰌆" text={method.name} />
-                </FlexComponent>
-              ))}
-            </FlexComponent>
-          ) : state.status.sessionId ? (
-            <FlexComponent color="default" direction="column" grow={1} shrink={1} overflow="auto" padding={[4]} onScroll={onScrollContainer}>
-              <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
-
-              <div ref={scroll} />
-            </FlexComponent>
-          ) : (
-            <FlexComponent color="default" horizontal="center" vertical="center" grow={1}>
-              <span style={{ opacity: 0.5 }}>No active session</span>
-            </FlexComponent>
-          )}
-        </FlexComponent>
-
-        <FlexComponent direction="column" padding={[4]}>
-          {state.notice && (
-            <FlexComponent color={({ error: "red", warning: "yellow" } as Record<string, string>)[state.notice.severity] ?? "blue"} padding={[4]} rounded={[4]} whiteSpace="pre-wrap" selectable>
-              <IconComponent font={({ error: uiIcons.error, warning: uiIcons.warning } as Record<string, string>)[state.notice.severity] ?? uiIcons.info} />
-              <div role={state.notice.severity === "error" ? "alert" : "status"}>
-                <strong>{state.notice.title}</strong>
-                {state.notice.description && <div>{state.notice.description}</div>}
-              </div>
-            </FlexComponent>
-          )}
-          {state.notice && <div className="divider color-gray" /> }
-          {state.status.elicitation && (
-            <CollapseComponent label="󰋗 Elicitation" style={{marginBottom: 4}} open>
-              <ElicitationComponent request={state.status.elicitation} />
-            </CollapseComponent>
-          )}
-          {state.session?.usage &&
-            <FlexComponent color="orange" padding={[4]} rounded={[4]}>
-              <span>{state.session.usage.used.toLocaleString()} ({((state.session.usage.used / state.session.usage.size) * 100).toFixed(2)}%)</span>
-              <div className="space" />
-              {state.session.usage.cost && <span>{state.session.usage.cost.amount.toLocaleString()} {state.session.usage.cost.currency}</span>}
-            </FlexComponent>
-          }
-          {state.session?.usage && <div className="divider color-gray" /> }
-          {state.session?.plan && state.session.plan.length > 0 && (
-            <CollapseComponent
-              label=" Plans"
-              badge={`${state.session.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.session.plan.length}`}
-              style={{marginBottom: 4}}
-              open
-            >
-                {state.session.plan.map((entry, index) => (
-                  <FlexComponent key={index} vertical="center" color={getPriorityColor(entry.priority)} margin={[1]} padding={[2]} rounded={[2]}>
-                    {getStatusIcon(entry.status)}
-                    <FlexComponent grow={1} shrink={1} whiteSpace="pre-wrap" spacing>{entry.content}</FlexComponent>
-                  </FlexComponent>
-                ))}
-            </CollapseComponent>
-          )}
-          {state.files.length > 0 && (
-            <CollapseComponent label=" Files" badge={`${state.files.length}`} style={{marginBottom: 4}} open>
-                {state.files.map(file => (
-                  <FlexComponent key={file}>
-                    <a href={`file://${file}`}>{file}</a>
-                    <div className="space" />
-                    <IconComponent font={uiIcons.close} color="gray-fg" float="right" onClick={() => onRemoveFile(file)} />
-                  </FlexComponent>
-                ))}
-            </CollapseComponent>
-          )}
-          {state.status.sessionId && <McpAppsComponent sessionId={state.status.sessionId} />}
-          {state.images.length > 0 && ( <CollapseComponent label=" Images" badge={`${state.images.length}`} style={{marginBottom: 4}} open>
-              {state.images.map((image, index) => (
-                <FlexComponent key={index} vertical="center" padding={[2]}>
-                  <img src={`data:${image.mimeType};base64,${image.data}`} style={styles.image} />
-                  <div className="space" />
-                  <IconComponent font={uiIcons.close} color="gray-fg" onClick={() => onRemoveImage(index)} />
-                </FlexComponent>
-              ))}
-            </CollapseComponent>
-          )}
-          <FlexComponent>
-            {checkAcpStatus("connected") && state.status.agent && <IconComponent font={state.status.agent.icon || ""} mark={!!state.status.agent.icon} text={state.status.agent.name} /> }
-            {checkAcpStatus("connected") && <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpAgentStop} />}
-            {checkAcpStatus("connected") && state.status.initialize?.agentCapabilities?.auth?.logout && <IconComponent font="󰍃" color="orange-fg" onClick={onAcpAuthLogout} />}
-            {checkAcpStatus("connected") && <IconComponent font="󰍩" color="lightblue-fg" onClick={() => switchMode("prompt")} />}
-            {!checkAcpStatus("connected") && !checkAcpStatus("processing") && (
-              <MenuComponent label={() => <IconComponent font="" color="green-fg" onClick={() => switchMode("package")} />}>
-                {Object.entries({ ...state.registry, custom: Setting.acp.customs }).map(renderRegistryProvider)}
-              </MenuComponent>
-            )}
-            <MenuComponent label={() => <IconComponent font="" color="purple-fg" onClick={() => switchMode("mcp")} />}>
-              {Setting.acp.mcpServers.map((mcp, i) => (
-                <FlexComponent key={i} animate="hover" onClick={() => switchMode("mcp", i)} spacing>
-                  <input type="checkbox" checked={mcp.enabled} onChange={e => onEditMcp(e, "toggle", i)} />
-                  {mcp.server.name}
-                  <IconComponent color="gray" font={uiIcons.close} float="right" onClick={e => onEditMcp(e, "delete", i)} hover />
-                </FlexComponent>
-              ))}
-            </MenuComponent>
-            <div className="space" />
-            {checkAcpStatus("connected") && <IconComponent font={state.status.follow !== undefined ? "󰈈" : "󰈉"} color={state.status.follow !== undefined ? "yellow-fg" : "gray-fg"} onClick={onAcpFollowToggle} />}
-            {state.session && <IconComponent font={uiIcons.search} color="orange-fg" text={state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : ""} onClick={onSearchInput} />}
-            {(checkAcpStatus("connected")) && (
-              <MenuComponent label={() => <IconComponent color="lightblue-fg" font="" onClick={onAcpSessionCreate} />}>
+                  <Text component="span" inherit truncate>{state.session?.name || "No active session"}</Text>
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown ref={trackMenu} style={{ maxHeight: "50vh", maxWidth: "50vw", overflowY: "auto" }}>
                 {state.sessions.map(session => (
-                  <FlexComponent key={session.id} active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)} spacing>
-                    {session.name}
-                    <div className="space" />
-                    {state.status.initialize?.agentCapabilities?.sessionCapabilities?.fork && <IconComponent color="pink-fg" font="󰘬" onClick={e => onAcpSessionFork(e, session.id)} />}
-                    {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <IconComponent color="gray-fg" font={uiIcons.close} onClick={e => onAcpSessionDelete(e, session.id)} />}
-                  </FlexComponent>
+                  <MenuItemComponent key={session.id} active={state.status.sessionId === session.id} onClick={() => onAcpSessionSwitch(session.id)}
+                    rightSection={<>
+                      {state.status.initialize?.agentCapabilities?.sessionCapabilities?.fork && <ActionIcon color="pink" onClick={e => onAcpSessionFork(e, session.id)}><i>󰘬</i></ActionIcon>}
+                      {state.status.initialize?.agentCapabilities?.sessionCapabilities?.delete && <CloseButton onClick={e => onAcpSessionDelete(e, session.id)} />}
+                    </>}
+                  >
+                    <Text component="span" inherit truncate title={session.name}>{session.name}</Text>
+                  </MenuItemComponent>
                 ))}
-              </MenuComponent>
-            )}
-          </FlexComponent>
-          {state.promptContext && (
-            <FlexComponent>
-              <span>{state.promptContext.label}</span>
-              <div className="space" />
-              <IconComponent font={uiIcons.close} color="gray-fg" onClick={() => onSetPromptContext()} />
-            </FlexComponent>
+                <MenuItemComponent leftSection={<i>{uiIcons.add}</i>} title="New session" onClick={onAcpSessionCreate}>Add</MenuItemComponent>
+              </Menu.Dropdown>
+            </Menu>
+          ) : <div className="space" />}
+          {connected && <ActionIcon color={state.status.follow !== undefined ? "yellow" : "gray"} title="Follow" onClick={onAcpFollowToggle}><i>{state.status.follow !== undefined ? "󰈈" : "󰈉"}</i></ActionIcon>}
+          <MenuComponent label={() => <ActionIcon title="Settings" aria-label="Settings"><i>{uiIcons.settings}</i></ActionIcon>}>
+            {state.session && <>
+              <MenuItemComponent leftSection={<i>{uiIcons.search}</i>} rightSection={<Text size="xs" c="dimmed">/</Text>} onClick={onSearchInput}>Search messages</MenuItemComponent>
+              <Menu.Divider />
+            </>}
+            <SubMenuComponent label="MCP servers" leftSection={<i>{uiIcons.mcp}</i>}>
+              {Setting.acp.mcpServers.map((mcp, i) => (
+                <MenuItemComponent key={i} onClick={() => openSettingForm("mcpServers", i, "url" in mcp.server ? "http" : "stdio")}
+                  style={mcp.enabled ? undefined : { opacity: .5 }}
+                >
+                  {mcp.server.name}
+                </MenuItemComponent>
+              ))}
+              <SubMenuComponent label="Add" leftSection={<i>{uiIcons.add}</i>}>
+                <MenuItemComponent onClick={() => openSettingForm("mcpServers", undefined, "stdio")}>stdio</MenuItemComponent>
+                <MenuItemComponent onClick={() => openSettingForm("mcpServers", undefined, "http")}>HTTP</MenuItemComponent>
+              </SubMenuComponent>
+            </SubMenuComponent>
+            {connected && state.status.initialize?.agentCapabilities?.auth?.logout && <MenuItemComponent leftSection={<i>󰍃</i>} onClick={onAcpAuthLogout}>Logout</MenuItemComponent>}
+            {connected && <>
+              <Menu.Divider />
+              <MenuItemComponent color="red" leftSection={<i>{uiIcons.quit}</i>} onClick={onAcpAgentStop}>Stop agent</MenuItemComponent>
+            </>}
+          </MenuComponent>
+        </Group>
+
+        <Paper withBorder radius="md" className="acp-messages" data-mode={color} style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+          {state.status.status === "authenticating" ? (
+            <Stack align="center" justify="center" gap={4} p="md" style={{ flex: 1 }}>
+              <Text size="xs">Authentication in progress</Text>
+              {!state.status.agent?.auth && state.status.initialize?.authMethods?.map(method => (
+                <Button key={method.id} variant="light" color="cyan" size="xs" leftSection={<i>󰌆</i>}
+                  onClick={() => onAcpAuthenticate(method)}
+                >
+                  {method.name}
+                </Button>
+              ))}
+            </Stack>
+          ) : state.status.sessionId ? (
+            <>
+              <Stack gap={0} p={6} style={{ flex: "1 1 auto", overflow: "auto" }} onScroll={onScrollContainer}>
+                <MessageComponent messages={state.messages} sessionId={state.status.sessionId} />
+
+                <div ref={scroll} />
+              </Stack>
+              <Group className="acp-search" data-visible={state.search.highlight || undefined} gap={4} wrap="nowrap">
+                <TextInput ref={searchInput} size="xs" placeholder="Search messages..." leftSection={<i>{uiIcons.search}</i>} value={state.search.query}
+                  onFocus={e => e.currentTarget.select()} onKeyDown={onSearchKeyDown}
+                  onChange={e => { const query = e.currentTarget.value; setState(state => ({ ...state, search: { ...state.search, query, highlight: false } })); }} />
+                {state.search.highlight && <Text size="xs" c="orange">{state.search.ranges.length ? `${state.search.active + 1}/${state.search.ranges.length}` : "0"}</Text>}
+              </Group>
+            </>
+          ) : (
+            <Text size="xs" c="dimmed" m="auto">No active session</Text>
           )}
-          <textarea
-            ref={textarea}
-            placeholder={getPlaceholder()}
-            value={state.input}
-            onChange={e => setState(state => ({ ...state, input: e.target.value }))}
-            onKeyDown={onInputKeyDown}
-            onPaste={onPaste}
-            rows={8}
-          />
-          <FlexComponent vertical="center" padding={[4, 0, 0]}>
-            {state.session && state.session.commands.length > 0 && (
-              <MenuComponent label="" color="green-fg">
-                {state.session.commands.map((command) => (
-                  <FlexComponent key={command.name} title={command.description} spacing
-                    onClick={() => onSetPromptContext({ label: `/${command.name}`, value: `/${command.name}` })}>
-                    /{command.name}
-                  </FlexComponent>
+        </Paper>
+
+        {state.notice && (
+          <Alert variant="light" color={({ error: "red", warning: "yellow" } as Record<string, string>)[state.notice.severity] ?? "blue"} p="xs" className="selectable"
+            icon={<i>{({ error: uiIcons.error, warning: uiIcons.warning } as Record<string, string>)[state.notice.severity] ?? uiIcons.info}</i>}
+            title={state.notice.title} role={state.notice.severity === "error" ? "alert" : "status"}
+          >
+            {state.notice.description}
+          </Alert>
+        )}
+        {state.status.elicitation && (
+          <ElicitationComponent key={state.status.elicitation.requestId} request={state.status.elicitation} />
+        )}
+        {state.session?.plan && state.session.plan.length > 0 && (
+          <CollapseComponent
+            label=" Plans"
+            badge={`${state.session.plan.filter(({ status }) => ["completed", "failed"].includes(status)).length} / ${state.session.plan.length}`}
+            open
+          >
+            {state.session.plan.map((entry, index) => (
+              <Group key={index} gap={6} wrap="nowrap" py={2}>
+                {getStatusIcon(entry.status)}
+                <Text size="xs" style={{ flex: 1, whiteSpace: "pre-wrap" }} td={entry.status === "completed" ? "line-through" : undefined} c={entry.status === "completed" ? "dimmed" : undefined}>{entry.content}</Text>
+                <Badge size="xs" variant="dot" color={getPriorityColor(entry.priority)}>{entry.priority}</Badge>
+              </Group>
+            ))}
+          </CollapseComponent>
+        )}
+        {state.status.sessionId && <McpAppsComponent sessionId={state.status.sessionId} />}
+
+        {checkAcpStatus("connected") && (
+          <Paper withBorder radius="md" p={6} className="acp-composer">
+            {(state.promptContext || state.files.length > 0 || state.images.length > 0) && (
+              <Group gap={4} mb={4}>
+                {state.promptContext && (
+                  <Badge variant="light" color="violet" tt="none" rightSection={<CloseButton onClick={() => onSetPromptContext()} />}>{state.promptContext.label}</Badge>
+                )}
+                {state.files.map(file => (
+                  <Badge key={file} variant="light" color="gray" tt="none" title={file} leftSection={<i></i>}
+                    rightSection={<CloseButton onClick={() => onRemoveFile(file)} />}
+                  >{file.replace(/.*\//, "")}</Badge>
                 ))}
-              </MenuComponent>
+                {state.images.map((image, index) => (
+                  <Badge key={index} variant="light" color="gray" tt="none" h="auto" p={2}
+                    rightSection={<CloseButton onClick={() => onRemoveImage(index)} />}
+                  ><img src={`data:${image.mimeType};base64,${image.data}`} style={{ height: 32, display: "block" }} /></Badge>
+                ))}
+              </Group>
             )}
-            {state.session?.configOptions?.map(renderConfigOption)}
-            <div className="space" />
-            {checkAcpStatus("processing") && <div className="animate loading inline" />}
-            <IconComponent font={uiIcons.stop} color="red-fg" onClick={onAcpPromptCancel} style={getDisabledStyle(state.mode.sub !== "prompt" || !checkAcpStatus("processing"))} />
-            <IconComponent font="󰒊" color="blue-fg" onClick={onConfirmInput} style={getDisabledStyle(state.mode.sub === "prompt" && (!state.status.sessionId || checkAcpStatus("processing")))} />
-          </FlexComponent>
-        </FlexComponent>
-      </FlexComponent>
+            <Popover opened={showCommandSuggestions} position="top-start" width="target" closeOnClickOutside={false} closeOnEscape={false}>
+              <Popover.Target>
+                <Box>
+                  <Textarea
+                    ref={textarea}
+                    variant="unstyled"
+                    size="xs"
+                    styles={{ input: { fontSize: "inherit" } }}
+                    placeholder="Type your message"
+                    value={state.input}
+                    onChange={e => {
+                      const input = e.currentTarget.value;
+                      setState(state => ({ ...state, input }));
+                      setSuggestion(0);
+                      setSuggestionsDismissed(false);
+                    }}
+                    onFocus={() => setSuggestionsDismissed(false)}
+                    aria-autocomplete="list"
+                    aria-controls={showCommandSuggestions ? suggestionsId : undefined}
+                    aria-activedescendant={showCommandSuggestions ? `${suggestionsId}-${selectedSuggestion}` : undefined}
+                    onKeyDown={onInputKeyDown}
+                    onPaste={onPaste}
+                    autosize
+                    minRows={3}
+                    maxRows={12}
+                  />
+                </Box>
+              </Popover.Target>
+              <Popover.Dropdown p={4}>
+                <Stack id={suggestionsId} role="listbox" aria-label="Slash commands" gap={2} mah={200} style={{ overflowY: "auto" }}>
+                  {commandSuggestions.map((command, index) => (
+                    <UnstyledButton key={command.name} id={`${suggestionsId}-${index}`} role="option" aria-selected={index === selectedSuggestion}
+                      tabIndex={-1} px={8} py={4}
+                      style={{
+                        flexShrink: 0, borderRadius: "var(--mantine-radius-sm)", overflowWrap: "anywhere",
+                        background: index === selectedSuggestion ? "var(--mantine-primary-color-light)" : undefined,
+                      }}
+                      onMouseDown={event => event.preventDefault()} onClick={() => selectCommandSuggestion(command.name)}
+                    >
+                      <Text size="xs" fw={500}>/{command.name}</Text>
+                      {command.description && <Text size="xs" c="dimmed">{command.description}</Text>}
+                    </UnstyledButton>
+                  ))}
+                </Stack>
+              </Popover.Dropdown>
+            </Popover>
+            <Group gap={4} wrap="nowrap" align="flex-end">
+              <Group gap={4} style={{ flex: 1, minWidth: 0 }}>
+              {state.session && state.session.commands.length > 0 && (
+                <MenuComponent label={() => <Button {...chipProps(false)} c="green">/</Button>}>
+                  {state.session.commands.map((command) => (
+                    <MenuItemComponent key={command.name} title={command.description}
+                      onClick={() => onSetPromptContext({ label: `/${command.name}`, value: `/${command.name}` })}>
+                      /{command.name}
+                    </MenuItemComponent>
+                  ))}
+                </MenuComponent>
+              )}
+                {state.session?.configOptions?.map(renderConfigOption)}
+              </Group>
+              <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+                {checkAcpStatus("processing") && <Loader size="1em" />}
+                {checkAcpStatus("processing") ? (
+                  <ActionIcon variant="light" color="red" title="Cancel" onClick={onAcpPromptCancel}>
+                    <i>{uiIcons.stop}</i>
+                  </ActionIcon>
+                ) : (
+                  <ActionIcon variant="filled" title="Send" onClick={onConfirmInput}><i>󰒊</i></ActionIcon>
+                )}
+              </Group>
+            </Group>
+          </Paper>
+        )}
+
+        {state.session?.usage && (
+          <Group gap={6} px={4} c="dimmed" fz={10} wrap="nowrap">
+            <UsageComponent {...state.session.usage} />
+            {state.session.usage.cost && <span>{state.session.usage.cost.amount.toLocaleString()} {state.session.usage.cost.currency}</span>}
+          </Group>
+        )}
+      </Stack>
     </FocusProvider>
   );
+}
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+function UsageComponent({ used, size }: { used: number; size: number }) {
+  const ratio = size > 0 ? used / size : 0;
+  const color = ratio < 0.6 ? "green" : ratio < 0.85 ? "yellow" : "red";
+
+  return (
+    <Tooltip label={`${used.toLocaleString()} / ${size.toLocaleString()} tokens (${(ratio * 100).toFixed(1)}%)`} fz="xs" withArrow>
+      <Group gap={6} wrap="nowrap" flex={1} miw={0}>
+        <Progress value={ratio * 100} color={color} size={4} radius="xl" flex={1} />
+        <span style={{ whiteSpace: "nowrap" }}>{compact.format(used)} / {compact.format(size)}</span>
+      </Group>
+    </Tooltip>
+  );
+}
+
+function AgentIcon({ icon }: { icon?: string | null }) {
+  return icon ? <i className="agent-icon" style={{ maskImage: `url(${icon})` }} /> : <i>{"\uEC1E"}</i>;
 }

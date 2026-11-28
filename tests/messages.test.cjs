@@ -19,6 +19,7 @@ function load(file, imports = {}) {
   }).outputText, filename);
   return module.exports;
 }
+const schemaModule = load('common/schema.ts');
 const { Messages } = load('main/envim/message.ts');
 const { App } = load('main/envim/app.ts', { 'main/emit': {} });
 const text = items => items.map(m => m.contents.map(c => c.content).join(''));
@@ -27,21 +28,26 @@ function setup() {
   let state;
   const emit = {
     on: (event, fn) => { handlers[event] = fn; },
+    share() {},
+    update: (event, _replace, ...args) => emit.send(event, ...args),
     send: (...args) => { sent.push(structuredClone(args)); handlers[args[0]]?.(...args.slice(1)); }
   };
   const react = {
     createElement() {}, useRef: () => ({ current: null }), useEffect: fn => fn(),
-    useState: initial => { state = initial; return [initial, fn => { state = fn(state); }]; }
+    useState: initial => {
+      state = initial;
+      return [initial, fn => { state = fn(state); }];
+    }
   };
-  const { HistoryComponent } = load('renderer/components/envim/history.tsx', {
+  const { MessagesComponent } = load('renderer/components/envim/messages.tsx', {
     react: { __esModule: true, default: react },
     'renderer/context/editor': { useEditor: () => ({ options: {} }) },
-    'renderer/context/workspace': { useWorkspace: () => ({ emit }) },
-    'renderer/utils/emit': { Emit: {} }, 'renderer/utils/icons': { uiIcons: {} },
-    'renderer/components/flex': {}, 'renderer/components/menu': {},
-    'renderer/components/icon': {}, 'renderer/components/envim/message': {}
+    'renderer/context/workspace': { useWorkspace: () => ({ emit, highlights: { style: () => ({}) } }) },
+    'common/schema': schemaModule,
+    '@mantine/core': {},
+    'renderer/components/menu': {}, 'renderer/utils/icons': {}, 'renderer/utils/emit': {}
   });
-  HistoryComponent({ width: 80, height: 24 });
+  MessagesComponent();
   const workspace = { emit, nvim: { on() {}, call: async () => [] }, grids: { flush() {} } };
   workspace.messages = new Messages(workspace);
   return { messages: workspace.messages, app: new App(workspace), sent, handlers, get state() { return state; },
@@ -62,6 +68,7 @@ test('workspace instances isolate notifications and history; IDs and append pres
   assert.deepEqual(text(a.last(':show')), ['A', 'D \nE']);
   a.messages.clear(); a.messages.flush();
   assert.deepEqual(a.last(':show'), []);
+  assert.deepEqual(a.state.notifications, []);
   assert.deepEqual(text(a.state.messages), ['A', 'B', 'C', 'D \nE']);
   assert.equal(a.handlers['neovim:ui:messages:history:clear'], undefined);
   assert.equal(a.handlers['neovim:ui:messages:record'], undefined);
@@ -80,6 +87,18 @@ test('App delegates notifications and history replacement', () => {
   a.app.onNotification('redraw', [['msg_history_show', [[], true]]]);
   assert.deepEqual(a.sent.at(-1), ['neovim:ui:messages:history', [], true]);
   assert.deepEqual(a.state.messages, []);
+});
+
+test('status messages update independently in the message panel and clear on empty content', () => {
+  const app = setup();
+  for (const kind of ['mode', 'command', 'ruler']) {
+    app.messages.status(kind, [[0, kind, 0]]);
+    assert.deepEqual(text([app.state[kind]]), [kind]);
+  }
+  app.messages.status('mode', []);
+  assert.equal(app.state.mode, undefined);
+  assert.deepEqual(text([app.state.command, app.state.ruler]), ['command', 'ruler']);
+  assert.deepEqual(app.state.messages, []);
 });
 
 test('history excludes transient messages and retains the latest 1000 records', () => {

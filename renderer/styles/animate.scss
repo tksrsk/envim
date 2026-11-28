@@ -9,39 +9,10 @@
     animation-name: slideRight, fadeIn;
   }
 
-  &.slide-up {
-    animation-name: slideUp, fadeIn;
-  }
-
-  &.slide-down {
-    animation-name: slideDown, fadeIn;
-  }
-
   &.fade-in {
     animation-name: fadeIn;
   }
 
-  &.loading {
-    width: 10em;
-    height: 10em;
-    border-radius: 50%;
-    border-top: 1.1em solid rgba(255, 255, 255, 0.2);
-    border-right: 1.1em solid rgba(255, 255, 255, 0.2);
-    border-bottom: 1.1em solid rgba(255, 255, 255, 0.2);
-    border-left: 1.1em solid;
-    animation-name: loading;
-    animation-duration: 1000ms;
-    animation-timing-function: linear(0, .5 75%, 1);
-    animation-iteration-count: infinite;
-
-    &.inline {
-      max-width: 1em;
-      max-height: 1em;
-      min-width: 1em;
-      min-height: 1em;
-      border-width: 0.2em;
-    }
-  }
 
   &.hover {
     > .contents {
@@ -61,18 +32,6 @@
 }
 
 
-@keyframes slideUp {
-  from {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes slideDown {
-  from {
-    transform: translateY(-100%);
-  }
-}
-
 @keyframes slideRight {
   from {
     transform: translateX(100%);
@@ -82,14 +41,5 @@
 @keyframes fadeIn {
   from {
     filter: opacity(0);
-  }
-}
-
-@keyframes loading {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 }

@@ -1,5 +1,6 @@
 import * as McpAppBridge from "@modelcontextprotocol/ext-apps/app-bridge";
 import React from "react";
+import { Anchor, Modal } from "@mantine/core";
 
 import { IMcpApp } from "common/interface";
 
@@ -7,9 +8,7 @@ import { useWorkspace } from "renderer/context/workspace";
 
 import { Emit } from "renderer/utils/emit";
 
-import { FlexComponent } from "renderer/components/flex";
 import { CollapseComponent } from "renderer/components/collapse";
-import { DialogComponent } from "renderer/components/dialog";
 
 const SANDBOX_PROXY_HTML = `<!doctype html>
 <html>
@@ -42,25 +41,30 @@ function getHostContext(element: HTMLElement): McpAppBridge.McpUiHostContext {
   return {
     availableDisplayModes: ["inline", "fullscreen"],
     containerDimensions: { width: element.clientWidth, height: element.clientHeight },
-    displayMode: element.closest("dialog")?.open ? "fullscreen" : "inline",
+    displayMode: element.closest(".mantine-Modal-content") ? "fullscreen" : "inline",
     platform: "desktop",
     theme: element.closest(".theme-light") ? "light" : "dark",
     styles: {
       variables: {
-        "--color-background-primary": computed.getPropertyValue("--color-bg"),
-        "--color-background-secondary": computed.getPropertyValue("--color-gray-alpha"),
-        "--color-border-primary": computed.getPropertyValue("--color-gray"),
-        "--color-text-primary": computed.getPropertyValue("--color-fg"),
-        "--color-text-secondary": computed.getPropertyValue("--color-gray"),
-        "--color-text-info": computed.getPropertyValue("--color-blue"),
-        "--color-text-danger": computed.getPropertyValue("--color-red"),
-        "--color-text-success": computed.getPropertyValue("--color-green"),
-        "--color-text-warning": computed.getPropertyValue("--color-yellow"),
+        "--color-background-primary": computed.getPropertyValue("--mantine-color-body"),
+        "--color-background-secondary": computed.getPropertyValue("--mantine-color-gray-light"),
+        "--color-border-primary": computed.getPropertyValue("--mantine-color-default-border"),
+        "--color-text-primary": computed.getPropertyValue("--mantine-color-text"),
+        "--color-text-secondary": computed.getPropertyValue("--mantine-color-dimmed"),
+        "--color-text-info": computed.getPropertyValue("--mantine-color-blue-text"),
+        "--color-text-danger": computed.getPropertyValue("--mantine-color-red-text"),
+        "--color-text-success": computed.getPropertyValue("--mantine-color-green-text"),
+        "--color-text-warning": computed.getPropertyValue("--mantine-color-yellow-text"),
         "--border-radius-sm": "4px",
       },
     },
   } as McpAppBridge.McpUiHostContext;
 }
+
+const modalStyles = {
+  content: { height: "90vh", display: "flex", flexDirection: "column" as const },
+  body: { flex: 1, minHeight: 0, padding: 4 },
+};
 
 const McpAppFrame = React.memo(({ app, sessionId, onClose }: { app: IMcpApp; sessionId: string; onClose: () => void }) => {
   const { emit } = useWorkspace();
@@ -177,10 +181,10 @@ export function McpAppsComponent({ sessionId }: { sessionId: string }) {
     <CollapseComponent label="󱘍 Apps" badge={`${filtered.length}`} style={{marginBottom: 4}} open>
       {filtered.map(app => (
         <React.Fragment key={app.id}>
-          <FlexComponent color="purple-fg" onClick={() => setActiveId(app.id)}>{`${app.server} / ${app.tool}`}</FlexComponent>
-          <DialogComponent open={activeId === app.id} onClose={onClose}>
+          <Anchor component="button" c="violet" fz="inherit" ta="left" truncate onClick={() => setActiveId(app.id)}>{`${app.server} / ${app.tool}`}</Anchor>
+          <Modal opened={activeId === app.id} onClose={onClose} size="90vw" title={`${app.server} / ${app.tool}`} centered keepMounted styles={modalStyles}>
             <McpAppFrame app={app} sessionId={sessionId} onClose={onClose} />
-          </DialogComponent>
+          </Modal>
         </React.Fragment>
       ))}
     </CollapseComponent>

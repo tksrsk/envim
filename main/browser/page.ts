@@ -2,6 +2,8 @@ import * as Electron from "electron";
 import { lookup } from "dns";
 
 import { Bootstrap } from "main/bootstrap";
+import { IFormRequest, schema } from "common/schema";
+
 import { Emit } from "main/emit";
 import { Dialogs } from "main/browser/mcp/dialogs";
 
@@ -43,13 +45,16 @@ export class BrowserPage {
     this.openTab(url);
   }
 
-  private onLogin = async (e: Electron.Event, _: Electron.AuthenticationResponseDetails, __: Electron.AuthInfo, callback: Function) => {
+  private onLogin = async (e: Electron.Event, _: Electron.AuthenticationResponseDetails, info: Electron.AuthInfo, callback: Function) => {
     e.preventDefault();
 
-    const user = await Emit.share("neovim:readline", "User");
-    const password = await Emit.share("neovim:readline", "Password");
+    const [action, values] = await Emit.share("form:request", {
+      title: "󰌆 Sign in", message: [info.host, info.realm].filter(Boolean).join("\n"),
+      schema: schema.object({ user: schema.string("User"), password: schema.string("Password", { format: "password" }) }, ["user"]),
+      actions: [{ action: "login", name: "Sign in", color: "blue", font: "󰌆", submit: true }],
+    } satisfies Omit<IFormRequest, "reply">) as [string?, { user: string; password?: string }?];
 
-    user && callback(user, password);
+    action === "login" && values ? callback(values.user, values.password ?? "") : callback();
   }
 
   private onCertError = async (e: Electron.Event, url: string, __: string, ___: Object, callback: Function) => {

@@ -107,10 +107,10 @@ export class Highlights {
     const color2 = this.hls[id] && this.hls[id][type] || color1;
 
     if (options.lighten && type === "background") {
-      return color2.lighten || color1.lighten;
+      return color2?.lighten || color1?.lighten || "";
     }
 
-    return color2[alpha] || color1[alpha];
+    return color2?.[alpha] || color1?.[alpha] || "";
   }
 
   style(id: string, options: IOptions = {}) {

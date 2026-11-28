@@ -1,7 +1,5 @@
 @use "animate";
-@use "color";
 @use "font";
-@use "input";
 @use "scrollbar";
 @use "markdown";
 
@@ -22,51 +20,70 @@ webview, iframe {
   border: none;
 }
 
-dialog {
-  height: 90vh;
-  width: 90vw;
-  padding: 4px;
-  overflow: hidden;
-  box-shadow: 0 0 2px 1px rgba(0, 0, 0, .5);
-  border: none;
-  border-radius: 4px;
+:root {
+  --envim-control-size: 1.6em;
 }
 
-details {
-  position: relative;
-  width: 100%;
-  max-height: 200px;
-  overflow: auto;
-  box-shadow: inset 0 0 2px 1px rgba(0, 0, 0, .5);
-  border: 1px solid var(--color-gray-alpha);
-  border-radius: 4px;
-  z-index: 1;
+#theme {
+  font-size: var(--mantine-font-size-sm);
+  line-height: var(--mantine-line-height);
+}
 
-  summary {
-    list-style-type: none;
-    position: sticky;
-    inset: 0;
-    z-index: 2;
-    padding: .3rem .3rem .3rem 1rem;
-    background: var(--color-bg);
+.acp-panel {
+  --mantine-font-size-xs: 10px;
+  --mantine-font-size-sm: 11px;
+  --mantine-font-size-md: 12px;
+}
 
-    &::before {
-      position: absolute;
-      left: .3rem;
-      margin-right: .5rem;
-      content: '▶';
-      display: inline-block;
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      opacity: 0.7;
+.acp-messages {
+  transition: border-color 150ms;
+
+  @each $mode in "green", "orange" {
+    &[data-mode="#{$mode}"] {
+      border-color: var(--mantine-color-#{$mode}-filled);
     }
   }
+}
 
-  &[open] > summary {
-    box-shadow: 0 0 2px 1px rgba(0, 0, 0, .5);
+.acp-search {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 4px;
+  background: var(--mantine-color-body);
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: var(--mantine-shadow-sm);
 
-    &::before {
-      transform: rotate(90deg);
-    }
+  &:not([data-visible]):not(:focus-within) {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.acp-composer:focus-within {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+:where(.menu-label) {
+  color: inherit;
+}
+
+.menu-label {
+  display: flex;
+  align-items: center;
+  height: var(--envim-control-size);
+  padding: 0 .4em;
+  font-size: var(--mantine-font-size-sm);
+  border-radius: var(--mantine-radius-sm);
+
+  &:hover, &[data-active] {
+    background: var(--mantine-color-default-hover);
+  }
+
+  &:disabled {
+    opacity: .5;
+    cursor: not-allowed;
   }
 }
 
@@ -90,10 +107,448 @@ details {
 }
 
 ::highlight(search-all) {
-  color: var(--color-bg);
-  background: var(--color-orange);
+  color: var(--mantine-color-body);
+  background: var(--mantine-color-orange-text);
 }
 
 ::highlight(search-active) {
-  background: var(--color-yellow);
+  background: var(--mantine-color-yellow-text);
+}
+
+.envim-history-item + .envim-history-item {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.envim-cmdline {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80%, 720px);
+  padding: .8em 1em .6em;
+  white-space: pre-wrap;
+  pointer-events: none;
+  border: 1px solid var(--cmdline-color);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-xl);
+
+  .envim-cmdline-title {
+    position: absolute;
+    top: 0;
+    left: .8em;
+    display: flex;
+    gap: .4em;
+    align-items: center;
+    padding: 0 .5em;
+    transform: translateY(-50%);
+    font-family: var(--mantine-font-family);
+    font-size: var(--mantine-font-size-xs);
+    line-height: 1.6;
+    color: var(--cmdline-color);
+    background: inherit;
+    border-radius: var(--mantine-radius-sm);
+  }
+}
+
+.envim-pum {
+  position: absolute;
+  width: max-content;
+  overflow: hidden auto;
+  white-space: pre;
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-body);
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: 0 0 0 1px var(--mantine-color-default-border), var(--mantine-shadow-md);
+
+  .envim-pum-item {
+    display: flex;
+    align-items: center;
+    gap: .5em;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--mantine-color-default-hover);
+    }
+
+    &[data-selected] {
+      background: var(--mantine-primary-color-light);
+      box-shadow: inset 2px 0 0 var(--mantine-primary-color-filled);
+    }
+  }
+
+  .envim-pum-word, .envim-pum-kind {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .envim-pum-word {
+    flex: 1 1 auto;
+  }
+
+  .envim-pum-kind {
+    flex: 0 0 auto;
+    max-width: 50%;
+    padding-inline: 2px;
+    font-size: .8em;
+    line-height: 1.5;
+    border-radius: var(--mantine-radius-xs);
+  }
+}
+
+.acp-message {
+  flex-shrink: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  word-break: break-all;
+}
+
+.acp-user-prompt {
+  border-inline-start: 2px solid var(--mantine-color-cyan-text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+
+  > .selectable > :first-child {
+    margin-top: 0;
+  }
+
+  > .selectable > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+.acp-diff {
+  display: flex;
+  position: relative;
+  overflow: auto;
+
+  > .acp-diff-signs {
+    display: flex;
+    position: absolute;
+    inset: 0;
+  }
+}
+
+.workspace-tab {
+  display: flex;
+  position: relative;
+  flex: 0 2 auto;
+  width: 150px;
+  min-width: 2rem;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--mantine-color-default-hover);
+  }
+
+  &[data-active] {
+    flex-shrink: 0;
+    color: var(--mantine-color-text);
+    // Inset shadow instead of a border so the underline does not push the text up.
+    box-shadow: inset 0 -2px var(--mantine-primary-color-filled);
+  }
+}
+
+$envim-shadow: rgba(0, 0, 0, 0.2) 0 0 2px 2px;
+
+.envim-main {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.envim-row {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.envim-surface, .envim-tabline, .envim-input-value {
+  background: var(--mantine-color-body);
+}
+
+.envim-workspace {
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.envim-frame {
+  box-shadow: 0 0 0 1px var(--mantine-color-default-border), 0 0 0 100vmax var(--mantine-color-body);
+}
+
+.envim-cmdline, .envim-input, .envim-pum {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--envim-editor-font-size);
+  line-height: var(--envim-editor-line-height);
+}
+
+.envim-tabline {
+  display: flex;
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+  box-shadow: $envim-shadow;
+}
+
+.envim-message-status {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--mantine-font-size-xs);
+
+  .envim-message {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
+
+.envim-history-panel > .envim-message-status {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.envim-notifications > .envim-message-status {
+  align-self: flex-end;
+  background: var(--mantine-color-body);
+  max-width: 100%;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.envim-history-panel {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100% - 8px));
+  max-height: calc(100% - 8px);
+  box-sizing: border-box;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.envim-history-header {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+
+  button i {
+    font-size: var(--mantine-font-size-xs);
+  }
+}
+
+.envim-history-list {
+  max-height: min(180px, 35vh);
+  overflow: auto;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.35;
+}
+
+.envim-history-item {
+  padding: 0 3px;
+
+  .envim-message-body {
+    max-height: min(7em, 25vh);
+    overflow-y: auto;
+  }
+}
+
+.envim-message {
+  display: flex;
+  position: relative;
+  flex: 1 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  word-break: break-all;
+
+  &[data-collapsible] {
+    cursor: pointer;
+  }
+}
+
+.envim-message-body {
+  flex: 1 1 0;
+  font-family: var(--mantine-font-family-monospace);
+  min-width: 0;
+  padding: 2px 4px;
+  overflow: hidden;
+}
+
+.envim-message-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.envim-input {
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+
+  &[data-shadow] {
+    box-shadow: $envim-shadow;
+  }
+}
+
+.envim-grid {
+  display: flex;
+  position: absolute;
+  white-space: nowrap;
+
+  &[data-nomouse] {
+    pointer-events: none;
+  }
+
+  &[data-shadow] {
+    box-shadow: $envim-shadow;
+  }
+
+  > .envim-grid-canvas {
+    display: flex;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  > .envim-grid-fab {
+    position: absolute;
+    top: 0;
+    right: 0;
+    opacity: .4;
+    transition: opacity 150ms;
+
+    &:hover, &[data-hidden] {
+      opacity: 1;
+    }
+  }
+}
+
+// Unlayered, so these win over Mantine's layered Accordion styles.
+.envim-collapse {
+  .mantine-Accordion-control {
+    padding-inline: 4px;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+  }
+
+  .mantine-Accordion-label {
+    padding-block: 1px;
+  }
+
+  .mantine-Accordion-chevron, .mantine-Accordion-icon {
+    margin-inline-end: 4px;
+  }
+
+  .mantine-Accordion-content {
+    padding: 4px;
+    max-height: 200px;
+    overflow: auto;
+  }
+}
+
+.envim-collapse-row > .mantine-Accordion-item {
+  border: 0;
+
+  > .mantine-Accordion-control {
+    border-radius: var(--mantine-radius-sm);
+
+    &:hover {
+      background: var(--mantine-color-default-hover);
+      color: var(--mantine-color-text);
+    }
+
+    > .mantine-Accordion-chevron {
+      display: none;
+    }
+  }
+
+  > .mantine-Accordion-panel {
+    margin-left: 10px;
+    border-left: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.acp-message[data-kind="tool_call"], .acp-message[data-kind="tool_call_update"], .acp-message[data-kind="agent_thought_chunk"] {
+  padding-block: 1px;
+}
+
+.envim-notifications {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  width: fit-content;
+  max-width: min(280px, calc(100% - 16px));
+  max-height: min(140px, 30%);
+  overflow: hidden auto;
+}
+
+.envim-notification {
+  flex-shrink: 0;
+  align-self: flex-end;
+  max-width: 100%;
+  padding: 0 3px;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.35;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.envim-history-item .envim-message, .envim-notification .envim-message {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.acp-tool-tabs {
+  .mantine-Tabs-list {
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+
+  .mantine-Tabs-tab {
+    padding: 1px 8px;
+    font-size: var(--mantine-font-size-xs);
+  }
+}
+
+.envim-inline-button {
+  height: var(--envim-control-size);
+  flex-shrink: 0;
+  align-self: center;
+  font-size: inherit;
+}
+
+.envim-message-icon {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 2px 4px;
+}
+
+.workspace-tab-close {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+}
+
+.agent-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  mask: center / contain no-repeat;
 }

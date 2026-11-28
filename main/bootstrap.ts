@@ -42,7 +42,7 @@ export class Bootstrap {
       resizable: true,
       hasShadow: false,
       titleBarStyle: "hidden",
-      titleBarOverlay: true,
+      titleBarOverlay: process.platform === "win32" ? { height: 34 } : true,
       webPreferences: {
         spellcheck: false,
         preload: join(__dirname, "../preload/index.js"),

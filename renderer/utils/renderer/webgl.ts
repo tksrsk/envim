@@ -351,12 +351,10 @@ export class WebGL2 extends Renderer {
       gl.scissor(x, grid.height - y - height, width, height);
       gl.clear(gl.COLOR_BUFFER_BIT);
       this.blit(capture, frame, area, x + dx - Math.round(fromX), y + dy - Math.round(fromY));
-      // Blitting replaces the destination, including transparent cell pixels.
       this.blit(grid, frame, area, x + dx, y + dy);
       gl.disable(gl.SCISSOR_TEST);
     }
     this.blit(frame, undefined, full);
-    // Check queued cell draws, scroll copies, and presentation together.
     return gl.getError() === gl.NO_ERROR && this.available;
   }
 

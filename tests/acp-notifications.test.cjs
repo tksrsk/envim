@@ -6,14 +6,20 @@ const path = require('node:path');
 const ts = require('typescript');
 const { JSDOM } = require('jsdom');
 const React = require('react');
+const { Accordion, MantineProvider } = require('@mantine/core');
 const { createRoot } = require('react-dom/client');
 
+const theme = { components: { Accordion: Accordion.extend({ defaultProps: { transitionDuration: 0 } }) } };
+
 async function setup(t) {
-  const dom = new JSDOM('<!doctype html><div id="root"></div>');
+  const dom = new JSDOM('<!doctype html><div id="root"></div>', { pretendToBeVisual: true });
   global.window = dom.window;
   global.document = dom.window.document;
-  const elementTypes = ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'HTMLButtonElement'];
+  Object.defineProperty(document, 'fonts', { value: new dom.window.EventTarget() });
+  const elementTypes = ['Element', 'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'HTMLButtonElement'];
   for (const type of elementTypes) global[type] = dom.window[type];
+  const browserMethods = ['requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle'];
+  for (const method of browserMethods) global[method] = dom.window[method].bind(dom.window);
   global.CSS = { highlights: new Map() };
   global.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
@@ -28,7 +34,7 @@ async function setup(t) {
     if (name === 'renderer/context/workspace') return { useWorkspace: () => ({ emit }) };
     if (name === 'renderer/utils/setting') return { Setting: { acp: { customs: [], mcpServers: [] }, font: { size: 16 } } };
     if (name === 'renderer/components/acp/app') return { McpAppsComponent: () => null };
-    if (!name.startsWith('renderer/')) return require(name);
+    if (!/^(renderer|common)\//.test(name)) return require(name);
     if (cache.has(name)) return cache.get(name).exports;
     const base = path.resolve(__dirname, '..', name);
     const filename = ['.tsx', '.ts'].map(ext => base + ext).find(file => fs.existsSync(file));
@@ -43,22 +49,26 @@ async function setup(t) {
   const { AcpComponent } = load('renderer/components/acp/index');
   const container = document.getElementById('root');
   const root = createRoot(container);
-  await React.act(async () => root.render(React.createElement(AcpComponent)));
+  t.after(async () => {
+    await React.act(async () => root.unmount());
+    dom.window.close();
+    for (const key of ['window', 'document', ...elementTypes, ...browserMethods, 'CSS', 'IS_REACT_ACT_ENVIRONMENT']) delete global[key];
+  });
+  await React.act(async () => root.render(React.createElement(MantineProvider, { env: 'test', theme }, React.createElement(AcpComponent))));
   async function receive(event, ...args) {
     await React.act(async () => handlers.get(event)(...args));
   }
   await receive('acp:status:changed', { status: 'connected', sessionId: 'active' });
-  t.after(async () => {
-    await React.act(async () => root.unmount());
-    dom.window.close();
-    for (const key of ['window', 'document', ...elementTypes, 'CSS', 'IS_REACT_ACT_ENVIRONMENT']) delete global[key];
-  });
   return {
     container,
     receive,
     notice: notice => receive('acp:notice:changed', notice),
     message: (update, sessionId = 'active') => receive('acp:message:added', { sessionId, update }),
-    get compactions() { return [...container.querySelectorAll('details')].filter(element => element.querySelector('summary')?.textContent.includes('context') || element.querySelector('summary')?.textContent.includes('Context')); }
+    get compactions() { return [...container.querySelectorAll('.envim-collapse-row')].filter(element => /context/i.test(element.querySelector('button')?.textContent ?? '')); },
+    async expandCompaction() {
+      const control = this.compactions[0].querySelector('button');
+      if (control.getAttribute('aria-expanded') === 'false') await React.act(async () => control.click());
+    }
   };
 }
 const progress = (fields = {}) => ({ sessionUpdate: 'compaction_update', compactionId: 'a', status: 'in_progress', ...fields });
@@ -68,8 +78,8 @@ test('notices render severity and plain text without interpreting HTML', async t
   const ui = await setup(t);
   for (const [severity, color] of [['info', 'blue'], ['warning', 'yellow'], ['error', 'red'], ['future', 'blue']]) {
     await ui.notice({ severity, title: severity, description: '<script>example</script>' });
-    const title = [...ui.container.querySelectorAll('strong')].find(node => node.textContent === severity);
-    assert.ok(title.closest(`[class~="color-${color}"]`));
+    const title = [...ui.container.querySelectorAll('.mantine-Alert-title')].find(node => node.textContent === severity);
+    assert.ok(title.closest('[role]').style.getPropertyValue('--alert-color').includes(`-${color}-`));
     assert.ok(title.closest('[role]').textContent.includes('<script>example</script>'));
   }
   assert.equal(ui.container.querySelector('script'), null);
@@ -80,15 +90,16 @@ test('compaction updates the original row independently of the notice area', asy
   await ui.message(progress({ summary: [{ type: 'text', text: 'Summary' }] }));
   const row = ui.compactions[0];
   assert.match(row.textContent, /Compacting context/);
-  assert.ok(row.querySelector('.loading'));
+  assert.ok(row.querySelector('.mantine-Loader-root'));
   await ui.notice({ severity: 'info', title: 'Working' });
   await ui.message(progress({ status: 'completed' }));
   assert.equal(ui.compactions.length, 1);
   assert.equal(ui.compactions[0], row);
   assert.match(row.textContent, /Context compacted/);
+  await ui.expandCompaction();
   assert.match(row.textContent, /Summary/);
-  assert.equal(row.querySelector('.loading'), null);
-  const notice = ui.container.querySelector('strong');
+  assert.equal(row.querySelector('.mantine-Loader-root'), null);
+  const notice = ui.container.querySelector('.mantine-Alert-title');
   assert.ok(row.compareDocumentPosition(notice) & window.Node.DOCUMENT_POSITION_FOLLOWING);
 });
 
@@ -99,14 +110,17 @@ test('summary chunks create a row, append, and preserve completion', async t => 
   await ui.message(progress({ status: 'completed' }));
   await ui.message(chunk('Second'));
   assert.equal(ui.compactions.length, 1);
+  await ui.expandCompaction();
   assert.match(ui.compactions[0].textContent, /Context compacted.*First.*Second/s);
 });
 
 test('replacement and cleared summaries and errors are reflected in the display', async t => {
   const ui = await setup(t);
   await ui.message(progress({ status: 'failed', summary: [{ type: 'text', text: 'Old summary' }], error: 'Failure details' }));
+  await ui.expandCompaction();
   assert.match(ui.compactions[0].textContent, /Context compaction failed.*Failure details.*Old summary/s);
-  assert.equal(ui.container.querySelector('[role="alert"]'), null);
+  const alerts = [...ui.container.querySelectorAll('[role="alert"]')];
+  assert.ok(alerts.every(alert => ui.compactions[0].contains(alert)));
   await ui.message(progress({ summary: [{ type: 'text', text: 'New summary' }], error: null }));
   assert.doesNotMatch(ui.compactions[0].textContent, /Failure details|Old summary/);
   assert.match(ui.compactions[0].textContent, /New summary/);
@@ -136,12 +150,12 @@ test('the notice area replaces the previous notice and clears independently of s
   await ui.notice({ severity: 'error', title: 'Previous error', description: 'Old detail' });
   await ui.notice({ severity: 'warning', title: 'Latest warning' });
   assert.doesNotMatch(ui.container.textContent, /Previous error|Old detail/);
-  assert.equal(ui.container.querySelectorAll('strong').length, 1);
-  assert.equal(ui.container.querySelector('strong').textContent, 'Latest warning');
+  assert.equal(ui.container.querySelectorAll('.mantine-Alert-title').length, 1);
+  assert.equal(ui.container.querySelector('.mantine-Alert-title').textContent, 'Latest warning');
   await ui.receive('acp:status:changed', { status: 'connected', sessionId: 'active' });
-  assert.equal(ui.container.querySelector('strong').textContent, 'Latest warning');
+  assert.equal(ui.container.querySelector('.mantine-Alert-title').textContent, 'Latest warning');
   await ui.notice();
-  assert.equal(ui.container.querySelector('strong'), null);
+  assert.equal(ui.container.querySelector('.mantine-Alert-title'), null);
 });
 
 test('notice area is available without a session during startup and authentication', async t => {
@@ -157,6 +171,7 @@ test('compaction errors remain in the compaction UI when notices change or clear
   const ui = await setup(t);
   await ui.message(progress({ status: 'failed', error: 'Compaction failure' }));
   await ui.notice({ severity: 'warning', title: 'Independent notice' });
+  await ui.expandCompaction();
   assert.match(ui.compactions[0].textContent, /Compaction failure/);
   assert.doesNotMatch(ui.compactions[0].textContent, /Independent notice/);
   await ui.notice();
